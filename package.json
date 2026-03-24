@@ -16,7 +16,7 @@
   },
   "build": {
     "appId": "ch.space-media.app",
-    "productName": "SPACE Media",
+    "productName": "SPACE Media App",
     "copyright": "Copyright © 2026 SPACE Media",
     "directories": {
       "output": "dist",
@@ -37,7 +37,7 @@
         }
       ],
       "icon": "assets/icon.ico",
-      "artifactName": "SPACE-Media-Setup-${version}.${ext}"
+      "artifactName": "SPACE-Media-App-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": true,
@@ -45,7 +45,7 @@
       "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "SPACE Media"
+      "shortcutName": "SPACE Media App"
     },
     "mac": {
       "target": [
@@ -59,7 +59,7 @@
       ],
       "icon": "assets/icon.png",
       "category": "public.app-category.business",
-      "artifactName": "SPACE-Media-${version}-${arch}.${ext}",
+      "artifactName": "SPACE-Media-App-${version}-${arch}.${ext}",
       "darkModeSupport": true
     },
     "dmg": {
