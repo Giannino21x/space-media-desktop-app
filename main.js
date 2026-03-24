@@ -17,7 +17,7 @@ function createWindow() {
     backgroundColor: '#04070d',
     show: false,
 
-    // Frameless + native traffic lights on Mac = Notion-style
+    // Frameless + native controls
     frame: false,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
     titleBarOverlay: process.platform === 'win32' ? {
@@ -26,31 +26,21 @@ function createWindow() {
       height: 40,
     } : undefined,
     trafficLightPosition: { x: 16, y: 16 },
-
     roundedCorners: true,
 
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
+      partition: 'persist:spaceapp',
       backgroundThrottling: false,
+      spellcheck: false,
     },
   });
 
-  // Smooth fade-in on load
+  // Show after first paint is composited (prevents flash)
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-    mainWindow.setOpacity(0);
-    let opacity = 0;
-    const fadeIn = setInterval(() => {
-      opacity += 0.1;
-      if (opacity >= 1) {
-        mainWindow.setOpacity(1);
-        clearInterval(fadeIn);
-      } else {
-        mainWindow.setOpacity(opacity);
-      }
-    }, 12);
   });
 
   const url = isDev ? 'http://localhost:3000' : APP_URL;
@@ -77,12 +67,15 @@ function createWindow() {
   });
 }
 
-// Performance flags (must be before app.ready)
+// GPU flags — before app.ready
 if (app && app.commandLine) {
   app.commandLine.appendSwitch('enable-gpu-rasterization');
   app.commandLine.appendSwitch('enable-zero-copy');
-  app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder,CanvasOopRasterization');
-  app.commandLine.appendSwitch('disable-frame-rate-limit');
+  app.commandLine.appendSwitch('ignore-gpu-blocklist');
+  app.commandLine.appendSwitch('enable-accelerated-2d-canvas');
+  app.commandLine.appendSwitch('enable-smooth-scrolling');
+  app.commandLine.appendSwitch('force-color-profile', 'srgb');
+  app.commandLine.appendSwitch('disable-features', 'PaintHolding');
 }
 
 app.on('ready', () => {
