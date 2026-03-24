@@ -1,0 +1,72 @@
+{
+  "name": "space-media",
+  "version": "1.0.0",
+  "description": "SPACE Media — AI-Powered Sales & Marketing Automation",
+  "main": "main.js",
+  "author": {
+    "name": "SPACE Media",
+    "email": "giannino.peloso@space-media.ch"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "pack:win": "electron-builder --win",
+    "pack:mac": "electron-builder --mac",
+    "pack:all": "electron-builder --win --mac"
+  },
+  "build": {
+    "appId": "ch.space-media.app",
+    "productName": "SPACE Media",
+    "copyright": "Copyright © 2026 SPACE Media",
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "assets/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/icon.ico",
+      "artifactName": "SPACE-Media-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "SPACE Media"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "icon": "assets/icon.png",
+      "category": "public.app-category.business",
+      "artifactName": "SPACE-Media-${version}-${arch}.${ext}",
+      "darkModeSupport": true
+    },
+    "dmg": {
+      "iconSize": 128,
+      "contents": [
+        { "x": 380, "y": 170, "type": "link", "path": "/Applications" },
+        { "x": 130, "y": 170, "type": "file" }
+      ]
+    }
+  },
+  "devDependencies": {
+    "electron": "^28.3.3",
+    "electron-builder": "^26.8.1"
+  }
+}
