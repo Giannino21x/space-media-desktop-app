@@ -10,9 +10,9 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "pack:win": "electron-builder --win",
-    "pack:mac": "electron-builder --mac",
-    "pack:all": "electron-builder --win --mac"
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:all": "electron-builder --win --mac"
   },
   "build": {
     "appId": "ch.space-media.app",
@@ -31,7 +31,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "assets/icon.ico",
@@ -49,7 +51,10 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
       "icon": "assets/icon.png",
@@ -60,13 +65,24 @@
     "dmg": {
       "iconSize": 128,
       "contents": [
-        { "x": 380, "y": 170, "type": "link", "path": "/Applications" },
-        { "x": 130, "y": 170, "type": "file" }
+        {
+          "x": 380,
+          "y": 170,
+          "type": "link",
+          "path": "/Applications"
+        },
+        {
+          "x": 130,
+          "y": 170,
+          "type": "file"
+        }
       ]
     }
   },
   "devDependencies": {
     "electron": "^28.3.3",
-    "electron-builder": "^26.8.1"
+    "electron-builder": "^26.8.1",
+    "png-to-ico": "^3.0.1",
+    "sharp": "^0.34.5"
   }
 }
