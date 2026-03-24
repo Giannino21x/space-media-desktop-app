@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, Menu } = require('electron');
+const { app, BrowserWindow, shell, Menu, ipcMain, nativeImage } = require('electron');
 const path = require('path');
 
 const APP_URL = 'https://space-media-app.vercel.app';
@@ -75,6 +75,36 @@ function createWindow() {
     mainWindow = null;
   });
 }
+
+// Generate a badge overlay icon with a number (Windows taskbar)
+function createBadgeIcon(count) {
+  const size = 16;
+  const canvas = `
+    <svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="8" cy="8" r="8" fill="#ef4444"/>
+      <text x="8" y="12" text-anchor="middle" fill="white" font-size="10" font-family="Arial" font-weight="bold">${count > 9 ? '9+' : count}</text>
+    </svg>
+  `;
+  return nativeImage.createFromBuffer(
+    Buffer.from(canvas.trim())
+  );
+}
+
+// Listen for badge count updates from the renderer
+ipcMain.on('set-badge-count', (event, count) => {
+  if (!mainWindow) return;
+  if (process.platform === 'win32') {
+    if (count > 0) {
+      mainWindow.setOverlayIcon(createBadgeIcon(count), `${count} ungelesene Benachrichtigungen`);
+    } else {
+      mainWindow.setOverlayIcon(null, '');
+    }
+  }
+  // macOS dock badge
+  if (process.platform === 'darwin') {
+    app.setBadgeCount(count);
+  }
+});
 
 // GPU flags — before app.ready
 if (app && app.commandLine) {
