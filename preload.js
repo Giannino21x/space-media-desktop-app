@@ -2,6 +2,9 @@
 
 const { ipcRenderer } = require('electron');
 
+// Expose restart function for auto-updater banner
+window.__electronRestart = () => ipcRenderer.send('restart-for-update');
+
 window.addEventListener('DOMContentLoaded', () => {
   const style = document.createElement('style');
   style.textContent = `

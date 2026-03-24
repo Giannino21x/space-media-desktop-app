@@ -1,4 +1,5 @@
-const { app, BrowserWindow, shell, Menu, ipcMain, nativeImage } = require('electron');
+const { app, BrowserWindow, shell, Menu, ipcMain, nativeImage, dialog } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const path = require('path');
 
 const APP_URL = 'https://space-media-app.vercel.app';
@@ -90,6 +91,11 @@ function createBadgeIcon(count) {
   );
 }
 
+// Restart app to install update
+ipcMain.on('restart-for-update', () => {
+  autoUpdater.quitAndInstall();
+});
+
 // Listen for badge count updates from the renderer
 ipcMain.on('set-badge-count', (event, count) => {
   if (!mainWindow) return;
@@ -122,9 +128,36 @@ if (process.platform === 'win32') {
   app.setAppUserModelId('ch.space-media.app');
 }
 
+// Auto-updater: check GitHub Releases for new versions
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = true;
+
+autoUpdater.on('update-downloaded', (info) => {
+  // Silently install on next quit, or notify user
+  if (mainWindow) {
+    mainWindow.webContents.executeJavaScript(`
+      if (!document.getElementById('space-update-banner')) {
+        const banner = document.createElement('div');
+        banner.id = 'space-update-banner';
+        banner.style.cssText = 'position:fixed;bottom:20px;right:20px;background:rgba(16,185,129,0.95);color:white;padding:12px 20px;border-radius:12px;font-family:Inter,sans-serif;font-size:13px;z-index:99999;cursor:pointer;box-shadow:0 8px 32px rgba(0,0,0,0.3);display:flex;align-items:center;gap:8px;backdrop-filter:blur(8px);';
+        banner.innerHTML = '<span style="font-size:16px">✨</span> Update v${info.version} bereit — klicke zum Neustarten';
+        banner.onclick = () => { window.__electronRestart && window.__electronRestart(); };
+        document.body.appendChild(banner);
+      }
+    `);
+  }
+});
+
 app.on('ready', () => {
   Menu.setApplicationMenu(null);
   createWindow();
+
+  // Check for updates (not in dev mode)
+  if (!isDev) {
+    setTimeout(() => autoUpdater.checkForUpdates(), 5000);
+    // Check every 30 minutes
+    setInterval(() => autoUpdater.checkForUpdates(), 30 * 60 * 1000);
+  }
 });
 
 app.on('activate', () => {
