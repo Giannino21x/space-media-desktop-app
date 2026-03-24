@@ -38,6 +38,15 @@ function createWindow() {
     },
   });
 
+  // Auto-grant notification permission (no browser popup needed)
+  mainWindow.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
+    if (permission === 'notifications') {
+      callback(true);
+    } else {
+      callback(false);
+    }
+  });
+
   // Show after first paint is composited (prevents flash)
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
@@ -76,6 +85,11 @@ if (app && app.commandLine) {
   app.commandLine.appendSwitch('enable-smooth-scrolling');
   app.commandLine.appendSwitch('force-color-profile', 'srgb');
   app.commandLine.appendSwitch('disable-features', 'PaintHolding');
+}
+
+// Windows: set app user model ID for notifications to show "SPACE Media App"
+if (process.platform === 'win32') {
+  app.setAppUserModelId('ch.space-media.app');
 }
 
 app.on('ready', () => {
