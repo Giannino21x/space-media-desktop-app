@@ -13,7 +13,6 @@ window.addEventListener('DOMContentLoaded', () => {
     'height: 40px',
     '-webkit-app-region: drag',
     'z-index: 99999',
-    'pointer-events: none',
   ].join(';');
   document.body.appendChild(dragRegion);
 
