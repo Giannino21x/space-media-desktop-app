@@ -30,18 +30,18 @@
 
 ## Features
 
-- **Vollstaendige Web-App** — Identisch mit [space-media-app.vercel.app](https://space-media-app.vercel.app)
+- **Vollständige Web-App** — Identisch mit [space-media-app.vercel.app](https://space-media-app.vercel.app)
 - **Auto-Updates** — Neue Versionen werden automatisch heruntergeladen und installiert
-- **Desktop-Notifications** — Native Benachrichtigungen
-- **System Tray** — App laeuft im Hintergrund weiter
-- **Auto-Start** — Optional beim Systemstart oeffnen
-- **GPU-beschleunigt** — Schnelles, fluessiges Rendering
+- **Desktop-Notifications** — Native Benachrichtigungen für neue Nachrichten
+- **System Tray** — App läuft im Hintergrund weiter
+- **Auto-Start** — Optional beim Systemstart öffnen
+- **GPU-beschleunigt** — Schnelles, flüssiges Rendering
 
 ## Installation
 
 ### Windows
 1. `.exe` herunterladen
-2. Installer starten — App wird automatisch installiert und geoeffnet
+2. Installer starten — App wird automatisch installiert und geöffnet
 3. Fertig! Updates kommen automatisch.
 
 ### macOS
@@ -51,7 +51,7 @@
 
 ## Auto-Updates
 
-Die App prueft automatisch alle 4 Stunden auf neue Versionen:
+Die App prüft automatisch alle 4 Stunden auf neue Versionen:
 
 1. Update wird im Hintergrund heruntergeladen
 2. Banner erscheint: *"Neue Version bereit — Jetzt neu starten"*
@@ -61,8 +61,8 @@ Die App prueft automatisch alle 4 Stunden auf neue Versionen:
 
 ## Voraussetzungen
 
-- **Windows:** Windows 10+
-- **macOS:** macOS 11 (Big Sur)+
+- **Windows:** Windows 10 oder neuer
+- **macOS:** macOS 11 (Big Sur) oder neuer
 
 ## Support
 
@@ -71,5 +71,5 @@ Bei Fragen: [giannino.peloso@space-media.ch](mailto:giannino.peloso@space-media.
 ---
 
 <p align="center">
-  <sub>Entwickelt von <a href="https://www.space-media.ch">SPACE Media</a> — Zuerich, Schweiz</sub>
+  <sub>Entwickelt von <a href="https://www.space-media.ch">SPACE Media</a> — Zürich, Schweiz</sub>
 </p>
