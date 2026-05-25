@@ -1,0 +1,101 @@
+# Codemagic build pipelines for SPACE Media mobile (Capacitor)
+# Docs: https://docs.codemagic.io/yaml-quick-start/building-a-native-android-app/
+
+workflows:
+  # ---- iOS: Build + auto-submit to TestFlight ----
+  ios-workflow:
+    name: iOS (TestFlight)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      groups:
+        - app_store_credentials   # set in Codemagic: APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_PRIVATE_KEY
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: ch.spacemedia.app
+      node: 20
+      xcode: latest
+      cocoapods: default
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'mobile-v*'
+          include: true
+    scripts:
+      - name: Install npm dependencies (mobile)
+        script: |
+          cd mobile
+          npm ci --no-audit --no-fund
+      - name: Capacitor sync iOS
+        script: |
+          cd mobile
+          npx cap sync ios
+      - name: Set up provisioning profile
+        script: |
+          xcode-project use-profiles
+      - name: Increment build number
+        script: |
+          cd mobile/ios/App
+          LATEST_BUILD=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APP_ID" 2>/dev/null || echo "0")
+          NEW_BUILD=$(($LATEST_BUILD + 1))
+          agvtool new-version -all $NEW_BUILD
+      - name: Build .ipa
+        script: |
+          cd mobile/ios/App
+          xcode-project build-ipa \
+            --workspace App.xcworkspace \
+            --scheme App
+    artifacts:
+      - mobile/ios/App/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        beta_groups:
+          - Internal Testers
+        submit_to_app_store: false
+
+  # ---- Android: Build AAB for Play Store ----
+  android-workflow:
+    name: Android (Play Store)
+    instance_type: linux_x2
+    max_build_duration: 60
+    environment:
+      groups:
+        - google_play_credentials   # set in Codemagic: GCLOUD_SERVICE_ACCOUNT_CREDENTIALS, KEYSTORE_PASSWORD, KEY_PASSWORD, KEY_ALIAS
+      android_signing:
+        - spacemedia_keystore
+      node: 20
+      java: 21
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'mobile-v*'
+          include: true
+    scripts:
+      - name: Install npm dependencies (mobile)
+        script: |
+          cd mobile
+          npm ci --no-audit --no-fund
+      - name: Capacitor sync Android
+        script: |
+          cd mobile
+          npx cap sync android
+      - name: Set Android SDK location
+        script: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/mobile/android/local.properties"
+      - name: Build Android release AAB
+        script: |
+          cd mobile/android
+          ./gradlew bundleRelease
+    artifacts:
+      - mobile/android/app/build/outputs/**/*.aab
+      - mobile/android/app/build/outputs/**/mapping.txt
+    publishing:
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: internal
+        submit_as_draft: false
