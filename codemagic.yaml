@@ -27,6 +27,12 @@ workflows:
           npx cap sync ios
       - name: Set up code signing (auto-fetch via App Store Connect API)
         script: |
+          # Capacitor's default pbxproj uses CODE_SIGN_STYLE=Automatic with no team.
+          # Switch to Manual + inject team id so codemagic-installed profile is used.
+          sed -i.bak "s/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;\\
+\\t\\t\\t\\tDEVELOPMENT_TEAM = 699K5VAG3G;/g" mobile/ios/App/App.xcodeproj/project.pbxproj
+          rm -f mobile/ios/App/App.xcodeproj/project.pbxproj.bak
+          # Fetch + install signing files from App Store Connect API
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
             --create
