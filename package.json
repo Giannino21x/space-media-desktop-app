@@ -60,7 +60,14 @@
       "icon": "assets/icon.png",
       "category": "public.app-category.business",
       "artifactName": "SPACE-Media-App-${version}-${arch}.${ext}",
-      "darkModeSupport": true
+      "darkModeSupport": true,
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "assets/entitlements.mac.plist",
+      "entitlementsInherit": "assets/entitlements.mac.plist",
+      "notarize": {
+        "teamId": "699K5VAG3G"
+      }
     },
     "dmg": {
       "iconSize": 128,

@@ -5,3 +5,16 @@ dist/
 *.msi
 .DS_Store
 Thumbs.db
+
+# Browser automation workspace (Chrome profile, screenshots, credentials)
+.browser-automation/
+
+# Apple signing artifacts (never commit private keys/certs)
+.signing/
+*.p12
+*.cer
+*.csr
+*.certSigningRequest
+*.mobileprovision
+*.provisionprofile
+*.key
