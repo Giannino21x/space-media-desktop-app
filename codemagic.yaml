@@ -14,7 +14,7 @@ workflows:
         BUNDLE_ID: ch.spacemedia.app
         XCODE_WORKSPACE: mobile/ios/App/App.xcworkspace
         XCODE_SCHEME: App
-      node: 20
+      node: 22
       xcode: latest
       cocoapods: default
     scripts:
@@ -68,7 +68,7 @@ workflows:
         - google_play_credentials   # set in Codemagic: GCLOUD_SERVICE_ACCOUNT_CREDENTIALS, KEYSTORE_PASSWORD, KEY_PASSWORD, KEY_ALIAS
       android_signing:
         - spacemedia_keystore
-      node: 20
+      node: 22
       java: 21
     triggering:
       events:
