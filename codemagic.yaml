@@ -9,19 +9,14 @@ workflows:
     max_build_duration: 60
     environment:
       groups:
-        - app_store_credentials   # set in Codemagic: APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_PRIVATE_KEY
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: ch.spacemedia.app
+        - app_store_credentials   # APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_PRIVATE_KEY
+      vars:
+        BUNDLE_ID: ch.spacemedia.app
+        XCODE_WORKSPACE: mobile/ios/App/App.xcworkspace
+        XCODE_SCHEME: App
       node: 20
       xcode: latest
       cocoapods: default
-    triggering:
-      events:
-        - tag
-      tag_patterns:
-        - pattern: 'mobile-v*'
-          include: true
     scripts:
       - name: Install npm dependencies (mobile)
         script: |
@@ -31,8 +26,13 @@ workflows:
         script: |
           cd mobile
           npx cap sync ios
-      - name: Set up provisioning profile
+      - name: Set up code signing (auto-fetch via App Store Connect API)
         script: |
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+          keychain initialize
+          keychain add-certificates
           xcode-project use-profiles
       - name: Increment build number
         script: |
@@ -42,10 +42,9 @@ workflows:
           agvtool new-version -all $NEW_BUILD
       - name: Build .ipa
         script: |
-          cd mobile/ios/App
           xcode-project build-ipa \
-            --workspace App.xcworkspace \
-            --scheme App
+            --workspace "$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME"
     artifacts:
       - mobile/ios/App/build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
