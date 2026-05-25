@@ -87,6 +87,7 @@ workflows:
       - name: Build debug APK (installable without Play Store)
         script: |
           cd mobile/android
+          chmod +x ./gradlew
           ./gradlew assembleDebug
     artifacts:
       - mobile/android/app/build/outputs/apk/debug/*.apk
