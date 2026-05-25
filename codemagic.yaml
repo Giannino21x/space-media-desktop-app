@@ -37,6 +37,8 @@ workflows:
           keychain initialize
           keychain add-certificates --certificate /tmp/ios_distribution.p12 \
             --certificate-password "$IOS_DISTRIBUTION_CERT_PASSWORD"
+          # Generate /Users/builder/export_options.plist from the installed profile
+          xcode-project use-profiles --warn-only
       - name: Increment build number
         script: |
           cd mobile/ios/App
