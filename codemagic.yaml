@@ -25,16 +25,18 @@ workflows:
         script: |
           cd mobile
           npx cap sync ios
-      - name: Set up code signing (auto-fetch via App Store Connect API)
+      - name: Install signing certificate + provisioning profile
         script: |
-          # pbxproj is pre-configured with CODE_SIGN_STYLE=Manual + DEVELOPMENT_TEAM.
-          # codemagic-cli-tools fetches the matching provisioning profile, installs
-          # the distribution certificate into a keychain, and patches the pbxproj
-          # with PROVISIONING_PROFILE_SPECIFIER.
-          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
+          # We pre-generated the distribution certificate and provisioning
+          # profile manually (Apple's API can't re-export the private key for
+          # a fresh distribution cert). Both are passed in as base64 env vars.
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$IOS_DISTRIBUTION_CERT_BASE64" | base64 --decode > /tmp/ios_distribution.p12
+          echo "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode \
+            > ~/Library/MobileDevice/Provisioning\ Profiles/space_media_app_store.mobileprovision
           keychain initialize
-          keychain add-certificates
-          xcode-project use-profiles
+          keychain add-certificates --certificate /tmp/ios_distribution.p12 \
+            --certificate-password "$IOS_DISTRIBUTION_CERT_PASSWORD"
       - name: Increment build number
         script: |
           cd mobile/ios/App
