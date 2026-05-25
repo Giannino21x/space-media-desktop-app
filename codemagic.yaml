@@ -67,7 +67,7 @@ workflows:
   # ---- Android: Build AAB for Play Store ----
   android-workflow:
     name: Android (Debug APK)
-    instance_type: linux_x2
+    instance_type: linux
     max_build_duration: 60
     environment:
       node: 22
