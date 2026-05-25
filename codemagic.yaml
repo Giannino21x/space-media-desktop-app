@@ -66,22 +66,12 @@ workflows:
 
   # ---- Android: Build AAB for Play Store ----
   android-workflow:
-    name: Android (Play Store)
+    name: Android (Debug APK)
     instance_type: linux_x2
     max_build_duration: 60
     environment:
-      groups:
-        - google_play_credentials   # set in Codemagic: GCLOUD_SERVICE_ACCOUNT_CREDENTIALS, KEYSTORE_PASSWORD, KEY_PASSWORD, KEY_ALIAS
-      android_signing:
-        - spacemedia_keystore
       node: 22
       java: 21
-    triggering:
-      events:
-        - tag
-      tag_patterns:
-        - pattern: 'mobile-v*'
-          include: true
     scripts:
       - name: Install npm dependencies (mobile)
         script: |
@@ -94,15 +84,9 @@ workflows:
       - name: Set Android SDK location
         script: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/mobile/android/local.properties"
-      - name: Build Android release AAB
+      - name: Build debug APK (installable without Play Store)
         script: |
           cd mobile/android
-          ./gradlew bundleRelease
+          ./gradlew assembleDebug
     artifacts:
-      - mobile/android/app/build/outputs/**/*.aab
-      - mobile/android/app/build/outputs/**/mapping.txt
-    publishing:
-      google_play:
-        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-        track: internal
-        submit_as_draft: false
+      - mobile/android/app/build/outputs/apk/debug/*.apk
