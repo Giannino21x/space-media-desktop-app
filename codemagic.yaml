@@ -12,11 +12,10 @@ workflows:
         - app_store_credentials   # APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_PRIVATE_KEY
       vars:
         BUNDLE_ID: ch.spacemedia.app
-        XCODE_WORKSPACE: mobile/ios/App/App.xcworkspace
+        XCODE_PROJECT: mobile/ios/App/App.xcodeproj
         XCODE_SCHEME: App
       node: 22
       xcode: latest
-      cocoapods: default
     scripts:
       - name: Install npm dependencies (mobile)
         script: |
@@ -43,7 +42,7 @@ workflows:
       - name: Build .ipa
         script: |
           xcode-project build-ipa \
-            --workspace "$XCODE_WORKSPACE" \
+            --project "$XCODE_PROJECT" \
             --scheme "$XCODE_SCHEME"
     artifacts:
       - mobile/ios/App/build/ios/ipa/*.ipa
