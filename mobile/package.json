@@ -1,0 +1,22 @@
+{
+  "name": "space-media-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SPACE Media — Mobile (iOS/Android) via Capacitor wrapping the Vercel web app",
+  "scripts": {
+    "sync": "cap sync",
+    "open:ios": "cap open ios",
+    "build:ios": "cap sync ios",
+    "build:android": "cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.3.4",
+    "@capacitor/cli": "^8.3.4",
+    "@capacitor/core": "^8.3.4",
+    "@capacitor/ios": "^8.3.4"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "typescript": "^6.0.3"
+  }
+}
