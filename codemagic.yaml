@@ -3,6 +3,8 @@
 
 workflows:
   # ---- iOS: Build + auto-submit to TestFlight ----
+  # Trigger: manual (via Codemagic UI). Avoid auto-trigger so Apple Compliance review isn't
+  # disturbed by repeated TestFlight uploads.
   ios-workflow:
     name: iOS (TestFlight)
     instance_type: mac_mini_m2
@@ -64,7 +66,9 @@ workflows:
           - Internal Testers
         submit_to_app_store: false
 
-  # ---- Android: Build AAB for Play Store ----
+  # ---- Android: Debug APK (push-triggered) ----
+  # Use this for quick installable APKs without Play Store.
+  # Triggered automatically on push to master.
   android-workflow:
     name: Android (Debug APK)
     instance_type: mac_mini_m2
@@ -98,3 +102,75 @@ workflows:
           ./gradlew assembleDebug
     artifacts:
       - mobile/android/app/build/outputs/apk/debug/*.apk
+
+  # ---- Android: Release AAB + Play Store publishing ----
+  # Trigger: tag matching v* (e.g. v1.0.0). Does NOT auto-trigger on push.
+  # PRECONDITIONS (set up in Codemagic UI BEFORE running):
+  #   1. Env group `play_store_credentials` with:
+  #      - ANDROID_KEYSTORE_BASE64  (base64 of .signing/android/spacemedia-release.jks)
+  #      - ANDROID_KEYSTORE_PASSWORD
+  #      - ANDROID_KEY_ALIAS = spacemedia
+  #      - ANDROID_KEY_PASSWORD (same as keystore password)
+  #      - GCLOUD_SERVICE_ACCOUNT_CREDENTIALS  (JSON content of Play Service Account)
+  #      - GOOGLE_PLAY_TRACK = internal | alpha | beta | production
+  #   2. App created in Play Console with package name ch.spacemedia.app
+  #   3. Service account linked + granted permissions in Play Console → API access
+  android-release-workflow:
+    name: Android (Release AAB → Play Store)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
+    environment:
+      groups:
+        - play_store_credentials
+      vars:
+        PACKAGE_NAME: ch.spacemedia.app
+      node: 22
+      java: 21
+    scripts:
+      - name: Install npm dependencies (mobile)
+        script: |
+          cd mobile
+          npm ci --no-audit --no-fund
+      - name: Capacitor sync Android
+        script: |
+          cd mobile
+          npx cap sync android
+      - name: Set Android SDK location
+        script: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/mobile/android/local.properties"
+      - name: Install signing keystore
+        script: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > /tmp/keystore.jks
+          cat > "$CM_BUILD_DIR/mobile/android/keystore.properties" <<EOF
+          storeFile=/tmp/keystore.jks
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          keyPassword=$ANDROID_KEY_PASSWORD
+          EOF
+      - name: Bump versionCode from Play Store (highest across tracks)
+        script: |
+          cd mobile/android/app
+          LATEST=$(google-play get-latest-build-number \
+            --package-name "$PACKAGE_NAME" \
+            --tracks internal alpha beta production 2>/dev/null || echo "0")
+          NEW=$(($LATEST + 1))
+          sed -i.bak "s/versionCode .*/versionCode $NEW/" build.gradle
+          echo "New versionCode: $NEW"
+      - name: Build release AAB
+        script: |
+          cd mobile/android
+          chmod +x ./gradlew
+          ./gradlew bundleRelease
+    artifacts:
+      - mobile/android/app/build/outputs/bundle/release/*.aab
+    publishing:
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: $GOOGLE_PLAY_TRACK
+        submit_as_draft: false
