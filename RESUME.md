@@ -1,6 +1,6 @@
 # 📱 SPACE Media App — Stand & Wie weiter
 
-**Pause am 2026-05-25, 19:50 CEST**
+**Update am 2026-05-26** — Während du im Garten warst hab ich die Build-Automatisierung umgebaut und alle Store-Texte vorbereitet.
 
 ## ✅ Was läuft
 
@@ -10,7 +10,7 @@
 - → Install [TestFlight](https://apps.apple.com/app/testflight/id899247664) auf iPhone, Mail öffnen, akzeptieren, App laden
 - Bundle ID: `ch.spacemedia.app`
 - App Store Connect App ID: `6773051956`
-- Codemagic iOS-Workflow funktioniert bei jedem Push auf `master` (Trigger manuell via Web-UI)
+- Codemagic iOS-Workflow funktioniert (Trigger weiterhin manuell — bewusst so gelassen wegen Apple-Compliance-Review)
 
 ### Apple Developer Setup — komplett
 - Team ID: `699K5VAG3G`
@@ -21,54 +21,79 @@
 - App-spezifisches Passwort für Notarisierung
 - Compliance bei Apple eingereicht — wartet auf Approval (1-3 Tage)
 
+### Android — Build läuft automatisch 🆕
+- Capacitor Android-Projekt komplett aufgesetzt mit `ch.spacemedia.app`
+- Codemagic yaml fertig + `chmod +x ./gradlew` Fix
+- **NEU (2026-05-26):** `triggering` block hinzugefügt → Push auf master startet Build automatisch
+- **Commit `468887a` wurde gepusht** → Codemagic baut gerade Android APK
+- → Check https://codemagic.io/app/6a14617c1bd8ed4acd8711e1/builds (Build sollte gerade laufen oder fertig sein)
+
+### Store-Listings — alle Texte fertig 🆕
+- `STORE_LISTING.md` — App Store + Play Store Texte auf Deutsch + Englisch
+  - App-Name, Untertitel, Beschreibung, Keywords, Promo Text
+  - Inkl. Privacy Label / Datensicherheit Antworten
+  - Ready to copy-paste in App Store Connect + Play Console
+- `PLAY_STORE_SETUP.md` — Schritt-für-Schritt Anleitung von "Debug APK" zu "Production Release"
+  - Google Play Console Account ($25, D-U-N-S Nummer-Check)
+  - Release-Keystore-Erstellung
+  - Service Account für Auto-Publishing
+  - Codemagic yaml erweitert für `bundleRelease` + Auto-Submit
+
 ## ⏳ Was offen ist
 
-### Android — fast fertig, 1 Build-Iteration noch nötig
-- Capacitor Android-Projekt komplett aufgesetzt mit `ch.spacemedia.app`
-- Codemagic yaml fertig (Mac-Runner statt Linux wegen Free Tier)
-- **Letzter Fehler:** `gradlew` permission denied
-- **Fix bereits im Code:** `chmod +x ./gradlew` vor `./gradlew assembleDebug`
-- **TO-DO:** Yaml committen + pushen, dann Build #4 triggern → APK installierbar
+### iOS App Store Submission — geblockt bis Apple Compliance approved
+- Apple Mail abwarten (1-3 Tage)
+- Dann: 3-5 Screenshots vom iPhone (TestFlight Build) machen
+- App Store Connect Listing füllen (Texte stehen in `STORE_LISTING.md`)
+- Privacy Policy URL braucht's noch → `https://space-media.ch/datenschutz` muss live sein
 
-### App Store Submission (iOS)
-- App Store Listing fehlt noch: Screenshots, Beschreibung, Privacy Policy URL
-- Submission ist **geblockt** bis Apple Compliance approved (siehe ⏳)
+### Android APK — wenn Codemagic Build durch ist
+1. Codemagic Web-UI öffnen, neuesten Build prüfen
+2. APK runterladen (Artifact)
+3. Aufs Android-Phone übertragen (USB / Google Drive / Mail)
+4. Installation erlauben in "Unbekannte Quellen"
+5. App testen
+
+### Play Store — frühestens nächste Woche (siehe `PLAY_STORE_SETUP.md`)
+- Google Play Console Account (USD 25, evtl. D-U-N-S Wartezeit)
+- Release-Keystore generieren + sichern
+- Service Account in Google Cloud
+- Codemagic-yaml umbauen auf `bundleRelease` + Google-Play Publishing
 
 ### Mac DMG (signiert + notarisiert) — pausiert
 - GitHub Actions workflow + p12 + alle Secrets bereit
 - Hängte beim letzten Test 22 Min ohne Output → wurde gecancelt
 - Niedrige Priorität (DMG-Build funktioniert auch unsigned, gibt nur Gatekeeper-Warning)
 
-## 🚀 Morgen — empfohlene Reihenfolge
+## 🚀 Empfohlene Reihenfolge — Heute
 
-### 1. Android-Build fertigstellen (~5 Min)
-```bash
-cd C:/Projects/space-media-desktop
-git add codemagic.yaml
-git commit -m "fix(android): chmod gradlew before build"
-git push origin master
-```
-Dann in Codemagic Web-UI:
-- App Settings → "Check for configuration files"
-- Branch auf `master`
-- "Start new build" → Workflow `android-workflow` wählen → Start
-- APK Download wenn fertig (~5 Min)
-- Auf Android-Phone installieren (Settings → "Install from unknown sources")
+### 1. Android-Build prüfen (5 Min)
+- https://codemagic.io/app/6a14617c1bd8ed4acd8711e1/builds
+- Wenn ✅: APK runterladen + auf Phone installieren
+- Wenn ❌: Logs ansehen, mir Screenshot/Fehlertext zeigen
 
-### 2. Wenn Apple Compliance approved (Mail check)
-- App Store Listing ausfüllen (Apple App Store Connect → SPACE Media → "Vertrieb")
-- Submission to App Store Review (1-3 Tage Apple-Review)
+### 2. Apple-Mail checken
+- Wenn Compliance approved: weiter mit Punkt 3
+- Wenn noch nicht: einfach warten
 
-### 3. Google Play Store (wenn ernst gemeint)
-- Google Play Console Account ($25 einmalig): https://play.google.com/console
-- Service Account JSON für Codemagic (für auto-submission)
-- Android Release-Signing Keystore in Codemagic
-- yaml umbauen: `assembleDebug` → `bundleRelease` + publishing block
+### 3. Privacy Policy auf space-media.ch publizieren
+- Pflicht für beide Stores
+- Inhalt: Cookies, Login-Daten, Hosting in CH, FADP-Konformität, Kontakt
+- Ideal: Eigene Seite `/datenschutz` im Web-App-Repo deployen
+
+### 4. iOS App Store Listing füllen (wenn Compliance da)
+- App Store Connect → SPACE Media öffnen
+- "Vertrieb" / "1.0 Prepare for Submission"
+- Texte aus `STORE_LISTING.md` kopieren
+- Screenshots hochladen
+- "Zur Überprüfung einreichen"
 
 ## 🔑 Wichtige Files & Pfade
 
 | Wofür | Pfad |
 |---|---|
+| **Store-Texte (App Store + Play Store)** | `STORE_LISTING.md` 🆕 |
+| **Play Store Setup-Anleitung** | `PLAY_STORE_SETUP.md` 🆕 |
 | Apple Credentials | `.browser-automation/apple-credentials.md` |
 | iOS Distribution P12 | `.signing/apple_distribution.p12` |
 | iOS Provisioning Profile | `.signing/space_media_app_store.mobileprovision` |
@@ -86,6 +111,7 @@ Dann in Codemagic Web-UI:
 - **Codemagic:** https://codemagic.io/app/6a14617c1bd8ed4acd8711e1
 - **App Store Connect:** https://appstoreconnect.apple.com/apps/6773051956
 - **Apple Developer:** https://developer.apple.com/account
+- **Google Play Console:** https://play.google.com/console (Account muss noch angelegt werden)
 
 ## 🔐 GitHub Secrets gesetzt
 - `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`
@@ -99,7 +125,15 @@ Dann in Codemagic Web-UI:
 - `IOS_DISTRIBUTION_CERT_PASSWORD` = `mtaZR7TaGVxdh1MkzHnWKQcxTyy28xOU`
 - `IOS_PROVISIONING_PROFILE_BASE64` = base64 von mobileprovision
 
+## 🆕 Heute geändert (2026-05-26)
+
+| Commit | Was |
+|---|---|
+| `468887a` | `ci(android): auto-trigger workflow on push to master` — Codemagic baut Android jetzt automatisch bei Push |
+| (new file) | `STORE_LISTING.md` — Komplette Texte für iOS App Store + Play Store |
+| (new file) | `PLAY_STORE_SETUP.md` — Step-by-step Play Store Setup-Anleitung |
+
 ## ⚠️ Browser-Automation-Notes
-- Chrome läuft auf `localhost:9222` (Debug Port)
-- Profile in `.browser-automation/chrome-profile/`
-- Falls morgen Browser closed: neu öffnen mit den Args aus `chrome-profile` (Apple Login bleibt erhalten)
+- Chrome läuft NICHT mehr auf `localhost:9222` (war zu beim Resume-Check)
+- Profile in `.browser-automation/chrome-profile/` (Login bleibt erhalten)
+- Falls Browser-Automation gebraucht: neu öffnen mit Args aus chrome-profile
