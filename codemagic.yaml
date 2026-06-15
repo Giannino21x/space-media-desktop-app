@@ -169,8 +169,7 @@ workflows:
           ./gradlew bundleRelease
     artifacts:
       - mobile/android/app/build/outputs/bundle/release/*.aab
-    publishing:
-      google_play:
-        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-        track: $GOOGLE_PLAY_TRACK
-        submit_as_draft: false
+    # NOTE: google_play auto-publish disabled — GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+    # not configured yet. Build produces the signed .aab artifact; upload it
+    # manually to the Play Console release. Re-enable once a valid service
+    # account JSON is set in the play_store_credentials env group.
