@@ -13,6 +13,8 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <!-- App-Inhalt ist immer dunkel (#04070d) → helle System-Icons erzwingen -->
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 
 

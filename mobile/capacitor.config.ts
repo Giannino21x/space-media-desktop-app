@@ -10,7 +10,10 @@ const config: CapacitorConfig = {
     androidScheme: 'https',
   },
   ios: {
-    contentInset: 'always',
+    /* 'never': die Web-App handhabt Safe-Areas selbst (viewport-fit=cover +
+       env(safe-area-inset-*)). 'always' hat den Bottom-Inset doppelt
+       angewendet → sichtbarer Rand unter der App. */
+    contentInset: 'never',
     backgroundColor: '#04070d',
     scheme: 'SPACE Media',
   },
@@ -18,19 +21,9 @@ const config: CapacitorConfig = {
     backgroundColor: '#04070d',
     allowMixedContent: false,
   },
-  plugins: {
-    SplashScreen: {
-      launchAutoHide: true,
-      launchShowDuration: 1500,
-      backgroundColor: '#04070d',
-      androidScaleType: 'CENTER_CROP',
-      showSpinner: false,
-    },
-    StatusBar: {
-      style: 'DARK',
-      backgroundColor: '#04070d',
-    },
-  },
+  /* Keine plugins-Blöcke: @capacitor/status-bar & splash-screen sind nicht
+     installiert; Statusbar-Styling läuft nativ (Info.plist / styles.xml),
+     der Launch-Screen über die nativen Themes. */
 };
 
 export default config;
