@@ -155,13 +155,20 @@ workflows:
           EOF
       - name: Bump versionCode from Play Store (highest across tracks)
         script: |
+          # Without GCLOUD_SERVICE_ACCOUNT_CREDENTIALS the lookup fails — keep
+          # the versionCode committed in build.gradle instead of forcing 1.
           cd mobile/android/app
           LATEST=$(google-play get-latest-build-number \
             --package-name "$PACKAGE_NAME" \
             --tracks internal alpha beta production 2>/dev/null || echo "0")
-          NEW=$(($LATEST + 1))
-          sed -i.bak "s/versionCode .*/versionCode $NEW/" build.gradle
-          echo "New versionCode: $NEW"
+          if [ "$LATEST" -gt 0 ]; then
+            NEW=$(($LATEST + 1))
+            sed -i.bak "s/versionCode .*/versionCode $NEW/" build.gradle
+            echo "New versionCode: $NEW"
+          else
+            echo "Play lookup unavailable — using versionCode from build.gradle:"
+            grep versionCode build.gradle
+          fi
       - name: Build release AAB
         script: |
           cd mobile/android
