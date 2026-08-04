@@ -75,6 +75,45 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  // Windows: adapt the window-control symbols (–, □, ×) to what's actually
+  // rendered under the titlebar — sample real pixels, DOM-independent.
+  if (process.platform === 'win32') {
+    let lastSymbolColor = '';
+    const syncTitlebarTheme = async () => {
+      if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible() || mainWindow.isMinimized()) return;
+      try {
+        const [w] = mainWindow.getContentSize();
+        // Sample a strip left of the native buttons (buttons are ~138px wide)
+        const img = await mainWindow.webContents.capturePage({
+          x: Math.max(0, w - 200), y: 6, width: 40, height: 28,
+        });
+        const bmp = img.getBitmap(); // BGRA
+        if (!bmp.length) return;
+        let r = 0, g = 0, b = 0;
+        const px = bmp.length / 4;
+        for (let i = 0; i < bmp.length; i += 4) {
+          b += bmp[i]; g += bmp[i + 1]; r += bmp[i + 2];
+        }
+        r /= px; g /= px; b /= px;
+        const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+        const symbolColor = luminance > 0.5 ? '#1f2937' : '#ffffff';
+        if (symbolColor !== lastSymbolColor) {
+          lastSymbolColor = symbolColor;
+          const toHex = (v) => Math.round(v).toString(16).padStart(2, '0');
+          mainWindow.setTitleBarOverlay({
+            color: `#${toHex(r)}${toHex(g)}${toHex(b)}`,
+            symbolColor,
+            height: 40,
+          });
+        }
+      } catch (_) {
+        // capturePage can fail transiently (e.g. during navigation) — ignore
+      }
+    };
+    mainWindow.webContents.on('did-finish-load', syncTitlebarTheme);
+    setInterval(syncTitlebarTheme, 2000);
+  }
 }
 
 // Generate a badge overlay icon with a number (Windows taskbar)
