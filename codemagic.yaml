@@ -47,13 +47,16 @@ workflows:
           # get-latest-app-store-build-number kennt nur VERÖFFENTLICHTE Builds —
           # TestFlight-Uploads fehlen, daher kollidierte die Nummer (immer "1").
           # Max aus TestFlight- und Store-Stand nehmen, nicht-numerisches abfangen.
+          # ASC-Abfragen hinken frisch hochgeladenen Builds hinterher (Processing-
+          # Lag) → Duplikat-Nummern. Codemagics $BUILD_NUMBER ist streng
+          # steigend und eindeutig; ASC-Stand nur als Untergrenze.
           TF_BUILD=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APP_ID" 2>/dev/null | grep -oE '[0-9]+' | head -1)
           AS_BUILD=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APP_ID" 2>/dev/null | grep -oE '[0-9]+' | head -1)
           TF_BUILD=${TF_BUILD:-0}
           AS_BUILD=${AS_BUILD:-0}
           LATEST_BUILD=$(( TF_BUILD > AS_BUILD ? TF_BUILD : AS_BUILD ))
-          NEW_BUILD=$(($LATEST_BUILD + 1))
-          echo "TestFlight: $TF_BUILD, App Store: $AS_BUILD -> neue Build-Nummer: $NEW_BUILD"
+          NEW_BUILD=$(( BUILD_NUMBER > LATEST_BUILD ? BUILD_NUMBER : LATEST_BUILD + 1 ))
+          echo "Codemagic: $BUILD_NUMBER, TestFlight: $TF_BUILD, App Store: $AS_BUILD -> Build-Nummer: $NEW_BUILD"
           agvtool new-version -all $NEW_BUILD
       - name: Build .ipa
         script: |
