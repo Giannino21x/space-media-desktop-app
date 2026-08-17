@@ -21,8 +21,18 @@ const config: CapacitorConfig = {
     backgroundColor: '#04070d',
     allowMixedContent: false,
   },
-  /* Keine plugins-Blöcke: @capacitor/status-bar & splash-screen sind nicht
-     installiert; Statusbar-Styling läuft nativ (Info.plist / styles.xml),
+  plugins: {
+    /* @capacitor/keyboard ist NUR für setAccessoryBarVisible(false) drin
+       (die Web-App ruft es auf — versteckt die ∧∨✓-Leiste über der iOS-
+       Tastatur). resize 'none': die Web-App handhabt den Keyboard-Offset
+       selbst via visualViewport (useVisualViewportOffset) — der native
+       Resize-Modus würde das doppelt anwenden. */
+    Keyboard: {
+      resize: 'none',
+    },
+  },
+  /* @capacitor/status-bar & splash-screen sind nicht installiert;
+     Statusbar-Styling läuft nativ (Info.plist / styles.xml),
      der Launch-Screen über die nativen Themes. */
 };
 
