@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'ch.spacemedia.app',
-  appName: 'SPACE Media',
+  appName: 'SPACE Media Engine',
   webDir: 'www',
   server: {
     url: 'https://space-media-app.vercel.app',

@@ -16,7 +16,7 @@
   },
   "build": {
     "appId": "ch.space-media.app",
-    "productName": "SPACE Media App",
+    "productName": "SPACE Media Engine",
     "copyright": "Copyright © 2026 SPACE Media",
     "directories": {
       "output": "dist",
