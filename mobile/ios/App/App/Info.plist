@@ -6,6 +6,8 @@
 	<string>$(CAPACITOR_DEBUG)</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>SPACE Media Engine nutzt das Mikrofon für Sprachnachrichten und Spracheingabe an den SPACE Bot.</string>
 	<key>CFBundleDisplayName</key>
         <string>SPACE Media Engine</string>
 	<key>CFBundleExecutable</key>
