@@ -90,9 +90,9 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
 
 ## Current State
 
-- **Desktop:** letztes veröffentlichtes GitHub Release ist `v1.0.1` (15.06.2026). Der Tag `v1.0.2`
-  existiert remote, hat aber kein Release — der Build ist dort nicht durchgelaufen. `package.json`
-  auf `master` steht auf `1.0.1`.
+- **Desktop:** letztes veröffentlichtes GitHub Release ist `v1.0.2` (08.09.2026, lädt `app.space-media.ch`,
+  Electron 44). Lokal gebaut und per `gh release create` auf den bereits existierenden Tag `v1.0.2` gelegt
+  (kein neues Tag-Event → keine CI-Pipelines). `package.json` auf `master` steht auf `1.0.2`.
 - **iOS:** `MARKETING_VERSION` 1.0.2, App bei Apple eingereicht und freigegeben (Details in `RESUME.md`).
 - **Android:** `versionCode 3` / `versionName 1.0.2`, Keystore vorhanden, Play-Auto-Upload noch nicht
   konfiguriert — AAB-Uploads laufen manuell.
