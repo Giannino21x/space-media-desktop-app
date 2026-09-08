@@ -53,7 +53,9 @@ function createWindow() {
     mainWindow.show();
   });
 
-  const url = isDev ? 'http://localhost:3000' : APP_URL;
+  // --dev loads a local Next dev server; SPACE_DEV_URL overrides the port
+  // when 3000 is taken (e.g. SPACE_DEV_URL=http://localhost:3100 npm run dev).
+  const url = isDev ? (process.env.SPACE_DEV_URL || 'http://localhost:3000') : APP_URL;
   mainWindow.loadURL(url);
 
   // External links → system browser
@@ -78,8 +80,16 @@ function createWindow() {
 
   // Windows: adapt the window-control symbols (–, □, ×) to what's actually
   // rendered under the titlebar — sample real pixels, DOM-independent.
+  //
+  // Sampling is event-driven, not polled: capturePage is a compositor
+  // readback, and doing it every second put a small hitch into an otherwise
+  // steady frame rate. The renderer (preload.js) asks for a resync when the
+  // theme/brand attribute or the route changes; focus and load do too. A slow
+  // 10 s safety tick (only while the window is focused) catches everything else.
   if (process.platform === 'win32') {
-    let lastSymbolColor = '';
+    let applied = null; // last {r,g,b,symbolColor} actually set on the overlay
+    let pendingCount = 0;
+    let syncTimer = null;
     const syncTitlebarTheme = async () => {
       if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible() || mainWindow.isMinimized()) return;
       try {
@@ -88,7 +98,7 @@ function createWindow() {
         const img = await mainWindow.webContents.capturePage({
           x: Math.max(0, w - 200), y: 6, width: 40, height: 28,
         });
-        const bmp = img.getBitmap(); // BGRA
+        const bmp = img.toBitmap(); // BGRA
         if (!bmp.length) return;
         let r = 0, g = 0, b = 0;
         const px = bmp.length / 4;
@@ -98,21 +108,38 @@ function createWindow() {
         r /= px; g /= px; b /= px;
         const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
         const symbolColor = luminance > 0.5 ? '#1f2937' : '#ffffff';
-        if (symbolColor !== lastSymbolColor) {
-          lastSymbolColor = symbolColor;
-          const toHex = (v) => Math.round(v).toString(16).padStart(2, '0');
-          mainWindow.setTitleBarOverlay({
-            color: `#${toHex(r)}${toHex(g)}${toHex(b)}`,
-            symbolColor,
-            height: 40,
-          });
-        }
+        const changed = !applied
+          || applied.symbolColor !== symbolColor
+          || Math.abs(applied.r - r) + Math.abs(applied.g - g) + Math.abs(applied.b - b) > 48;
+        if (!changed) { pendingCount = 0; return; }
+        // Require two consecutive samples that want a change, so one-frame
+        // states (white load flash, dialogs sliding in) never stick.
+        pendingCount++;
+        if (pendingCount < 2) { scheduleSync(350); return; }
+        pendingCount = 0;
+        applied = { r, g, b, symbolColor };
+        const toHex = (v) => Math.round(v).toString(16).padStart(2, '0');
+        mainWindow.setTitleBarOverlay({
+          color: `#${toHex(r)}${toHex(g)}${toHex(b)}`,
+          symbolColor,
+          height: 40,
+        });
       } catch (_) {
         // capturePage can fail transiently (e.g. during navigation) — ignore
       }
     };
-    mainWindow.webContents.on('did-finish-load', syncTitlebarTheme);
-    setInterval(syncTitlebarTheme, 2000);
+    // Coalesce bursts (a route change fires several history/attribute events)
+    // into one sample after the UI has settled.
+    const scheduleSync = (delay) => {
+      if (syncTimer) clearTimeout(syncTimer);
+      syncTimer = setTimeout(() => { syncTimer = null; syncTitlebarTheme(); }, delay);
+    };
+    // Delay the post-load sample past the initial paint/flash of the web app.
+    mainWindow.webContents.on('did-finish-load', () => scheduleSync(1000));
+    mainWindow.webContents.on('did-navigate-in-page', () => scheduleSync(400));
+    mainWindow.on('focus', () => scheduleSync(50));
+    ipcMain.on('titlebar-resync', () => scheduleSync(300));
+    setInterval(() => { if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused()) scheduleSync(0); }, 10000);
   }
 }
 

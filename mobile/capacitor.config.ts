@@ -29,6 +29,12 @@ const config: CapacitorConfig = {
        Resize-Modus würde das doppelt anwenden. */
     Keyboard: {
       resize: 'none',
+      /* Android only: ab Android 15 (Edge-to-Edge) greift adjustResize im
+         Manifest nicht mehr von selbst — das Plugin verkleinert den
+         WebView-Content beim Einblenden der Tastatur explizit. Ohne das
+         legt sich die Tastatur über den Composer, der Viewport meldet
+         keine Änderung, und man sieht nicht, was man tippt. */
+      resizeOnFullScreen: true,
     },
   },
   /* @capacitor/status-bar & splash-screen sind nicht installiert;

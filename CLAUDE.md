@@ -7,7 +7,7 @@ Native Hüllen für die SPACE Media Web-App. Alle vier Builds laden dieselbe liv
 Änderungen an der Web-App sind sofort in allen Builds sichtbar; ein neuer Shell-Build ist nur nötig für
 Fensterverhalten, Icons, Notifications, Auto-Update oder Capacitor-Konfiguration.
 
-**Stack:** Electron 28 + electron-builder 26 + electron-updater 6 (Desktop) · Capacitor 8 (iOS/Android)
+**Stack:** Electron 44 + electron-builder 26 + electron-updater 6 (Desktop) · Capacitor 8 (iOS/Android)
 **CI:** GitHub Actions (Desktop) · Codemagic (Mobile)
 **Sprache:** UI + Store-Texte auf Deutsch, Code + Comments auf Englisch
 
@@ -15,8 +15,10 @@ Fensterverhalten, Icons, Notifications, Auto-Update oder Capacitor-Konfiguration
 
 ```
 main.js            → Electron Main: BrowserWindow (frameless), Auto-Updater, Taskbar-Badge-IPC,
-                     GPU-Flags, adaptive Windows-Titlebar (capturePage-Sampling alle 2 s)
-preload.js         → Drag-Region (body::after, 40 px), Badge-Observer, window.__electronRestart
+                     GPU-Flags, adaptive Windows-Titlebar (capturePage-Sampling event-getrieben: Theme-/Routenwechsel,
+                     Fokus, Load + 10-s-Sicherheitstick bei Fokus; wechselt erst nach 2 gleichen Samples)
+preload.js         → Drag-Region (body::after, 40 px), Badge-Observer (rAF-gedrosselt), Titlebar-Resync-IPC,
+                     window.__electronRestart
 assets/            → icon.ico, icon.png, entitlements.mac.plist (buildResources)
 .github/workflows/ → build.yml — Desktop-Build + GitHub Release
 codemagic.yaml     → 3 Mobile-Workflows (iOS TestFlight, Android Debug-APK, Android Release-AAB)
@@ -37,7 +39,7 @@ Session-Partition: `persist:spaceapp`. Branch: `master`.
 ```bash
 npm install
 npm start            # lädt die Vercel-Produktions-URL
-npm run dev          # lädt http://localhost:3000
+npm run dev          # lädt http://localhost:3000 (SPACE_DEV_URL=http://localhost:3100 für anderen Port)
 npm run build:win    # NSIS-Installer → dist/
 npm run build:mac    # DMG x64 + arm64 (braucht einen Mac + Apple-Zertifikate)
 ```

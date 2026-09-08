@@ -1,4 +1,4 @@
-// Preload — drag region + taskbar badge observer
+// Preload — drag region + taskbar badge observer + titlebar theme resync
 
 const { ipcRenderer } = require('electron');
 
@@ -32,16 +32,26 @@ window.addEventListener('DOMContentLoaded', () => {
   `;
   document.head.appendChild(style);
 
-  // Watch for notification badge changes in the DOM
-  // The web app renders .notification-bell-badge with the unread count
+  // Watch for notification badge changes in the DOM.
+  // The web app renders .notification-bell-badge with the unread count.
+  // React mutates the DOM constantly (streaming chat, lists); the observer
+  // callback is coalesced to one DOM query per animation frame instead of
+  // one per mutation batch, so it never competes with rendering.
   let lastCount = 0;
-  const observer = new MutationObserver(() => {
+  let badgeCheckScheduled = false;
+  const readBadge = () => {
+    badgeCheckScheduled = false;
     const badge = document.querySelector('.notification-bell-badge');
     const count = badge ? parseInt(badge.textContent || '0', 10) || 0 : 0;
     if (count !== lastCount) {
       lastCount = count;
       ipcRenderer.send('set-badge-count', count);
     }
+  };
+  const observer = new MutationObserver(() => {
+    if (badgeCheckScheduled) return;
+    badgeCheckScheduled = true;
+    requestAnimationFrame(readBadge);
   });
 
   // Start observing once the app has loaded
@@ -51,14 +61,31 @@ window.addEventListener('DOMContentLoaded', () => {
       subtree: true,
       characterData: true,
     });
-    // Initial check
-    const badge = document.querySelector('.notification-bell-badge');
-    const count = badge ? parseInt(badge.textContent || '0', 10) || 0 : 0;
-    if (count > 0) {
-      ipcRenderer.send('set-badge-count', count);
-    }
+    readBadge();
   };
 
   // Wait a bit for the app to render
   setTimeout(startObserving, 3000);
+
+  // Titlebar theme: the main process samples the pixels under the native
+  // window controls. Instead of polling every second it now resamples when
+  // something that can change the top-bar colour actually happens — theme /
+  // brand switch (data-theme / data-brand on <html>) or a route change.
+  const requestTitlebarSync = () => ipcRenderer.send('titlebar-resync');
+  new MutationObserver(requestTitlebarSync).observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme', 'data-brand', 'class', 'style'],
+  });
+  window.addEventListener('popstate', requestTitlebarSync);
+  const { pushState, replaceState } = history;
+  history.pushState = function (...args) {
+    const r = pushState.apply(this, args);
+    requestTitlebarSync();
+    return r;
+  };
+  history.replaceState = function (...args) {
+    const r = replaceState.apply(this, args);
+    requestTitlebarSync();
+    return r;
+  };
 });
