@@ -3,7 +3,8 @@
 ## What
 
 Native Hüllen für die SPACE Media Web-App. Alle vier Builds laden dieselbe live laufende Vercel-App
-(`https://space-media-app.vercel.app`) — hier liegt **keine** App-Logik, nur die Shell.
+(`https://app.space-media.ch`, Custom Domain des Vercel-Projekts; die alte `space-media-app.vercel.app` bleibt
+parallel erreichbar, weil installierte Store-Apps sie fest laden) — hier liegt **keine** App-Logik, nur die Shell.
 Änderungen an der Web-App sind sofort in allen Builds sichtbar; ein neuer Shell-Build ist nur nötig für
 Fensterverhalten, Icons, Notifications, Auto-Update oder Capacitor-Konfiguration.
 

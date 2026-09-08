@@ -1,6 +1,6 @@
 # SPACE Media App — Desktop
 
-Electron-Wrapper für die SPACE Media Web-App. Lädt `space-media-app.vercel.app` in einem nativen Fenster.
+Electron-Wrapper für die SPACE Media Web-App. Lädt `app.space-media.ch` in einem nativen Fenster.
 
 ## Download
 
