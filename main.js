@@ -2,7 +2,14 @@ const { app, BrowserWindow, shell, Menu, ipcMain, nativeImage, dialog } = requir
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 
-const APP_URL = 'https://space-media-app.vercel.app';
+const APP_URL = 'https://app.space-media.ch';
+// Former production host. Still served by Vercel; keep it navigable so
+// links/redirects that carry the old origin stay inside the window.
+const LEGACY_APP_URL = 'https://space-media-app.vercel.app';
+
+function isAppUrl(url) {
+  return url.startsWith(APP_URL) || url.startsWith(LEGACY_APP_URL) || url.startsWith('http://localhost');
+}
 const isDev = process.argv.includes('--dev');
 
 let mainWindow;
@@ -60,7 +67,7 @@ function createWindow() {
 
   // External links → system browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (!url.startsWith(APP_URL) && !url.startsWith('http://localhost')) {
+    if (!isAppUrl(url)) {
       shell.openExternal(url);
       return { action: 'deny' };
     }
@@ -68,7 +75,7 @@ function createWindow() {
   });
 
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith(APP_URL) && !url.startsWith('http://localhost')) {
+    if (!isAppUrl(url)) {
       event.preventDefault();
       shell.openExternal(url);
     }
