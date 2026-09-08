@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'SPACE Media Engine',
   webDir: 'www',
   server: {
-    url: 'https://space-media-app.vercel.app',
+    url: 'https://app.space-media.ch',
     cleartext: false,
     androidScheme: 'https',
   },
