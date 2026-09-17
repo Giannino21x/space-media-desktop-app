@@ -90,9 +90,11 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
 
 ## Current State
 
-- **Desktop:** letztes veröffentlichtes GitHub Release ist `v1.0.2` (08.09.2026, lädt `app.space-media.ch`,
-  Electron 44). Lokal gebaut und per `gh release create` auf den bereits existierenden Tag `v1.0.2` gelegt
-  (kein neues Tag-Event → keine CI-Pipelines). `package.json` auf `master` steht auf `1.0.2`.
+- **Desktop:** letztes veröffentlichtes GitHub Release ist `v1.0.3` (17.09.2026, Update-Banner-Neustart via
+  `contextBridge` gefixt). Lokal gebaut, Release per `gh release create --target <sha>` → das neue Tag hat die
+  GitHub-Actions-Pipeline gestartet (sofort per `gh run cancel` abgebrochen, sonst überschreibt deren Release-Job
+  die Assets ohne passendes `latest.yml`) und Codemagic `android-release-workflow` (harmlos, kein Auto-Publish).
+  Nutzer auf ≤1.0.2: Banner-Klick tut nichts → App über X schliessen installiert das Update.
 - **iOS:** `MARKETING_VERSION` 1.0.3, im App Store live seit 21.08.2026 (Build 19, Xcode 26.4.1, natives
   Liquid-Glass-Chrome via `NativeChromeViewController.swift`). Die Tastatur handhabt die Web-App selbst
   (`KeyboardViewport` + `keyboard-mobile.css` im Web-Repo) — dafür ist kein neuer iOS-Build nötig.
