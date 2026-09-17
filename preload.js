@@ -1,9 +1,11 @@
 // Preload — drag region + taskbar badge observer + titlebar theme resync
 
-const { ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
-// Expose restart function for auto-updater banner
-window.__electronRestart = () => ipcRenderer.send('restart-for-update');
+// Expose restart function for auto-updater banner. With contextIsolation the
+// preload's `window` is not the page's `window`, so the banner (injected via
+// executeJavaScript into the main world) can only see it through contextBridge.
+contextBridge.exposeInMainWorld('__electronRestart', () => ipcRenderer.send('restart-for-update'));
 
 window.addEventListener('DOMContentLoaded', () => {
   const style = document.createElement('style');
@@ -70,22 +72,12 @@ window.addEventListener('DOMContentLoaded', () => {
   // Titlebar theme: the main process samples the pixels under the native
   // window controls. Instead of polling every second it now resamples when
   // something that can change the top-bar colour actually happens — theme /
-  // brand switch (data-theme / data-brand on <html>) or a route change.
+  // brand switch (data-theme / data-brand on <html>). Route changes are caught
+  // in main.js via 'did-navigate-in-page' — patching history.pushState here
+  // would only patch the isolated preload world, not the page.
   const requestTitlebarSync = () => ipcRenderer.send('titlebar-resync');
   new MutationObserver(requestTitlebarSync).observe(document.documentElement, {
     attributes: true,
     attributeFilter: ['data-theme', 'data-brand', 'class', 'style'],
   });
-  window.addEventListener('popstate', requestTitlebarSync);
-  const { pushState, replaceState } = history;
-  history.pushState = function (...args) {
-    const r = pushState.apply(this, args);
-    requestTitlebarSync();
-    return r;
-  };
-  history.replaceState = function (...args) {
-    const r = replaceState.apply(this, args);
-    requestTitlebarSync();
-    return r;
-  };
 });

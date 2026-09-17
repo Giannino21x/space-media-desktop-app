@@ -166,7 +166,9 @@ function createBadgeIcon(count) {
 
 // Restart app to install update
 ipcMain.on('restart-for-update', () => {
-  autoUpdater.quitAndInstall();
+  // setImmediate: let the IPC handler return before the windows are torn down.
+  // (isSilent=false, isForceRunAfter=true) → relaunch the app after installing.
+  setImmediate(() => autoUpdater.quitAndInstall(false, true));
 });
 
 // Listen for badge count updates from the renderer
