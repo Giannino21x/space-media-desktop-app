@@ -1,6 +1,44 @@
 # 📱 SPACE Media App — Stand & Wie weiter
 
-**Letzter Update: 2026-05-26 (Nachmittag), 100% autonom via Claude + Playwright**
+**Letzter Update: 2026-06-02, autonom via Claude + Playwright/CDP**
+
+---
+
+## 🎯 STAND 2026-06-02 — HIER WEITERMACHEN
+
+### 🍎 iOS — 🎉 FREIGEGEBEN von Apple (2026-06-03), geht automatisch live
+- **Apple-Freigabe-Mail erhalten 2026-06-03**: „Die Überprüfung wurde abgeschlossen. Es ist nun für den Vertrieb berechtigt." Einreich-ID `92ba5e0b-6e9b-43c9-9272-f07781198751`, Version 1.0.
+- **Auto-Release war gewählt → KEIN Publish-Knopf nötig.** App wird automatisch ausgerollt, bis zu 24 h bis öffentlich sichtbar. Store-URL `apps.apple.com/app/space-media/id6773051956` gab am 2026-06-03 noch 404 (noch nicht propagiert — normal).
+- App vollständig bei Apple eingereicht (war Status „Warten auf Prüfung", jetzt freigegeben).
+- Erledigt: 5 iPhone-Screenshots (Lead-Engine raus), 4 iPad-Screenshots, Altersfreigabe **4+**, Inhaltsrechte „Nein", Preis **Gratis**, Build 1 angehängt, Export Compliance.
+- **Apple-Login:** `gpeloso@outlook.com` (Apple-Mails → Outlook-Postfach, NICHT space-media!).
+- **Reviewer-Demo:** `reviewer@space-media.ch` / `Sm-Rev-cr2OA66etj-2026` (im Admin-Backend freigeschaltet, Login getestet ✅).
+- **Privacy-URL FIX 2026-06-02:** war `https://space-media.ch/datenschutz` (404!), korrigiert auf `https://space-media.ch/datenschutz.html` (live, 200) in ASC App-Datenschutz. Persistiert.
+- Nichts mehr zu tun außer auf Review warten.
+
+### 🤖 Android — ⏸️ MITTEN IN DER KONTO-VERIFIZIERUNG (hier unterbrochen)
+Play Console blockt „Create app" bis die **Developer-Verifizierung** komplett ist. Stand der 3 Teil-Schritte:
+1. **Verify identity** (Ausweis + Vertreter) — ⏳ **„Google is verifying your identity"** — abgeschickt, Mail an Account-Owner (Giannino), 1–3 Tage. Authorised representative = **Matthew Mylius** eingetragen (Gesellschafter mit Einzelunterschrift im HR).
+2. **Verify organisation** — ✅ Submitted (Handelsregisterauszug `CHE-410.620.382.pdf` von zefix/HR Zürich — SPACE MEDIA KlG, Wermatswil)
+3. **Verify organisation's website** — ✅ **VERIFIED** (2026-06-02). Deploy war schon live (datenschutz.html + googlefc59ce7cb9b9f1c9.html auf Hostpoint). Search Console Property space-media.ch verifiziert (HTML-Datei), dann in Play Console „Verify website" → Website verified.
+4. **Verify phone numbers** — ⏳ entsperrt sich automatisch, sobald Identität von Google freigegeben.
+
+**➡️ NÄCHSTER SCHRITT:** Nur warten auf Googles Identitäts-Freigabe (Mail kommt). Dann Telefon-Verify → „Create app" entsperrt → Claude übernimmt App-Anlegen/Listing/Screenshots/Release.
+
+**WICHTIG — Website-Source/Deploy:** space-media.ch = Repo `C:/Projects/space-media-aios`, Source in `marketing/website/staging/` + `live/`, Deploy via **Hostpoint SFTP** (siehe `marketing/website/deploy.md`). Läuft auf nginx/Hostpoint, NICHT Vercel. datenschutz.html ist nur unter `/datenschutz.html` erreichbar, NICHT `/datenschutz` (404).
+
+**DANN (nach Google-Freigabe) übernimmt Claude via Playwright/CDP:** App anlegen, Store-Listing aus `STORE_LISTING.md`, Dashboard-Fragebögen, Android-Screenshots, Internal-Testing-Release. AAB-Build via `git tag v1.0.0 && git push origin v1.0.0` (Codemagic, Keystore steckt schon drin). Service-Account für Auto-Upload optional/später — erste AAB ggf. manuell hochladen.
+
+**Noch offen für Android (User-Sachen):**
+- `datenschutz.html` + `googlefc59ce7cb9b9f1c9.html` auf space-media.ch deployen (Pflicht-URL fürs Listing + hängt mit Org-Website-Verify zusammen)
+- Google-Cloud-Service-Account (nur falls Auto-Upload gewünscht — braucht Google-Login)
+
+### 🌐 So dockt Claude an den Browser an (für Weitermachen)
+Chrome mit Debug-Port starten, dann ist er via CDP steuerbar:
+```
+"C:/Program Files/Google/Chrome/Application/chrome.exe" --remote-debugging-port=9222 --user-data-dir="C:/Projects/space-media-desktop/.browser-automation/chrome-profile"
+```
+User loggt sich im DIESEM Fenster bei Play Console / ASC ein, dann übernimmt Claude. Skripte liegen in `.browser-automation/*.mjs`.
 
 ---
 

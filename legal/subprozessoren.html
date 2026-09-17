@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="de-CH">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Subprozessoren-Liste (Anlage zum AVV) — SPACE Media</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#fff;--ink:#0c1220;--muted:#5b6473;--line:#e3e7ee;--green:#0e9f6e;--green-bg:#e8f7f1;--warn:#92400e;--warn-bg:#fef3c7;--warn-line:#fcd34d}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:var(--ink);line-height:1.55;background:#f5f6f8;padding:2.5rem 1rem}
+  .page{max-width:920px;margin:0 auto;background:#fff;border:1px solid var(--line);border-radius:14px;padding:2.5rem 2.75rem}
+  header{border-bottom:2px solid var(--ink);padding-bottom:1rem;margin-bottom:1.5rem;display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;flex-wrap:wrap}
+  .brand{font-weight:800;letter-spacing:.02em;font-size:1.05rem}
+  .brand span{color:var(--green)}
+  .doc-meta{font-size:.78rem;color:var(--muted);text-align:right}
+  h1{font-size:1.5rem;font-weight:800;letter-spacing:-.01em;margin:.25rem 0 .35rem}
+  .lead{color:var(--muted);font-size:.92rem;max-width:62ch}
+  h2{font-size:1.02rem;font-weight:700;margin:1.9rem 0 .6rem;padding-top:1rem;border-top:1px solid var(--line)}
+  h2:first-of-type{border-top:0}
+  p{font-size:.9rem;color:#2a3340;margin-bottom:.6rem}
+  .muted{color:var(--muted)}
+  table{width:100%;border-collapse:collapse;margin:.5rem 0 1rem;font-size:.82rem}
+  th,td{text-align:left;vertical-align:top;padding:.5rem .6rem;border-bottom:1px solid var(--line)}
+  th{background:#f7f9fb;font-weight:700;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:#3a434f}
+  td.name{font-weight:700;white-space:nowrap}
+  td .seat{display:block;font-weight:400;color:var(--muted);font-size:.74rem;margin-top:.1rem}
+  a{color:var(--green);text-decoration:none;word-break:break-word}
+  a:hover{text-decoration:underline}
+  .tag{display:inline-block;font-size:.66rem;font-weight:700;padding:.08rem .4rem;border-radius:4px;text-transform:uppercase;letter-spacing:.03em}
+  .tag.eu{background:#e8f0fe;color:#1a56db}.tag.ch{background:var(--green-bg);color:var(--green)}.tag.us{background:#fde8e8;color:#c81e1e}.tag.opt{background:#f3f4f6;color:#4b5563}
+  .warn{background:var(--warn-bg);border:1px solid var(--warn-line);border-radius:10px;padding:.9rem 1.1rem;margin:1.1rem 0;font-size:.85rem;color:#3a2f12}
+  .warn strong{color:var(--warn)}
+  .warn ul{margin:.4rem 0 0 1.1rem}.warn li{margin:.2rem 0}
+  footer{margin-top:2rem;border-top:1px solid var(--line);padding-top:1rem;font-size:.75rem;color:var(--muted);display:flex;justify-content:space-between;flex-wrap:wrap;gap:.5rem}
+  @media print{body{background:#fff;padding:0}.page{border:0;border-radius:0;padding:0;max-width:none}.warn{-webkit-print-color-adjust:exact;print-color-adjust:exact}th{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div class="brand">SPACE <span>Media</span></div>
+    <div class="doc-meta">Anlage 1 zum Auftragsverarbeitungsvertrag (AVV)<br>Subprozessoren-Liste · Stand: 16. Juni 2026 · v1.0</div>
+  </header>
+
+  <h1>Liste der eingesetzten Subprozessoren</h1>
+  <p class="lead">Diese Liste ist Anlage und integraler Bestandteil des zwischen SPACE MEDIA KlG (Auftragsverarbeiterin) und dem Kunden (Verantwortlicher) geschlossenen Auftragsverarbeitungsvertrags. Sie benennt alle Dritten, die im Rahmen der Leistungserbringung personenbezogene Daten im Auftrag verarbeiten (Art. 28 Abs. 2 &amp; 4 DSGVO / Art. 9 revDSG). Jeder gelistete Subprozessor ist seinerseits durch einen eigenen Auftragsverarbeitungsvertrag (DPA) auf ein gleichwertiges Datenschutzniveau verpflichtet; die jeweils gültige Fassung ist über die angegebene Quelle abrufbar und dient als Nachweis (&bdquo;Sub-AVV-Beleg&ldquo;).</p>
+
+  <p class="muted" style="font-size:.84rem;margin-bottom:1rem">Datenresidenz: Die Kerndaten (Datenbank, Authentifizierung, Datei-Storage) werden in der <strong>Schweiz</strong> gehalten (Supabase, Region Zürich-North). Das Web-Hosting erfolgt in der <strong>EU</strong> (Vercel, Frankfurt), die optionale KI-Verarbeitung in den <strong>USA</strong> (abgesichert über EU-Standardvertragsklauseln). KI- und Integrations-Subprozessoren (Blöcke B &amp; C) sind nur aktiv, soweit die jeweilige Funktion genutzt wird.</p>
+
+  <h2>A · Kern-Infrastruktur (verarbeiten personenbezogene Daten regelmässig)</h2>
+  <table>
+    <thead><tr><th>Subprozessor</th><th>Zweck</th><th>Datenkategorien</th><th>Sitz / Region</th><th>DPA / Nachweis</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="name">Supabase<span class="seat">Supabase Inc.</span></td>
+        <td>Datenbank, Authentifizierung, Datei-Storage, Realtime-API</td>
+        <td>Account-, Login-, Inhalts- und Nutzungsdaten</td>
+        <td><span class="tag ch">Schweiz</span><span class="seat">USA (Unternehmen); Datenbank-Region Zürich-North (Schweiz)</span></td>
+        <td><a href="https://supabase.com/legal/dpa">supabase.com/legal/dpa</a></td>
+      </tr>
+      <tr>
+        <td class="name">Vercel<span class="seat">Vercel Inc.</span></td>
+        <td>Hosting &amp; Auslieferung der Web-Plattform, Serverless-Funktionen, Analytics</td>
+        <td>Verbindungs-/Nutzungsdaten; transient alle über die App laufenden Daten</td>
+        <td><span class="tag eu">EU</span><span class="seat">USA (Unternehmen); Hosting-Region Frankfurt (fra1)</span></td>
+        <td><a href="https://vercel.com/legal/dpa">vercel.com/legal/dpa</a><br><span class="muted">Subprozessoren: <a href="https://security.vercel.com">security.vercel.com</a></span></td>
+      </tr>
+      <tr>
+        <td class="name">Hostpoint<span class="seat">Hostpoint AG</span></td>
+        <td>E-Mail-Versand/-Empfang, Domain</td>
+        <td>E-Mail-Inhalte, Absender-/Empfängeradressen</td>
+        <td><span class="tag ch">Schweiz</span><span class="seat">Rechenzentrum Schweiz</span></td>
+        <td><span class="muted">Schweizer Anbieter, kein Drittlandtransfer — AVV via Hostpoint</span></td>
+      </tr>
+      <tr>
+        <td class="name">Upstash<span class="seat">Upstash Inc.</span></td>
+        <td>Redis-Caching &amp; Rate-Limiting (Schutz vor Missbrauch)</td>
+        <td>technische IDs, Verbindungsdaten</td>
+        <td><span class="tag eu">EU wählbar</span><span class="seat">USA (Unternehmen); EU-Region wählbar</span></td>
+        <td><a href="https://upstash.com/trust/dpa.pdf">upstash.com/trust/dpa.pdf</a></td>
+      </tr>
+      <tr>
+        <td class="name">Sentry<span class="seat">Functional Software Inc.</span></td>
+        <td>Fehler-/Crash-Monitoring der Anwendung</td>
+        <td>Fehlerkontext, ggf. IP-Adresse, Benutzer-ID</td>
+        <td><span class="tag eu">EU wählbar</span><span class="seat">USA (Unternehmen); EU-Datenresidenz wählbar</span></td>
+        <td><a href="https://sentry.io/legal/dpa/">sentry.io/legal/dpa</a></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>B · KI-Verarbeitung (verarbeiten aktiv übergebene Inhalte)</h2>
+  <p class="muted" style="font-size:.82rem">Diese Dienste verarbeiten ausschliesslich Inhalte, die durch die Nutzung der KI-/Content-Funktionen aktiv an sie übergeben werden (z.&nbsp;B. Prompts, Texte, Bilder, Audio). Die Übermittlung erfolgt über die jeweilige API; nach deren Bedingungen werden API-Daten nicht für das Training der Modelle verwendet. Drittlandtransfer (USA) wird über EU-Standardvertragsklauseln (SCC) abgesichert.</p>
+  <table>
+    <thead><tr><th>Subprozessor</th><th>Zweck</th><th>Sitz</th><th>DPA / Nachweis</th></tr></thead>
+    <tbody>
+      <tr><td class="name">Anthropic<span class="seat">Anthropic PBC</span></td><td>KI-Assistent &bdquo;Claude&ldquo; (Chat, Textgenerierung)</td><td><span class="tag us">USA</span></td><td><a href="https://trust.anthropic.com">trust.anthropic.com</a> <span class="muted">(DPA via Commercial Terms)</span></td></tr>
+      <tr><td class="name">OpenAI<span class="seat">OpenAI, L.L.C.</span></td><td>KI-Modelle (Text/Bild)</td><td><span class="tag us">USA</span></td><td><a href="https://openai.com/policies/data-processing-addendum/">openai.com/policies/data-processing-addendum</a></td></tr>
+      <tr><td class="name">Microsoft Azure OpenAI<span class="seat">Microsoft Corp.</span></td><td>KI-Modelle (Enterprise-Endpunkt)</td><td><span class="tag eu">EU wählbar</span></td><td><a href="https://www.microsoft.com/licensing/docs/view/Microsoft-Products-and-Services-Data-Protection-Addendum-DPA">Microsoft Products &amp; Services DPA</a></td></tr>
+      <tr><td class="name">Cohere<span class="seat">Cohere Inc.</span></td><td>KI (Embeddings / Reranking)</td><td><span class="tag us">USA/CA</span></td><td><a href="https://cohere.com/dpa">cohere.com/dpa</a></td></tr>
+      <tr><td class="name">AssemblyAI<span class="seat">AssemblyAI, Inc.</span></td><td>Audio-Transkription (Speech-to-Text)</td><td><span class="tag us">USA</span></td><td><a href="https://www.assemblyai.com/legal/data-processing-addendum">assemblyai.com/legal/data-processing-addendum</a></td></tr>
+      <tr><td class="name">Replicate<span class="seat">Replicate, Inc.</span></td><td>KI-Bild-/Video-Generierung (Modell-Hosting)</td><td><span class="tag us">USA</span></td><td><a href="https://replicate.com/terms">replicate.com/terms</a> <span class="muted">(DPA auf Anfrage)</span></td></tr>
+      <tr><td class="name">Higgsfield<span class="seat">Higgsfield, Inc.</span></td><td>KI-Video-/Bild-Generierung</td><td><span class="tag us">USA</span></td><td><span class="muted">Terms / Trust — DPA auf Anfrage</span></td></tr>
+      <tr><td class="name">Inception<span class="seat">Inception Labs, Inc.</span></td><td>KI-Modelle (Mercury)</td><td><span class="tag us">USA</span></td><td><span class="muted">Terms — DPA auf Anfrage</span></td></tr>
+    </tbody>
+  </table>
+
+  <h2>C · Integrationen (nur aktiv, wenn der Kunde die Funktion verbindet)</h2>
+  <table>
+    <thead><tr><th>Subprozessor</th><th>Zweck</th><th>Datenkategorien</th><th>Sitz</th><th>DPA / Nachweis</th></tr></thead>
+    <tbody>
+      <tr><td class="name">Composio<span class="seat">Composio Inc.</span></td><td>Integrations-Layer zu Drittdiensten (Gmail, Kalender, Slack &hellip;)</td><td>OAuth-Tokens, Inhalte der verbundenen Konten</td><td><span class="tag us">USA</span></td><td><a href="https://composio.dev/legal/dpa">composio.dev/legal/dpa</a></td></tr>
+      <tr><td class="name">Google<span class="seat">Google LLC (via Composio)</span></td><td>Gmail-/Kalender-/Drive-Integration</td><td>Inhalte der verbundenen Google-Konten</td><td><span class="tag opt">USA/EU</span></td><td><a href="https://cloud.google.com/terms/data-processing-addendum">cloud.google.com/terms/data-processing-addendum</a></td></tr>
+      <tr><td class="name">Meta (Facebook/Instagram)<span class="seat">Meta Platforms Ireland Ltd.</span></td><td>Social-Media-Publishing</td><td>zu veröffentlichende Inhalte, Konto-IDs</td><td><span class="tag eu">EU/IE</span></td><td><a href="https://www.facebook.com/legal/terms/dataprocessing">facebook.com/legal/terms/dataprocessing</a></td></tr>
+      <tr><td class="name">Slack<span class="seat">Salesforce, Inc.</span></td><td>Benachrichtigungen in Review-Channel</td><td>Benachrichtigungsinhalte</td><td><span class="tag us">USA</span></td><td><a href="https://www.salesforce.com/company/legal/agreements/">salesforce.com — Data Processing Addendum</a></td></tr>
+      <tr><td class="name">Apple Push / Google FCM<span class="seat">Apple Inc. / Google LLC</span></td><td>Push-Benachrichtigungen an Mobilgeräte</td><td>Geräte-Push-Token</td><td><span class="tag opt">USA</span></td><td><span class="muted">Plattform-Standarddienste (APNs / FCM)</span></td></tr>
+    </tbody>
+  </table>
+
+  <p class="muted" style="font-size:.8rem;margin-top:1rem">Änderungen der Subprozessoren-Liste werden dem Verantwortlichen gemäss AVV vorab mitgeteilt; ihm steht ein Widerspruchsrecht zu. Die jeweils aktuelle Fassung wird auf Anfrage zur Verfügung gestellt.</p>
+
+  <footer>
+    <span>SPACE MEDIA KlG · Hanfroosenweg 11a · 8615 Wermatswil ZH · Schweiz</span>
+    <span><a href="mailto:info@space-media.ch">info@space-media.ch</a> · +41 79 104 22 33</span>
+  </footer>
+</div>
+</body>
+</html>
