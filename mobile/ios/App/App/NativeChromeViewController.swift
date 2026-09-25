@@ -213,10 +213,21 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         view.addSubview(chromeContainer)
         let content = chromeContainer.contentView
 
-        // Menü-Button (Kreis)
-        menuPiece = makeGlassPiece(tinted: false, cornerRadius: glassConfig.controlHeight / 2)
+        // Menü-Button (Kreis). iOS 26: Apples eigener Glas-Button
+        // (`UIButton.Configuration.glass()`) — dieselbe Klasse Glas wie die
+        // System-Leiste, inklusive Interaktion. Der umgebende Träger bleibt
+        // dann ohne Effekt, sonst läge Glas auf Glas. <26: Blur-Kreis.
+        var menuConfig: UIButton.Configuration
+        if #available(iOS 26.0, *) {
+            menuPiece = UIVisualEffectView(effect: nil)
+            menuPiece.translatesAutoresizingMaskIntoConstraints = false
+            menuConfig = UIButton.Configuration.glass()
+            menuConfig.cornerStyle = .capsule
+        } else {
+            menuPiece = makeGlassPiece(tinted: false, cornerRadius: glassConfig.controlHeight / 2)
+            menuConfig = UIButton.Configuration.plain()
+        }
         content.addSubview(menuPiece)
-        var menuConfig = UIButton.Configuration.plain()
         menuConfig.image = UIImage(
             systemName: "line.3.horizontal",
             withConfiguration: UIImage.SymbolConfiguration(pointSize: glassConfig.iconSize, weight: .medium))
@@ -332,11 +343,10 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         if #available(iOS 26.0, *) {
             let container = containerEffect()
             let plain = glassEffect(tinted: false)
-            let menu = glassEffect(tinted: false)
             UIView.animate(withDuration: 0.25) {
                 self.chromeContainer.effect = container
                 self.pillPiece.effect = plain
-                self.menuPiece.effect = menu
+                // menuPiece bleibt ohne Effekt — das Glas trägt der Button selbst.
             }
         } else {
             menuPiece.layer.cornerRadius = glassConfig.controlHeight / 2
