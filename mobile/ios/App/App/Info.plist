@@ -49,7 +49,19 @@
 	</array>
 	<key>UIStatusBarStyle</key>
 	<string>UIStatusBarStyleLightContent</string>
+	<!-- VC-basiert: NativeChromeViewController schaltet die Status-Leiste mit
+	     dem Web-Theme um (hell = dunkle Schrift). Der Plist-Wert oben bleibt
+	     der Startwert (dunkles Theme ist Standard). -->
 	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<true/>
+	<!-- ProMotion: ohne diesen Schlüssel deckelt iOS Core Animation und damit
+	     die WebView bei 60 Hz. Mit ihm laufen Scrollen, CSS-Animationen und
+	     das Glas-Chrome auf 120 Hz. -->
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<!-- Nur HTTPS/Standard-Krypto: erspart die Export-Compliance-Frage bei
+	     jedem TestFlight-Upload. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 </dict>
 </plist>
