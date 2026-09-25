@@ -52,11 +52,18 @@ workflows:
           # steigend und eindeutig; ASC-Stand nur als Untergrenze.
           TF_BUILD=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APP_ID" 2>/dev/null | grep -oE '[0-9]+' | head -1)
           AS_BUILD=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APP_ID" 2>/dev/null | grep -oE '[0-9]+' | head -1)
+          # Dritte Quelle: alle Builds (auch noch in Verarbeitung) — 2026-09-25 meldete
+          # die TestFlight-Abfrage 23, obwohl Build 24 schon lag → Upload 409 (Duplikat).
+          ANY_BUILD=$(app-store-connect get-latest-build-number "$APP_STORE_APP_ID" 2>/dev/null | grep -oE '[0-9]+' | head -1)
           TF_BUILD=${TF_BUILD:-0}
           AS_BUILD=${AS_BUILD:-0}
+          ANY_BUILD=${ANY_BUILD:-0}
           LATEST_BUILD=$(( TF_BUILD > AS_BUILD ? TF_BUILD : AS_BUILD ))
+          LATEST_BUILD=$(( ANY_BUILD > LATEST_BUILD ? ANY_BUILD : LATEST_BUILD ))
           NEW_BUILD=$(( BUILD_NUMBER > LATEST_BUILD ? BUILD_NUMBER : LATEST_BUILD + 1 ))
-          echo "Codemagic: $BUILD_NUMBER, TestFlight: $TF_BUILD, App Store: $AS_BUILD -> Build-Nummer: $NEW_BUILD"
+          # Notbremse: beim API-Trigger als environment.variables.IOS_BUILD_NUMBER mitgeben.
+          if [ -n "$IOS_BUILD_NUMBER" ]; then NEW_BUILD=$IOS_BUILD_NUMBER; fi
+          echo "Codemagic: $BUILD_NUMBER, TestFlight: $TF_BUILD, App Store: $AS_BUILD, alle: $ANY_BUILD -> Build-Nummer: $NEW_BUILD"
           agvtool new-version -all $NEW_BUILD
       - name: Build .ipa
         script: |
