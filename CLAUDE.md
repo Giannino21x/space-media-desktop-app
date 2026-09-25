@@ -95,9 +95,13 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
   GitHub-Actions-Pipeline gestartet (sofort per `gh run cancel` abgebrochen, sonst überschreibt deren Release-Job
   die Assets ohne passendes `latest.yml`) und Codemagic `android-release-workflow` (harmlos, kein Auto-Publish).
   Nutzer auf ≤1.0.2: Banner-Klick tut nichts → App über X schliessen installiert das Update.
-- **iOS:** `MARKETING_VERSION` 1.0.3, im App Store live seit 21.08.2026 (Build 19, Xcode 26.4.1, natives
-  Liquid-Glass-Chrome via `NativeChromeViewController.swift`). Die Tastatur handhabt die Web-App selbst
-  (`KeyboardViewport` + `keyboard-mobile.css` im Web-Repo) — dafür ist kein neuer iOS-Build nötig.
+- **iOS:** `master` steht auf `MARKETING_VERSION` 1.0.4 (Commit 51a9b7f, 25.09.2026): echtes Liquid Glass wie in
+  der Sport-Nexus-Hülle — `UIGlassContainerEffect` + `cornerConfiguration(.capsule)`, kein `clipsToBounds` (1.0.3
+  hatte das Glas abgeschnitten → matte Pille), Theme-fähig (hell/dunkel inkl. Status-Leiste), alle Glas-Parameter
+  kommen aus `NativeChromeBridge.tsx` der Web-App (`glass`-Feld) — nachjustieren ohne Store-Durchlauf; optional
+  Apples System-Tab-Bar unten (`useSystemTabBar`). **Codemagic `ios-workflow` manuell starten**, dann TestFlight
+  testen, dann ASC 1.0.4 einreichen. Store: 1.0.3 live seit 21.08.2026 (Build 19). Die Tastatur handhabt die Web-App
+  selbst (`KeyboardViewport` + `keyboard-mobile.css` im Web-Repo).
 - **Android:** Store hat `versionCode 4` / 1.0.3 (gebaut vor dem `resizeOnFullScreen`-Fix — Tastatur
   überdeckt dort den WebView). `master` steht auf `versionCode 5` / `versionName 1.0.4`; AAB via
   Codemagic gebaut (`downloads/app-release-v1.0.4.aab`), Play-Upload läuft manuell.
