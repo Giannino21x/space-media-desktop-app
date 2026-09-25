@@ -254,7 +254,10 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         tabStack = stack
         content.addSubview(stack)
 
-        chromeContainer.interactiveViews = [menuPiece!, pillPiece!]
+        // Der Button-Stack ist ein GESCHWISTER der Pille (gleicher Glas-Container),
+        // kein Kind — er muss eigens als interaktiv gelten, sonst fallen Taps auf
+        // die Tab-Icons durch zur WebView (Befund TestFlight Build 24).
+        chromeContainer.interactiveViews = [menuPiece!, pillPiece!, tabStack!]
 
         let safe = view.safeAreaLayoutGuide
         let top = chromeContainer.topAnchor.constraint(equalTo: safe.topAnchor, constant: glassConfig.topInset)
@@ -456,7 +459,7 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         pillPiece.isHidden = false
         indicatorView.isHidden = false
         tabStack.isHidden = false
-        chromeContainer.interactiveViews = [menuPiece!, pillPiece!]
+        chromeContainer.interactiveViews = [menuPiece!, pillPiece!, tabStack!]
         lastAppliedHidden = nil
         reportedBottomInset = -1
         applyChromeVisibility()
