@@ -1,11 +1,16 @@
 import ActivityKit
+import AppIntents
 import SwiftUI
 import WidgetKit
 
-/// Widget-Erweiterung: zeichnet die Live Activity einer laufenden Aufnahme in
-/// der Dynamic Island (kompakt, minimal, aufgeklappt) und auf dem
+/// Widget-Erweiterung: zeichnet die Live Activity einer Aufnahme in der
+/// Dynamic Island (kompakt, minimal, aufgeklappt) und auf dem
 /// Sperrbildschirm. Gestartet und beendet wird sie von der App
 /// (LiveActivityBridge), die Uhr zählt hier selbst (Text(timerInterval:)).
+///
+/// Zustände (Canvas «Sys-Island»): Aufnahme läuft · Pausiert · Steno schreibt
+/// · Protokoll bereit. Schwarzer Grund, Stenos Gelb als Kennfarbe, ein
+/// einziger Knopf «Fertig» während der Aufnahme.
 @main
 struct SpaceLiveActivityBundle: WidgetBundle {
     var body: some Widget {
@@ -15,6 +20,31 @@ struct SpaceLiveActivityBundle: WidgetBundle {
 
 private let aufnahmeRot = Color(red: 1.0, green: 0.27, blue: 0.23)
 private let pauseOrange = Color(red: 1.0, green: 0.62, blue: 0.04)
+private let stenoGelb = Color(red: 0.984, green: 0.749, blue: 0.141)
+
+@available(iOS 16.2, *)
+private func kennfarbe(_ state: AufnahmeAttributes.ContentState) -> Color {
+    switch state.status {
+    case "pausiert": return pauseOrange
+    case "schreibt", "bereit": return stenoGelb
+    default: return aufnahmeRot
+    }
+}
+
+@available(iOS 16.2, *)
+private func zeile(_ state: AufnahmeAttributes.ContentState) -> String {
+    switch state.status {
+    case "pausiert": return "Pausiert"
+    case "schreibt": return "Steno schreibt …"
+    case "bereit": return "Protokoll bereit"
+    default: return "Aufnahme läuft"
+    }
+}
+
+@available(iOS 16.2, *)
+private func ziel(_ state: AufnahmeAttributes.ContentState) -> URL {
+    state.status == "bereit" ? AufnahmeLink.dokument(state.pfad) : AufnahmeLink.oeffnen
+}
 
 @available(iOS 16.2, *)
 struct AufnahmeLiveActivity: Widget {
@@ -23,63 +53,96 @@ struct AufnahmeLiveActivity: Widget {
             SperrbildschirmAnsicht(context: context)
                 .activityBackgroundTint(Color.black.opacity(0.78))
                 .activitySystemActionForegroundColor(.white)
-                .widgetURL(AufnahmeLink.oeffnen)
+                .widgetURL(ziel(context.state))
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    StatusSymbol(laeuft: context.state.laeuft, groesse: 40)
+                    StatusSymbol(state: context.state, groesse: 40)
                         .padding(.leading, 4)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    Dauer(state: context.state)
-                        .font(.system(size: 28, weight: .semibold, design: .rounded))
-                        .frame(maxWidth: 110, alignment: .trailing)
-                        .padding(.trailing, 4)
+                    if context.state.aufnahme {
+                        Dauer(state: context.state)
+                            .font(.system(size: 28, weight: .semibold, design: .rounded))
+                            .frame(maxWidth: 110, alignment: .trailing)
+                            .padding(.trailing, 4)
+                    }
                 }
                 DynamicIslandExpandedRegion(.center) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(context.attributes.titel)
+                        Text(context.state.status == "bereit" ? "Protokoll bereit" : context.attributes.titel)
                             .font(.headline)
                             .lineLimit(1)
-                        Text(context.state.laeuft ? "Aufnahme läuft" : "Pausiert")
+                        Text(context.state.status == "bereit" ? context.attributes.titel : zeile(context.state))
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    StoppKnopf()
-                        .padding(.top, 6)
+                    if context.state.aufnahme {
+                        FertigKnopf()
+                            .padding(.top, 6)
+                    } else if context.state.status == "bereit" {
+                        AnsehenKnopf(ziel: ziel(context.state))
+                            .padding(.top, 6)
+                    }
                 }
             } compactLeading: {
-                StatusSymbol(laeuft: context.state.laeuft, groesse: 22)
+                StatusSymbol(state: context.state, groesse: 22)
             } compactTrailing: {
-                Dauer(state: context.state)
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .frame(maxWidth: 52)
+                KompaktRechts(state: context.state)
             } minimal: {
-                StatusSymbol(laeuft: context.state.laeuft, groesse: 22)
+                StatusSymbol(state: context.state, groesse: 22)
             }
-            .widgetURL(AufnahmeLink.oeffnen)
-            .keylineTint(context.state.laeuft ? aufnahmeRot : pauseOrange)
+            .widgetURL(ziel(context.state))
+            .keylineTint(kennfarbe(context.state))
         }
     }
 }
 
-/// Roter Kreis mit Wellenform (läuft) bzw. oranger mit Pause-Zeichen.
+/// Kreis mit Zeichen: Wellenform (läuft), Pause, Stift (schreibt), Haken (bereit)
 @available(iOS 16.2, *)
 private struct StatusSymbol: View {
-    let laeuft: Bool
+    let state: AufnahmeAttributes.ContentState
     let groesse: CGFloat
+
+    private var symbol: String {
+        switch state.status {
+        case "pausiert": return "pause.fill"
+        case "schreibt": return "pencil.line"
+        case "bereit": return "checkmark"
+        default: return "waveform"
+        }
+    }
 
     var body: some View {
         ZStack {
-            Circle().fill((laeuft ? aufnahmeRot : pauseOrange).opacity(0.22))
-            Image(systemName: laeuft ? "waveform" : "pause.fill")
+            Circle().fill(kennfarbe(state).opacity(0.22))
+            Image(systemName: symbol)
                 .font(.system(size: groesse * 0.46, weight: .semibold))
-                .foregroundStyle(laeuft ? aufnahmeRot : pauseOrange)
+                .foregroundStyle(kennfarbe(state))
         }
         .frame(width: groesse, height: groesse)
+    }
+}
+
+/// Rechts der Kamera: Uhr während der Aufnahme, sonst ein Wort
+@available(iOS 16.2, *)
+private struct KompaktRechts: View {
+    let state: AufnahmeAttributes.ContentState
+
+    var body: some View {
+        if state.aufnahme {
+            Dauer(state: state)
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .frame(maxWidth: 52)
+        } else {
+            Text(state.status == "bereit" ? "Bereit" : "schreibt")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(stenoGelb)
+        }
     }
 }
 
@@ -107,18 +170,37 @@ private struct Dauer: View {
     }
 }
 
-/// Öffnet die App und beendet dort die Aufnahme (AppDelegate → Web-App).
-private struct StoppKnopf: View {
-    var body: some View {
-        Link(destination: AufnahmeLink.stopp) {
-            HStack(spacing: 6) {
-                Image(systemName: "stop.fill")
-                Text("Aufnahme beenden")
-            }
+/// «Fertig»: ab iOS 17 per App Intent direkt (ohne App zu öffnen), sonst öffnet
+/// der Link die App und beendet dort (AppDelegate → Web-App).
+private struct FertigKnopf: View {
+    private var beschriftung: some View {
+        Text("Fertig")
             .font(.system(size: 15, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(.black)
             .frame(maxWidth: .infinity, minHeight: 40)
-            .background(aufnahmeRot, in: Capsule())
+            .background(Color.white, in: Capsule())
+    }
+
+    var body: some View {
+        if #available(iOS 17.0, *) {
+            Button(intent: AufnahmeFertigIntent()) { beschriftung }
+                .buttonStyle(.plain)
+        } else {
+            Link(destination: AufnahmeLink.stopp) { beschriftung }
+        }
+    }
+}
+
+private struct AnsehenKnopf: View {
+    let ziel: URL
+
+    var body: some View {
+        Link(destination: ziel) {
+            Text("Ansehen")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.black)
+                .frame(maxWidth: .infinity, minHeight: 40)
+                .background(stenoGelb, in: Capsule())
         }
     }
 }
@@ -129,30 +211,49 @@ private struct SperrbildschirmAnsicht: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            StatusSymbol(laeuft: context.state.laeuft, groesse: 44)
+            StatusSymbol(state: context.state, groesse: 44)
             VStack(alignment: .leading, spacing: 2) {
                 Text(context.attributes.titel)
                     .font(.headline)
                     .foregroundStyle(.white)
                     .lineLimit(1)
-                Text(context.state.laeuft ? "Aufnahme läuft" : "Pausiert")
+                Text(zeile(context.state))
                     .font(.subheadline)
                     .foregroundStyle(.white.opacity(0.7))
             }
             Spacer(minLength: 8)
-            Dauer(state: context.state)
-                .font(.system(size: 26, weight: .semibold, design: .rounded))
-                .frame(maxWidth: 110, alignment: .trailing)
-            Link(destination: AufnahmeLink.stopp) {
-                Image(systemName: "stop.fill")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-                    .background(aufnahmeRot, in: Circle())
+            if context.state.aufnahme {
+                Dauer(state: context.state)
+                    .font(.system(size: 26, weight: .semibold, design: .rounded))
+                    .frame(maxWidth: 110, alignment: .trailing)
+                if #available(iOS 17.0, *) {
+                    Button(intent: AufnahmeFertigIntent()) { fertigKreis }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Fertig")
+                } else {
+                    Link(destination: AufnahmeLink.stopp) { fertigKreis }
+                        .accessibilityLabel("Fertig")
+                }
+            } else if context.state.status == "bereit" {
+                Link(destination: ziel(context.state)) {
+                    Text("Ansehen")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 14)
+                        .frame(height: 36)
+                        .background(stenoGelb, in: Capsule())
+                }
             }
-            .accessibilityLabel("Aufnahme beenden")
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
+    }
+
+    private var fertigKreis: some View {
+        Image(systemName: "checkmark")
+            .font(.system(size: 16, weight: .bold))
+            .foregroundStyle(.black)
+            .frame(width: 44, height: 44)
+            .background(Color.white, in: Circle())
     }
 }

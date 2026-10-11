@@ -6,6 +6,18 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     var window: UIWindow?
 
+    /// Pfad in der Web-App öffnen (NativeChromeViewController lauscht)
+    static let oeffnePfad = Notification.Name("ch.spacemedia.oeffne.pfad")
+    /// Noch nicht geöffneter Pfad (App per Link gestartet, WebView lädt noch)
+    static var wartenderPfad: String?
+
+    /// Nur eigene, relative Pfade mit harmlosen Zeichen — nie eine fremde Adresse
+    static func istEigenerPfad(_ pfad: String) -> Bool {
+        guard pfad.hasPrefix("/"), !pfad.hasPrefix("//"), pfad.count <= 300 else { return false }
+        let erlaubt = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/-_.?=&%")
+        return pfad.unicodeScalars.allSatisfy { erlaubt.contains($0) }
+    }
+
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Override point for customization after application launch.
         return true
@@ -38,6 +50,24 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         if url.scheme == "spacemedia", url.host == "aufnahme" {
             if url.path == "/stopp" {
                 NotificationCenter.default.post(name: LiveActivityBridge.stoppNotification, object: nil)
+            }
+            return true
+        }
+        // «Protokoll bereit» in der Insel: spacemedia://oeffne?pfad=/sitzungen/<id>
+        // Nach der Anmeldung bei Microsoft/Google im Browser: spacemedia://konto/verbindungen
+        if url.scheme == "spacemedia", url.host == "oeffne" || url.host == "konto" {
+            let pfad: String?
+            if url.host == "oeffne" {
+                pfad = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                    .queryItems?.first(where: { $0.name == "pfad" })?.value
+            } else {
+                let seite = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                pfad = "/settings" + (seite.isEmpty ? "" : "?tab=\(seite)")
+            }
+            if let pfad, AppDelegate.istEigenerPfad(pfad) {
+                // Kaltstart: der Controller holt ihn nach dem ersten Laden ab
+                AppDelegate.wartenderPfad = pfad
+                NotificationCenter.default.post(name: AppDelegate.oeffnePfad, object: nil, userInfo: ["pfad": pfad])
             }
             return true
         }

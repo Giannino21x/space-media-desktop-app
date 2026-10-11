@@ -161,6 +161,12 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         setupChrome()
         applyTheme()
 
+        // Links aus der Insel und dem Browser (spacemedia://oeffne, spacemedia://konto)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(pfadOeffnen), name: AppDelegate.oeffnePfad, object: nil)
+        if AppDelegate.wartenderPfad != nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.pfadOeffnen() }
+        }
         NotificationCenter.default.addObserver(
             self, selector: #selector(keyboardWillShow), name: UIResponder.keyboardWillShowNotification, object: nil)
         NotificationCenter.default.addObserver(
@@ -587,6 +593,13 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
 
     private func runJS(_ js: String) {
         webView?.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    /// Wartenden Pfad in der Web-App öffnen (nur geprüfte eigene Pfade, AppDelegate.istEigenerPfad)
+    @objc private func pfadOeffnen() {
+        guard let pfad = AppDelegate.wartenderPfad, AppDelegate.istEigenerPfad(pfad) else { return }
+        AppDelegate.wartenderPfad = nil
+        runJS("window.location.assign('\(pfad)')")
     }
 
     @objc private func menuTapped() {
