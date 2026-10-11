@@ -102,7 +102,13 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
   Apples System-Tab-Bar unten (`useSystemTabBar`). **Codemagic `ios-workflow` manuell starten**, dann TestFlight
   testen, dann ASC 1.0.4 einreichen. Store: 1.0.3 live seit 21.08.2026 (Build 19). Die Tastatur handhabt die Web-App
   selbst (`KeyboardViewport` + `keyboard-mobile.css` im Web-Repo).
-- **iOS 1.0.5 (11.10.2026, noch nicht gebaut): Live Activity «Aufnahme läuft»** in Dynamic Island + Sperrbildschirm.
+- **iOS 1.0.5 — Tab-Leiste aus der Web-App (11.10.2026):** die Hülle setzt `html[data-native-tabs]` und nimmt das
+  Feld `tabs` ([{id, symbol, label, action?}]) der nativeChrome-Meldung an → Apples echte `UITabBarController`-Leiste
+  unten mit genau diesen Tabs, oben nichts Natives. Welche Tabs: `src/lib/navigation/mobile-tabs.ts` im Web-Repo (pro
+  Paket: SPACE Bot vs. Betrieb). `action` = Aktions-Tab (Diktat, blauer Kreis, wählt nicht aus). Ohne `tabs` gilt das
+  alte Verhalten (Pille oben). Gebaut + eingereicht per Tag `ios-*` (Codemagic `ios-workflow`, `submit_to_app_store`,
+  «Neu in dieser Version» aus `release_notes.json`).
+- **iOS 1.0.5 (11.10.2026): Live Activity «Aufnahme läuft»** in Dynamic Island + Sperrbildschirm.
   Widget-Erweiterung `SpaceLiveActivity` (eigenes Target, Bundle-ID `ch.spacemedia.app.LiveActivity`, ab iOS 16.2,
   von Hand in `project.pbxproj` eingetragen — IDs `A71CE…`), gemeinsame `Shared/AufnahmeAttributes.swift` in beiden
   Targets, `App/LiveActivityBridge.swift` (Kanal `webkit.messageHandlers.liveActivity`, Gegenstück

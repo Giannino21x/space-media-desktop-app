@@ -21,7 +21,11 @@ import Capacitor
 ///                 window.__nativeOpenDrawer(),
 ///                 --native-tabbar-h + html[data-native-tabbar] (nur System-Leiste)
 ///   Web  -> Nativ: webkit.messageHandlers.nativeChrome.postMessage(
-///                 {hidden?, active?, theme?, accent?, glass?})
+///                 {hidden?, active?, theme?, accent?, glass?, tabs?})
+/// Ab 1.0.5: html[data-native-tabs="1"] — die Hülle nimmt `tabs`
+/// ([{id, symbol, label, action?}]) an. Dann gibt es nur Apples System-Leiste
+/// unten mit genau diesen Tabs (pro Paket verschieden), Tipp ruft
+/// window.__nativeNavigate(id); oben bleibt nichts Natives.
 /// Das Chrome bleibt unsichtbar, bis die erste Web-Meldung eintrifft — Login-
 /// Seite und alte Web-Stände ohne Bridge zeigen so nichts Natives.
 /// iOS < 26 fällt auf `UIBlurEffect` zurück. Ab 1024 pt Breite (iPad, Desktop-
@@ -110,11 +114,30 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
     }
 
     /// IDs = Routen der Web-App, Symbole spiegeln ihren ViewSwitcher.
-    private let tabs: [(id: String, symbol: String, label: String)] = [
+    private let pillTabs: [(id: String, symbol: String, label: String)] = [
         ("chat", "message", "Chat"),
         ("mail", "envelope", "Mail"),
         ("calendar", "calendar", "Kalender"),
     ]
+
+    /// Tabs der System-Leiste unten. Ab 1.0.5 schickt die Web-App sie selbst
+    /// (Feld `tabs`, pro Paket verschieden) — neue Tabs ohne App-Store-Durchlauf.
+    /// Ohne Feld (ältere Web-Stände) gilt die Pillen-Liste.
+    private struct SystemTab: Equatable {
+        let id: String
+        let symbol: String
+        let label: String
+        /// Aktions-Tab (Diktat): farbiges Symbol, löst aus statt auszuwählen.
+        let action: Bool
+    }
+    private var webTabs: [SystemTab] = []
+    private var systemTabs: [SystemTab] {
+        if !webTabs.isEmpty { return webTabs }
+        return pillTabs.map { SystemTab(id: $0.id, symbol: $0.symbol, label: $0.label, action: false) }
+    }
+    /// Web-App führt die Tabs: dann gibt es nur die Leiste unten — Menü, Pille
+    /// und Scrim oben entfallen (Kopfzeile und «Mehr» liefert die Web-App).
+    private var webTabsMode: Bool { !webTabs.isEmpty }
 
     // MARK: - Lifecycle
 
@@ -125,7 +148,9 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         // Web-App informieren, dass natives Chrome verfügbar ist (überlebt
         // Reloads), und den Rückkanal registrieren.
         let flagScript = WKUserScript(
-            source: "document.documentElement.dataset.nativeChrome = '1'",
+            // nativeTabs: diese Hülle nimmt Tabs von der Web-App an (ab 1.0.5)
+            source: "document.documentElement.dataset.nativeChrome = '1';"
+                + "document.documentElement.dataset.nativeTabs = '1'",
             injectionTime: .atDocumentEnd,
             forMainFrameOnly: true
         )
@@ -254,7 +279,7 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         stack.axis = .horizontal
         stack.distribution = .fillEqually
         stack.translatesAutoresizingMaskIntoConstraints = false
-        for (index, tab) in tabs.enumerated() {
+        for (index, tab) in pillTabs.enumerated() {
             var config = UIButton.Configuration.plain()
             config.image = symbolImage(tab.symbol, active: false)
             config.contentInsets = .zero
@@ -317,7 +342,7 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
     }
 
     private func pillWidthValue() -> CGFloat {
-        CGFloat(tabs.count) * glassConfig.tabWidth + 8
+        CGFloat(pillTabs.count) * glassConfig.tabWidth + 8
     }
 
     private func makeIndicatorView() -> UIView {
@@ -368,11 +393,7 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
             withConfiguration: UIImage.SymbolConfiguration(pointSize: glassConfig.iconSize, weight: .medium))
         menuButton.configuration = menuConfig
 
-        if glassConfig.useSystemTabBar {
-            if #available(iOS 26.0, *) { enableSystemTabBar() }
-        } else {
-            disableSystemTabBar()
-        }
+        updateSystemTabBarPresence()
         applySystemTabAppearance()
         applyScrim()
         UIView.animate(withDuration: 0.25) { self.view.layoutIfNeeded() }
@@ -416,20 +437,7 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
     private func enableSystemTabBar() {
         guard systemTabController == nil else { return }
         let controller = UITabBarController()
-        controller.viewControllers = tabs.enumerated().map { pair -> UIViewController in
-            let index = pair.offset
-            let tab = pair.element
-            let placeholder = UIViewController()
-            placeholder.view.backgroundColor = .clear
-            placeholder.view.isUserInteractionEnabled = false
-            let filled = UIImage(systemName: tab.symbol + ".fill")
-            placeholder.tabBarItem = UITabBarItem(
-                title: tab.label,
-                image: UIImage(systemName: tab.symbol),
-                selectedImage: filled ?? UIImage(systemName: tab.symbol))
-            placeholder.tabBarItem.tag = index
-            return placeholder
-        }
+        controller.viewControllers = makeSystemTabControllers()
         controller.delegate = self
         controller.view.backgroundColor = .clear
 
@@ -462,6 +470,51 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         applyChromeVisibility()
     }
 
+    /// Leiste unten an/aus: die Web-App führt Tabs (immer, jede iOS-Version)
+    /// oder `glass.useSystemTabBar` (nur iOS 26, sonst bleibt die Pille).
+    private func updateSystemTabBarPresence() {
+        guard chromeContainer != nil else { return }
+        var wanted = webTabsMode
+        if #available(iOS 26.0, *) { wanted = wanted || glassConfig.useSystemTabBar }
+        if wanted { enableSystemTabBar() } else { disableSystemTabBar() }
+    }
+
+    /// Leere, durchsichtige Platzhalter — den Inhalt liefert die WebView.
+    private func makeSystemTabControllers() -> [UIViewController] {
+        systemTabs.enumerated().map { pair -> UIViewController in
+            let index = pair.offset
+            let tab = pair.element
+            let placeholder = UIViewController()
+            placeholder.view.backgroundColor = .clear
+            placeholder.view.isUserInteractionEnabled = false
+            if tab.action {
+                // Weisses Mikrofon auf blauem Kreis (Diktat): bleibt in jedem Zustand gleich
+                let config = UIImage.SymbolConfiguration(pointSize: 24, weight: .semibold)
+                    .applying(UIImage.SymbolConfiguration(paletteColors: [.white, .systemBlue]))
+                let image = UIImage(systemName: tab.symbol, withConfiguration: config)?
+                    .withRenderingMode(.alwaysOriginal)
+                placeholder.tabBarItem = UITabBarItem(title: tab.label, image: image, selectedImage: image)
+            } else {
+                let filled = UIImage(systemName: tab.symbol + ".fill")
+                placeholder.tabBarItem = UITabBarItem(
+                    title: tab.label,
+                    image: UIImage(systemName: tab.symbol),
+                    selectedImage: filled ?? UIImage(systemName: tab.symbol))
+            }
+            placeholder.tabBarItem.tag = index
+            return placeholder
+        }
+    }
+
+    /// Neue Tab-Liste (Paketwechsel, Login): Leiste neu bestücken.
+    private func reloadSystemTabs() {
+        guard let controller = systemTabController else { return }
+        syncingSystemSelection = true
+        controller.viewControllers = makeSystemTabControllers()
+        syncingSystemSelection = false
+        syncSystemTabSelection()
+    }
+
     private func disableSystemTabBar() {
         guard let controller = systemTabController else { return }
         controller.willMove(toParent: nil)
@@ -488,7 +541,7 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
 
     private func syncSystemTabSelection() {
         guard let controller = systemTabController else { return }
-        guard let index = tabs.firstIndex(where: { $0.id == activeTabId }),
+        guard let index = systemTabs.firstIndex(where: { $0.id == activeTabId }),
               controller.viewControllers?.indices.contains(index) == true,
               controller.selectedIndex != index else { return }
         syncingSystemSelection = true
@@ -513,12 +566,21 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
             + "document.documentElement.dataset.nativeTabbar=\(flag);")
     }
 
+    /// Aktions-Tab (Diktat) wählt nicht aus, sondern löst aus — wie ein Knopf.
+    func tabBarController(_ tabBarController: UITabBarController, shouldSelect viewController: UIViewController) -> Bool {
+        let index = viewController.tabBarItem.tag
+        guard systemTabs.indices.contains(index), systemTabs[index].action else { return true }
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        runJS("window.__nativeNavigate && window.__nativeNavigate('\(systemTabs[index].id)')")
+        return false
+    }
+
     func tabBarController(_ tabBarController: UITabBarController, didSelect viewController: UIViewController) {
         guard !syncingSystemSelection else { return }
         let index = viewController.tabBarItem.tag
-        guard tabs.indices.contains(index) else { return }
+        guard systemTabs.indices.contains(index) else { return }
         UISelectionFeedbackGenerator().selectionChanged()
-        navigate(to: tabs[index].id)
+        navigate(to: systemTabs[index].id)
     }
 
     // MARK: - Aktionen (Nativ -> Web)
@@ -534,7 +596,7 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
 
     @objc private func tabTapped(_ sender: UIButton) {
         UISelectionFeedbackGenerator().selectionChanged()
-        navigate(to: tabs[sender.tag].id)
+        navigate(to: pillTabs[sender.tag].id)
     }
 
     /// Optimistisch sofort umschalten; die Web-App bestätigt nach Navigation
@@ -569,6 +631,24 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         }
         if let active = body["active"] as? String {
             activeTabId = active
+        }
+        if let rawTabs = body["tabs"] as? [[String: Any]] {
+            let next: [SystemTab] = rawTabs.compactMap { (raw: [String: Any]) -> SystemTab? in
+                guard let id = raw["id"] as? String, let symbol = raw["symbol"] as? String,
+                      let label = raw["label"] as? String,
+                      id.range(of: "^[a-z0-9-]{1,32}$", options: .regularExpression) != nil
+                else { return nil }
+                return SystemTab(id: id, symbol: symbol, label: label, action: raw["action"] as? Bool ?? false)
+            }
+            if next != webTabs {
+                let modeChanged = next.isEmpty != webTabs.isEmpty
+                webTabs = next
+                if modeChanged {
+                    lastAppliedHidden = nil
+                    updateSystemTabBarPresence()
+                }
+                reloadSystemTabs()
+            }
         }
         if let raw = body["glass"] as? [String: Any] {
             let next = Self.parseGlassConfig(from: raw, base: glassConfig)
@@ -606,11 +686,11 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
 
     private func applyActiveTab(animated: Bool) {
         guard !tabButtons.isEmpty else { return }
-        let newIndex = tabs.firstIndex { $0.id == activeTabId }
+        let newIndex = pillTabs.firstIndex { $0.id == activeTabId }
         let changed = newIndex != currentActiveIndex
         currentActiveIndex = newIndex
 
-        for (index, tab) in tabs.enumerated() {
+        for (index, tab) in pillTabs.enumerated() {
             let isActive = index == newIndex
             let button = tabButtons[index]
             var config = button.configuration
@@ -680,7 +760,7 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
     private func layoutIndicator(animated: Bool) {
         guard let indicator = indicatorView, let stack = tabStack, !tabButtons.isEmpty,
               systemTabController == nil else { return }
-        guard let index = tabs.firstIndex(where: { $0.id == activeTabId }),
+        guard let index = pillTabs.firstIndex(where: { $0.id == activeTabId }),
               tabButtons.indices.contains(index) else {
             // Route ohne eigenen Tab (Dashboard, Einstellungen): kein Lozenge.
             setIndicator(hidden: true, animated: animated)
@@ -713,7 +793,7 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
                 animations: { indicator.alpha = 0 },
                 completion: { [weak self] _ in
                     guard let self else { return }
-                    guard self.tabs.firstIndex(where: { $0.id == self.activeTabId }) == index else { return }
+                    guard self.pillTabs.firstIndex(where: { $0.id == self.activeTabId }) == index else { return }
                     apply()
                     UIView.animate(
                         withDuration: 0.18, delay: 0,
@@ -811,12 +891,14 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         let hidden = !chromeReady || hiddenByWeb || hiddenByKeyboard || desktopChrome
         if hidden == lastAppliedHidden { return }
         lastAppliedHidden = hidden
-        chromeContainer.isUserInteractionEnabled = !hidden
-        scrimView.isHidden = desktopChrome
+        // Tabs aus der Web-App: oben bleibt nichts Natives (Menü/Scrim)
+        let topHidden = hidden || webTabsMode
+        chromeContainer.isUserInteractionEnabled = !topHidden
+        scrimView.isHidden = desktopChrome || webTabsMode
         UIView.animate(withDuration: 0.24, delay: 0, options: [.curveEaseOut]) {
-            self.chromeContainer.alpha = hidden ? 0 : 1
-            self.chromeContainer.transform = hidden ? CGAffineTransform(translationX: 0, y: -10) : .identity
-            self.scrimView.alpha = hidden && !self.hiddenByKeyboard ? 0 : 1
+            self.chromeContainer.alpha = topHidden ? 0 : 1
+            self.chromeContainer.transform = topHidden ? CGAffineTransform(translationX: 0, y: -10) : .identity
+            self.scrimView.alpha = topHidden && !self.hiddenByKeyboard ? 0 : 1
         }
         if let overlay = tabOverlay {
             overlay.isUserInteractionEnabled = !hidden
