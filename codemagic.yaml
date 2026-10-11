@@ -38,12 +38,24 @@ workflows:
             > ~/Library/MobileDevice/Provisioning\ Profiles/space_media_app_store.mobileprovision
           # Live Activity (Dynamic Island) ist eine eigene Widget-Erweiterung mit
           # eigener App-ID ch.spacemedia.app.LiveActivity und eigenem Profil.
-          if [ -z "$IOS_LIVEACTIVITY_PROFILE_BASE64" ]; then
-            echo "IOS_LIVEACTIVITY_PROFILE_BASE64 fehlt (App-Store-Profil für ch.spacemedia.app.LiveActivity)." >&2
-            exit 1
+          # Vorgegebenes Profil (base64) hat Vorrang; sonst legt der ASC-API-Key
+          # aus app_store_credentials App-ID + App-Store-Profil selbst an — mit
+          # dem Schlüssel des vorhandenen Verteilungs-Zertifikats (kein neues).
+          if [ -n "$IOS_LIVEACTIVITY_PROFILE_BASE64" ]; then
+            echo "$IOS_LIVEACTIVITY_PROFILE_BASE64" | base64 --decode \
+              > ~/Library/MobileDevice/Provisioning\ Profiles/space_media_live_activity_app_store.mobileprovision
+          else
+            openssl pkcs12 -in /tmp/ios_distribution.p12 -nocerts -nodes \
+              -passin pass:"$IOS_DISTRIBUTION_CERT_PASSWORD" -out /tmp/ios_distribution_key.pem 2>/dev/null \
+              || openssl pkcs12 -legacy -in /tmp/ios_distribution.p12 -nocerts -nodes \
+                   -passin pass:"$IOS_DISTRIBUTION_CERT_PASSWORD" -out /tmp/ios_distribution_key.pem
+            app-store-connect fetch-signing-files "$BUNDLE_ID.LiveActivity" \
+              --platform IOS \
+              --type IOS_APP_STORE \
+              --certificate-key @file:/tmp/ios_distribution_key.pem \
+              --create
+            rm -f /tmp/ios_distribution_key.pem
           fi
-          echo "$IOS_LIVEACTIVITY_PROFILE_BASE64" | base64 --decode \
-            > ~/Library/MobileDevice/Provisioning\ Profiles/space_media_live_activity_app_store.mobileprovision
           keychain initialize
           keychain add-certificates --certificate /tmp/ios_distribution.p12 \
             --certificate-password "$IOS_DISTRIBUTION_CERT_PASSWORD"

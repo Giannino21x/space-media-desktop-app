@@ -109,9 +109,10 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
   `src/lib/mobile/live-activity.ts` + `useRecording.ts` im Web-Repo). «Stopp» öffnet die App über
   `spacemedia://aufnahme/stopp` (AppDelegate → `window.__nativeAufnahme('stopp')`). Info.plist: `NSSupportsLiveActivities`,
   URL-Schema `spacemedia`, `UIBackgroundModes` audio (damit die WebView-Aufnahme bei gesperrtem Telefon weiterlaufen
-  kann — auf dem Gerät prüfen, ob wirklich Ton ankommt). **Vor dem Build:** App-ID `ch.spacemedia.app.LiveActivity` im
-  Developer-Portal, App-Store-Profil dafür, base64 als Codemagic-Variable `IOS_LIVEACTIVITY_PROFILE_BASE64`
-  (Gruppe wie `IOS_PROVISIONING_PROFILE_BASE64`) — ohne bricht der Signier-Schritt mit klarer Meldung ab.
+  kann — auf dem Gerät prüfen, ob wirklich Ton ankommt). Signieren: der Codemagic-Schritt legt App-ID
+  `ch.spacemedia.app.LiveActivity` + App-Store-Profil selbst an (`app-store-connect fetch-signing-files --create`, ASC-Key
+  aus `app_store_credentials`, Schlüssel des vorhandenen Verteilungs-Zertifikats); ein vorgegebenes Profil in
+  `IOS_LIVEACTIVITY_PROFILE_BASE64` hat Vorrang.
 - **Android:** Store hat `versionCode 4` / 1.0.3 (gebaut vor dem `resizeOnFullScreen`-Fix — Tastatur
   überdeckt dort den WebView). `master` steht auf `versionCode 5` / `versionName 1.0.4`; AAB via
   Codemagic gebaut (`downloads/app-release-v1.0.4.aab`), Play-Upload läuft manuell.
