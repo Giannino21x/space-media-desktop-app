@@ -36,6 +36,14 @@ workflows:
           echo "$IOS_DISTRIBUTION_CERT_BASE64" | base64 --decode > /tmp/ios_distribution.p12
           echo "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode \
             > ~/Library/MobileDevice/Provisioning\ Profiles/space_media_app_store.mobileprovision
+          # Live Activity (Dynamic Island) ist eine eigene Widget-Erweiterung mit
+          # eigener App-ID ch.spacemedia.app.LiveActivity und eigenem Profil.
+          if [ -z "$IOS_LIVEACTIVITY_PROFILE_BASE64" ]; then
+            echo "IOS_LIVEACTIVITY_PROFILE_BASE64 fehlt (App-Store-Profil für ch.spacemedia.app.LiveActivity)." >&2
+            exit 1
+          fi
+          echo "$IOS_LIVEACTIVITY_PROFILE_BASE64" | base64 --decode \
+            > ~/Library/MobileDevice/Provisioning\ Profiles/space_media_live_activity_app_store.mobileprovision
           keychain initialize
           keychain add-certificates --certificate /tmp/ios_distribution.p12 \
             --certificate-password "$IOS_DISTRIBUTION_CERT_PASSWORD"

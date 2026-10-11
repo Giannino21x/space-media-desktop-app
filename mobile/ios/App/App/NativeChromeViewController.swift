@@ -60,6 +60,9 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
     }
     private var glassConfig = GlassConfig()
 
+    /// Laufende Aufnahmen in Dynamic Island + Sperrbildschirm (LiveActivityBridge.swift)
+    private let liveActivity = LiveActivityBridge()
+
     // MARK: - State
 
     private var chromeContainer: ChromeContainerView!
@@ -128,6 +131,7 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         )
         webView.configuration.userContentController.addUserScript(flagScript)
         webView.configuration.userContentController.add(self, name: "nativeChrome")
+        liveActivity.attach(to: webView)
 
         setupChrome()
         applyTheme()

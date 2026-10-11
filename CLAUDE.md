@@ -102,6 +102,16 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
   Apples System-Tab-Bar unten (`useSystemTabBar`). **Codemagic `ios-workflow` manuell starten**, dann TestFlight
   testen, dann ASC 1.0.4 einreichen. Store: 1.0.3 live seit 21.08.2026 (Build 19). Die Tastatur handhabt die Web-App
   selbst (`KeyboardViewport` + `keyboard-mobile.css` im Web-Repo).
+- **iOS 1.0.5 (11.10.2026, noch nicht gebaut): Live Activity «Aufnahme läuft»** in Dynamic Island + Sperrbildschirm.
+  Widget-Erweiterung `SpaceLiveActivity` (eigenes Target, Bundle-ID `ch.spacemedia.app.LiveActivity`, ab iOS 16.2,
+  von Hand in `project.pbxproj` eingetragen — IDs `A71CE…`), gemeinsame `Shared/AufnahmeAttributes.swift` in beiden
+  Targets, `App/LiveActivityBridge.swift` (Kanal `webkit.messageHandlers.liveActivity`, Gegenstück
+  `src/lib/mobile/live-activity.ts` + `useRecording.ts` im Web-Repo). «Stopp» öffnet die App über
+  `spacemedia://aufnahme/stopp` (AppDelegate → `window.__nativeAufnahme('stopp')`). Info.plist: `NSSupportsLiveActivities`,
+  URL-Schema `spacemedia`, `UIBackgroundModes` audio (damit die WebView-Aufnahme bei gesperrtem Telefon weiterlaufen
+  kann — auf dem Gerät prüfen, ob wirklich Ton ankommt). **Vor dem Build:** App-ID `ch.spacemedia.app.LiveActivity` im
+  Developer-Portal, App-Store-Profil dafür, base64 als Codemagic-Variable `IOS_LIVEACTIVITY_PROFILE_BASE64`
+  (Gruppe wie `IOS_PROVISIONING_PROFILE_BASE64`) — ohne bricht der Signier-Schritt mit klarer Meldung ab.
 - **Android:** Store hat `versionCode 4` / 1.0.3 (gebaut vor dem `resizeOnFullScreen`-Fix — Tastatur
   überdeckt dort den WebView). `master` steht auf `versionCode 5` / `versionName 1.0.4`; AAB via
   Codemagic gebaut (`downloads/app-release-v1.0.4.aab`), Play-Upload läuft manuell.
