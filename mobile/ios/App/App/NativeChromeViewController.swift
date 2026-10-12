@@ -89,6 +89,9 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
     private var meldungUnten: NSLayoutConstraint?
     /// Kopfleiste oben in Liquid Glass (NativeKopfleiste.swift, ab 1.0.6 Build 4, nur iOS 26)
     private let kopfleiste = NativeKopfleiste()
+    /// PDFs und andere Dateien in QuickLook statt im App-Fenster (NativeDatei.swift, ab 1.0.6 Build 25)
+    private let datei = NativeDatei()
+    private let dateiNavigation = NativeDateiNavigation()
     private var kopfInhalt: NativeKopfleiste.Inhalt?
     private var kopfSichtbar = false
 
@@ -186,6 +189,13 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
 
     // MARK: - Lifecycle
 
+    /// Vor dem ersten Laden: Datei-Links fängt dieses Plugin ab (NativeDatei.swift)
+    override func capacitorDidLoad() {
+        super.capacitorDidLoad()
+        dateiNavigation.datei = datei
+        bridge?.registerPluginInstance(dateiNavigation)
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         guard let webView = self.webView else { return }
@@ -214,6 +224,7 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         liveActivity.attach(to: webView)
         aufnahme.attach(to: webView, insel: liveActivity)
         NativePush.shared.attach(to: webView)
+        datei.attach(to: webView, anzeiger: self)
 
         setupChrome()
         applyTheme()

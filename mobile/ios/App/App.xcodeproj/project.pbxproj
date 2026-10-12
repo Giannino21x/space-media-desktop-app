@@ -15,6 +15,7 @@
 		A71CE0000000000000000025 /* NativeMeldung.swift in Sources */ = {isa = PBXBuildFile; fileRef = A71CE0000000000000000026 /* NativeMeldung.swift */; };
 		A71CE0000000000000000027 /* NativeKopfleiste.swift in Sources */ = {isa = PBXBuildFile; fileRef = A71CE0000000000000000028 /* NativeKopfleiste.swift */; };
 		A71CE0000000000000000029 /* NativePush.swift in Sources */ = {isa = PBXBuildFile; fileRef = A71CE0000000000000000030 /* NativePush.swift */; };
+		A71CE0000000000000000032 /* NativeDatei.swift in Sources */ = {isa = PBXBuildFile; fileRef = A71CE0000000000000000033 /* NativeDatei.swift */; };
 		A71CE0000000000000000004 /* SpaceLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A71CE0000000000000000008 /* SpaceLiveActivity.swift */; };
 		A71CE0000000000000000005 /* SpaceLiveActivity.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A71CE000000000000000000A /* SpaceLiveActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
@@ -60,6 +61,7 @@
 		A71CE0000000000000000026 /* NativeMeldung.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeMeldung.swift; sourceTree = "<group>"; };
 		A71CE0000000000000000028 /* NativeKopfleiste.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeKopfleiste.swift; sourceTree = "<group>"; };
 		A71CE0000000000000000030 /* NativePush.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativePush.swift; sourceTree = "<group>"; };
+		A71CE0000000000000000033 /* NativeDatei.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeDatei.swift; sourceTree = "<group>"; };
 		A71CE0000000000000000031 /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		A71CE0000000000000000008 /* SpaceLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceLiveActivity.swift; sourceTree = "<group>"; };
 		A71CE0000000000000000009 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -128,6 +130,7 @@
 				A71CE0000000000000000026 /* NativeMeldung.swift */,
 				A71CE0000000000000000028 /* NativeKopfleiste.swift */,
 				A71CE0000000000000000030 /* NativePush.swift */,
+				A71CE0000000000000000033 /* NativeDatei.swift */,
 				A71CE0000000000000000031 /* App.entitlements */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
@@ -275,6 +278,7 @@
 				A71CE0000000000000000025 /* NativeMeldung.swift in Sources */,
 				A71CE0000000000000000027 /* NativeKopfleiste.swift in Sources */,
 				A71CE0000000000000000029 /* NativePush.swift in Sources */,
+				A71CE0000000000000000032 /* NativeDatei.swift in Sources */,
 				A71CE0000000000000000001 /* AufnahmeAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
