@@ -87,6 +87,10 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
     /// Meldung (Toast) in Liquid Glass über der Leiste (NativeMeldung.swift, ab 1.0.6 Build 3)
     private let meldung = NativeMeldung()
     private var meldungUnten: NSLayoutConstraint?
+    /// Kopfleiste oben in Liquid Glass (NativeKopfleiste.swift, ab 1.0.6 Build 4, nur iOS 26)
+    private let kopfleiste = NativeKopfleiste()
+    private var kopfInhalt: NativeKopfleiste.Inhalt?
+    private var kopfSichtbar = false
 
     // MARK: - State
 
@@ -188,6 +192,9 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
 
         // Web-App informieren, dass natives Chrome verfügbar ist (überlebt
         // Reloads), und den Rückkanal registrieren.
+        // nativeKopf: Zurück und Kopf-Knöpfe zeichnet die Hülle in Liquid Glass (nur iOS 26)
+        var kopfFlag = ""
+        if #available(iOS 26.0, *) { kopfFlag = ";document.documentElement.dataset.nativeKopf = '1'" }
         let flagScript = WKUserScript(
             // nativeTabs: diese Hülle nimmt Tabs von der Web-App an (ab 1.0.5);
             // nativeKreis: der Aktions-Tab darf als Kreis neben der Leiste sitzen (ab 1.0.6)
@@ -195,7 +202,8 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
                 + "document.documentElement.dataset.nativeTabs = '1';"
                 + "document.documentElement.dataset.nativeKreis = '1';"
                 + "document.documentElement.dataset.nativeAktionen = '1';"
-                + "document.documentElement.dataset.nativeMeldung = '1'",
+                + "document.documentElement.dataset.nativeMeldung = '1'"
+                + kopfFlag,
             injectionTime: .atDocumentEnd,
             forMainFrameOnly: true
         )
@@ -237,6 +245,7 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
             self?.applyChromeVisibility()
             self?.layoutIndicator(animated: false)
             self?.applyAktionsleiste()
+            self?.applyKopfleiste()
         }
     }
 
@@ -292,6 +301,22 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
             aktionsleiste.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             aktionsleiste.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             aktionsleiste.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+
+        // Kopfleiste: auf der 44-pt-Zeile der Web-Kopfzeile, unter der Statusleiste
+        kopfleiste.translatesAutoresizingMaskIntoConstraints = false
+        kopfleiste.isHidden = true
+        kopfleiste.alpha = 0
+        kopfleiste.onTipp = { [weak self] id in
+            guard id.range(of: "^[a-z0-9-]{1,32}$", options: .regularExpression) != nil else { return }
+            self?.runJS("window.__nativeKopf && window.__nativeKopf('\(id)')")
+        }
+        view.addSubview(kopfleiste)
+        NSLayoutConstraint.activate([
+            kopfleiste.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            kopfleiste.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
+            kopfleiste.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+            kopfleiste.heightAnchor.constraint(equalToConstant: 44),
         ])
 
         // Meldung: 12 pt über dem, was unten belegt ist (layoutMeldung), nie unter der Tastatur
@@ -959,9 +984,54 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         if body.keys.contains("aktionen") {
             aktionsInhalt = Self.parseAktionen(body["aktionen"])
         }
+        // Kopfleiste der Seite (ab 1.0.6 Build 4): null = keine (auch während ein Blatt offen ist)
+        if body.keys.contains("kopf") {
+            kopfInhalt = Self.parseKopf(body["kopf"])
+        }
         applyActiveTab(animated: true)
         applyChromeVisibility()
         applyAktionsleiste()
+        applyKopfleiste()
+    }
+
+    /// Kopf aus der Web-App: eigene Kennungen, nur bekannte SF Symbols
+    private static func parseKopf(_ roh: Any?) -> NativeKopfleiste.Inhalt? {
+        guard let raw = roh as? [String: Any] else { return nil }
+        let zurueck = (raw["zurueck"] as? [String: Any])?["label"] as? String
+        let liste = raw["knoepfe"] as? [[String: Any]] ?? []
+        let knoepfe = liste.compactMap { (k: [String: Any]) -> NativeKopfleiste.Knopf? in
+            guard let id = k["id"] as? String, let symbol = k["symbol"] as? String,
+                  let label = k["label"] as? String, !label.isEmpty,
+                  id.range(of: "^[a-z0-9-]{1,32}$", options: .regularExpression) != nil,
+                  symbol.range(of: "^[a-z0-9.]{1,64}$", options: .regularExpression) != nil,
+                  UIImage(systemName: symbol) != nil
+            else { return nil }
+            return NativeKopfleiste.Knopf(id: id, symbol: symbol, label: String(label.prefix(60)), aus: k["aus"] as? Bool ?? false)
+        }
+        guard zurueck != nil || !knoepfe.isEmpty else { return nil }
+        return NativeKopfleiste.Inhalt(zurueck: zurueck.map { String($0.prefix(40)) }, knoepfe: Array(knoepfe.prefix(2)))
+    }
+
+    /// Kopfleiste zeigen oder weg: nur iOS 26, Handy-Breite, Inhalt gemeldet
+    private func applyKopfleiste() {
+        var zeigen = false
+        if #available(iOS 26.0, *) {
+            zeigen = chromeReady && kopfInhalt != nil && view.bounds.width < 1024
+        }
+        if let inhalt = kopfInhalt {
+            kopfleiste.setze(inhalt, hell: isLightTheme)
+        }
+        guard zeigen != kopfSichtbar else { return }
+        kopfSichtbar = zeigen
+        if zeigen {
+            kopfleiste.isHidden = false
+            view.bringSubviewToFront(kopfleiste)
+        }
+        UIView.animate(withDuration: 0.2, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+            self.kopfleiste.alpha = zeigen ? 1 : 0
+        } completion: { _ in
+            if !self.kopfSichtbar { self.kopfleiste.isHidden = true }
+        }
     }
 
     /// Knöpfe aus der Web-App: nur eigene Kennungen (sie landen in einem JS-Aufruf)
