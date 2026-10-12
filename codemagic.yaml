@@ -36,6 +36,7 @@ workflows:
           npx cap sync ios
       - name: Install signing certificate + provisioning profile
         script: |
+          set -eo pipefail
           # We pre-generated the distribution certificate and provisioning
           # profile manually (Apple's API can't re-export the private key for
           # a fresh distribution cert). Both are passed in as base64 env vars.
@@ -52,10 +53,14 @@ workflows:
             echo "$IOS_LIVEACTIVITY_PROFILE_BASE64" | base64 --decode \
               > ~/Library/MobileDevice/Provisioning\ Profiles/space_media_live_activity_app_store.mobileprovision
           else
+            # Nur der reine RSA-Schlüssel (openssl rsa): mit den «Bag Attributes» aus
+            # pkcs12 lehnte die CLI ihn ab (Build #24, 1.0.5), und nichts brach ab.
             openssl pkcs12 -in /tmp/ios_distribution.p12 -nocerts -nodes \
-              -passin pass:"$IOS_DISTRIBUTION_CERT_PASSWORD" -out /tmp/ios_distribution_key.pem 2>/dev/null \
+              -passin pass:"$IOS_DISTRIBUTION_CERT_PASSWORD" 2>/dev/null > /tmp/ios_distribution_p12_key.pem \
               || openssl pkcs12 -legacy -in /tmp/ios_distribution.p12 -nocerts -nodes \
-                   -passin pass:"$IOS_DISTRIBUTION_CERT_PASSWORD" -out /tmp/ios_distribution_key.pem
+                   -passin pass:"$IOS_DISTRIBUTION_CERT_PASSWORD" > /tmp/ios_distribution_p12_key.pem
+            openssl rsa -in /tmp/ios_distribution_p12_key.pem -out /tmp/ios_distribution_key.pem
+            rm -f /tmp/ios_distribution_p12_key.pem
             app-store-connect fetch-signing-files "$BUNDLE_ID.LiveActivity" \
               --platform IOS \
               --type IOS_APP_STORE \
