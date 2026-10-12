@@ -31,6 +31,10 @@ import Capacitor
 /// der Leiste (Platz des Such-Tabs, UISearchTab) und wird nie ausgewählt;
 /// `farben` ({fill, ink, ring}) färbt ihn wie im Web (Steno-Gelb, Ring aus den
 /// Bot-Farben). Ältere iOS zeigen ihn als Tab in der Leiste.
+/// Ab 1.0.6: html[data-native-aktionen="1"] — Feld `aktionen` ({text?, knoepfe,
+/// akzent?, tinte?} | null): die Aktionsleiste der Seite in echtem Liquid Glass
+/// (NativeAktionsleiste.swift), Tipp ruft window.__nativeAktion(id). Apples
+/// Tab-Leiste geht ab iOS 18 mit setTabBarHidden weg und wieder herein.
 /// Das Chrome bleibt unsichtbar, bis die erste Web-Meldung eintrifft — Login-
 /// Seite und alte Web-Stände ohne Bridge zeigen so nichts Natives.
 /// iOS < 26 fällt auf `UIBlurEffect` zurück. Ab 1024 pt Breite (iPad, Desktop-
@@ -75,6 +79,11 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
     private let liveActivity = LiveActivityBridge()
     /// Aufnahme bei gesperrtem iPhone (NativeAufnahme.swift, ab 1.0.6)
     private let aufnahme = NativeAufnahme()
+    /// Aktionsleiste der Seite in Liquid Glass (NativeAktionsleiste.swift, ab 1.0.6)
+    private let aktionsleiste = NativeAktionsleiste()
+    private var aktionsInhalt: NativeAktionsleiste.Inhalt?
+    private var aktionenSichtbar = false
+    private var gemeldeteAktionsHoehe: CGFloat = -1
 
     // MARK: - State
 
@@ -181,7 +190,8 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
             // nativeKreis: der Aktions-Tab darf als Kreis neben der Leiste sitzen (ab 1.0.6)
             source: "document.documentElement.dataset.nativeChrome = '1';"
                 + "document.documentElement.dataset.nativeTabs = '1';"
-                + "document.documentElement.dataset.nativeKreis = '1'",
+                + "document.documentElement.dataset.nativeKreis = '1';"
+                + "document.documentElement.dataset.nativeAktionen = '1'",
             injectionTime: .atDocumentEnd,
             forMainFrameOnly: true
         )
@@ -211,6 +221,7 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         applyChromeVisibility()
         layoutIndicator(animated: false)
         reportBottomInset()
+        meldeAktionsHoehe()
     }
 
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
@@ -218,6 +229,7 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         coordinator.animate(alongsideTransition: nil) { [weak self] _ in
             self?.applyChromeVisibility()
             self?.layoutIndicator(animated: false)
+            self?.applyAktionsleiste()
         }
     }
 
@@ -261,6 +273,20 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
     }
 
     private func setupChrome() {
+        // Aktionsleiste unten (Seiten ohne Tab-Leiste): erst sichtbar, wenn die Web-App Knöpfe meldet
+        aktionsleiste.translatesAutoresizingMaskIntoConstraints = false
+        aktionsleiste.isHidden = true
+        aktionsleiste.alpha = 0
+        aktionsleiste.onTipp = { [weak self] id in
+            self?.runJS("window.__nativeAktion && window.__nativeAktion('\(id)')")
+        }
+        view.addSubview(aktionsleiste)
+        NSLayoutConstraint.activate([
+            aktionsleiste.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            aktionsleiste.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            aktionsleiste.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+
         // Scrim hinter der Status-Leiste — das Web-Chrome samt Scrim ist aus.
         scrimView.isUserInteractionEnabled = false
         scrimView.translatesAutoresizingMaskIntoConstraints = false
@@ -450,6 +476,7 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         statusBarStyle = isLightTheme ? .darkContent : .lightContent
         setNeedsStatusBarAppearanceUpdate()
         applyScrim()
+        applyAktionsleiste()
         // Blur-Fallback: neutrales Material passt sich per Style an.
         if #unavailable(iOS 26.0) {
             let blur = UIBlurEffect(style: .systemMaterial)
@@ -899,8 +926,75 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
                 applyGlassConfig()
             }
         }
+        // Aktionsleiste der Seite (ab 1.0.6): null = keine (auch während ein Blatt offen ist)
+        if body.keys.contains("aktionen") {
+            aktionsInhalt = Self.parseAktionen(body["aktionen"])
+        }
         applyActiveTab(animated: true)
         applyChromeVisibility()
+        applyAktionsleiste()
+    }
+
+    /// Knöpfe aus der Web-App: nur eigene Kennungen (sie landen in einem JS-Aufruf)
+    private static func parseAktionen(_ roh: Any?) -> NativeAktionsleiste.Inhalt? {
+        guard let raw = roh as? [String: Any], let liste = raw["knoepfe"] as? [[String: Any]] else { return nil }
+        let knoepfe = liste.compactMap { (k: [String: Any]) -> NativeAktionsleiste.Knopf? in
+            guard let id = k["id"] as? String, let label = k["label"] as? String, !label.isEmpty,
+                  id.range(of: "^[a-z0-9-]{1,32}$", options: .regularExpression) != nil
+            else { return nil }
+            return NativeAktionsleiste.Knopf(
+                id: id, label: String(label.prefix(60)),
+                haupt: (k["stil"] as? String) == "haupt", aus: k["aus"] as? Bool ?? false)
+        }
+        guard !knoepfe.isEmpty else { return nil }
+        return NativeAktionsleiste.Inhalt(
+            text: (raw["text"] as? String).map { String($0.prefix(160)) },
+            knoepfe: Array(knoepfe.prefix(3)),
+            akzent: (raw["akzent"] as? String).flatMap { Self.color(fromHex: $0) },
+            tinte: (raw["tinte"] as? String).flatMap { Self.color(fromHex: $0) })
+    }
+
+    /// Aktionsleiste zeigen oder weg: Knöpfe gemeldet, keine Tastatur, Handy-Breite
+    private func applyAktionsleiste() {
+        let desktopChrome = view.bounds.width >= 1024
+        let zeigen = chromeReady && !hiddenByKeyboard && !desktopChrome && aktionsInhalt != nil
+        if let inhalt = aktionsInhalt {
+            aktionsleiste.setze(inhalt, hell: isLightTheme, grund: scrimColor)
+        }
+        guard zeigen != aktionenSichtbar else { return }
+        aktionenSichtbar = zeigen
+        let ruhig = UIAccessibility.isReduceMotionEnabled
+        let weg = ruhig ? CGAffineTransform.identity : CGAffineTransform(translationX: 0, y: 28)
+        if zeigen {
+            aktionsleiste.isHidden = false
+            view.bringSubviewToFront(aktionsleiste)
+            aktionsleiste.transform = weg
+            UIView.animate(
+                withDuration: ruhig ? 0.2 : 0.46, delay: 0, usingSpringWithDamping: 0.86,
+                initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]
+            ) {
+                self.aktionsleiste.alpha = 1
+                self.aktionsleiste.transform = .identity
+            }
+            view.layoutIfNeeded()
+            meldeAktionsHoehe()
+        } else {
+            UIView.animate(withDuration: 0.2, delay: 0, options: [.curveEaseIn, .beginFromCurrentState]) {
+                self.aktionsleiste.alpha = 0
+                self.aktionsleiste.transform = weg
+            } completion: { _ in
+                if !self.aktionenSichtbar { self.aktionsleiste.isHidden = true }
+            }
+        }
+    }
+
+    /// Wie viel die Aktionsleiste unten belegt — die Seite polstert darüber (--native-aktionen-h)
+    private func meldeAktionsHoehe() {
+        guard aktionenSichtbar else { return }
+        let hoehe = aktionsleiste.bounds.height.rounded()
+        guard hoehe > 0, hoehe != gemeldeteAktionsHoehe else { return }
+        gemeldeteAktionsHoehe = hoehe
+        runJS("document.documentElement.style.setProperty('--native-aktionen-h','\(Int(hoehe))px')")
     }
 
     // MARK: - Auswahl (Lozenge + Icons)
@@ -1121,11 +1215,13 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
     @objc private func keyboardWillShow() {
         hiddenByKeyboard = true
         applyChromeVisibility()
+        applyAktionsleiste()
     }
 
     @objc private func keyboardWillHide() {
         hiddenByKeyboard = false
         applyChromeVisibility()
+        applyAktionsleiste()
     }
 
     private func applyChromeVisibility() {
@@ -1146,9 +1242,17 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         }
         if let overlay = tabOverlay {
             overlay.isUserInteractionEnabled = !hidden
-            UIView.animate(withDuration: 0.24, delay: 0, options: [.curveEaseOut]) {
-                overlay.alpha = hidden ? 0 : 1
-                overlay.transform = hidden ? CGAffineTransform(translationX: 0, y: 12) : .identity
+            if #available(iOS 18.0, *), let controller = systemTabController {
+                // Apples eigenes Aus- und Einblenden: die Leiste gleitet weg wie beim
+                // Öffnen eines Gesprächs (Chat, Dokument) und kommt mit Glas-Animation zurück
+                overlay.alpha = 1
+                overlay.transform = .identity
+                controller.setTabBarHidden(hidden, animated: !UIAccessibility.isReduceMotionEnabled)
+            } else {
+                UIView.animate(withDuration: 0.24, delay: 0, options: [.curveEaseOut]) {
+                    overlay.alpha = hidden ? 0 : 1
+                    overlay.transform = hidden ? CGAffineTransform(translationX: 0, y: 12) : .identity
+                }
             }
         }
         reportBottomInset()
