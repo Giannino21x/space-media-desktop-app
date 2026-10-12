@@ -84,6 +84,9 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
     private var aktionsInhalt: NativeAktionsleiste.Inhalt?
     private var aktionenSichtbar = false
     private var gemeldeteAktionsHoehe: CGFloat = -1
+    /// Meldung (Toast) in Liquid Glass über der Leiste (NativeMeldung.swift, ab 1.0.6 Build 3)
+    private let meldung = NativeMeldung()
+    private var meldungUnten: NSLayoutConstraint?
 
     // MARK: - State
 
@@ -191,12 +194,15 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
             source: "document.documentElement.dataset.nativeChrome = '1';"
                 + "document.documentElement.dataset.nativeTabs = '1';"
                 + "document.documentElement.dataset.nativeKreis = '1';"
-                + "document.documentElement.dataset.nativeAktionen = '1'",
+                + "document.documentElement.dataset.nativeAktionen = '1';"
+                + "document.documentElement.dataset.nativeMeldung = '1'",
             injectionTime: .atDocumentEnd,
             forMainFrameOnly: true
         )
         webView.configuration.userContentController.addUserScript(flagScript)
         webView.configuration.userContentController.add(self, name: "nativeChrome")
+        // Eigener Kanal: eine Meldung darf das Chrome nicht «bereit» schalten (Login-Seite)
+        webView.configuration.userContentController.add(self, name: "meldung")
         liveActivity.attach(to: webView)
         aufnahme.attach(to: webView, insel: liveActivity)
 
@@ -222,6 +228,7 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         layoutIndicator(animated: false)
         reportBottomInset()
         meldeAktionsHoehe()
+        layoutMeldung()
     }
 
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
@@ -285,6 +292,24 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
             aktionsleiste.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             aktionsleiste.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             aktionsleiste.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+
+        // Meldung: 12 pt über dem, was unten belegt ist (layoutMeldung), nie unter der Tastatur
+        meldung.translatesAutoresizingMaskIntoConstraints = false
+        meldung.onAntwort = { [weak self] id, art in
+            guard id.range(of: "^[a-z0-9-]{1,32}$", options: .regularExpression) != nil,
+                  ["gezeigt", "aktion", "zu"].contains(art) else { return }
+            self?.runJS("window.__nativeMeldung && window.__nativeMeldung('\(id)','\(art)')")
+        }
+        view.addSubview(meldung)
+        let unten = meldung.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -60)
+        unten.priority = .defaultHigh
+        meldungUnten = unten
+        NSLayoutConstraint.activate([
+            meldung.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
+            meldung.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+            meldung.bottomAnchor.constraint(lessThanOrEqualTo: view.keyboardLayoutGuide.topAnchor, constant: -12),
+            unten,
         ])
 
         // Scrim hinter der Status-Leiste — das Web-Chrome samt Scrim ist aus.
@@ -875,6 +900,10 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
     // MARK: - Web -> Nativ
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "meldung" {
+            meldungEmpfangen(message.body)
+            return
+        }
         guard message.name == "nativeChrome", let body = message.body as? [String: Any] else { return }
         chromeReady = true
         if let hidden = body["hidden"] as? Bool {
@@ -978,12 +1007,14 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
             }
             view.layoutIfNeeded()
             meldeAktionsHoehe()
+            layoutMeldung()
         } else {
             UIView.animate(withDuration: 0.2, delay: 0, options: [.curveEaseIn, .beginFromCurrentState]) {
                 self.aktionsleiste.alpha = 0
                 self.aktionsleiste.transform = weg
             } completion: { _ in
                 if !self.aktionenSichtbar { self.aktionsleiste.isHidden = true }
+                self.layoutMeldung()
             }
         }
     }
@@ -995,6 +1026,55 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         guard hoehe > 0, hoehe != gemeldeteAktionsHoehe else { return }
         gemeldeteAktionsHoehe = hoehe
         runJS("document.documentElement.style.setProperty('--native-aktionen-h','\(Int(hoehe))px')")
+    }
+
+    // MARK: - Meldung (Toast)
+
+    private static let meldungTypen: Set<String> = ["erfolg", "fehler", "info", "warnung", "laden", "normal"]
+
+    /// {meldung: {id, typ, titel, text?, aktion?, hell} | null} — nur eigene Kennungen,
+    /// Texte gekürzt (sie landen in einem Label, nicht in JS)
+    private func meldungEmpfangen(_ roh: Any) {
+        guard let body = roh as? [String: Any] else { return }
+        guard let m = body["meldung"] as? [String: Any],
+              let id = m["id"] as? String, id.range(of: "^[a-z0-9-]{1,32}$", options: .regularExpression) != nil,
+              let titel = m["titel"] as? String, !titel.isEmpty
+        else {
+            meldung.verstecke()
+            return
+        }
+        let typ = (m["typ"] as? String).flatMap { Self.meldungTypen.contains($0) ? $0 : nil } ?? "normal"
+        let inhalt = NativeMeldung.Inhalt(
+            id: id, typ: typ, titel: String(titel.prefix(120)),
+            text: (m["text"] as? String).map { String($0.prefix(200)) },
+            aktion: (m["aktion"] as? String).map { String($0.prefix(24)) },
+            hell: m["hell"] as? Bool ?? isLightTheme)
+        layoutMeldung()
+        view.bringSubviewToFront(meldung)
+        meldung.zeige(inhalt, akzent: accent)
+        meldung.onAntwort?(id, "gezeigt")
+    }
+
+    /// Die Meldung sitzt 12 pt über dem, was unten belegt ist: Home-Indikator,
+    /// Apples Tab-Leiste (sichtbar) oder die Aktionsleiste der Seite.
+    private func layoutMeldung() {
+        guard let unten = meldungUnten else { return }
+        var belegt = view.safeAreaInsets.bottom
+        if let controller = systemTabController, lastAppliedHidden == false {
+            let barTop = controller.tabBar.convert(controller.tabBar.bounds, to: view).minY
+            belegt = max(belegt, view.bounds.height - barTop)
+        }
+        if aktionenSichtbar {
+            belegt = max(belegt, view.bounds.height - aktionsleiste.frame.minY - 14)
+        }
+        let neu = -(belegt.rounded() + 12)
+        guard unten.constant != neu else { return }
+        unten.constant = neu
+        if meldung.sichtbar {
+            UIView.animate(withDuration: 0.25, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+                self.view.layoutIfNeeded()
+            }
+        }
     }
 
     // MARK: - Auswahl (Lozenge + Icons)
@@ -1256,6 +1336,7 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
             }
         }
         reportBottomInset()
+        layoutMeldung()
     }
 }
 
