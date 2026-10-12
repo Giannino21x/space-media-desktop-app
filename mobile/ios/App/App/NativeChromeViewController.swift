@@ -579,17 +579,8 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
                 kreis.image = kreisBild(tab)
                 return kreis
             }
-            if tab.action {
-                return UITab(title: tab.label, image: aktionsTabBild(tab), identifier: tab.id, viewControllerProvider: platzhalter)
-            }
-            let uiTab = UITab(title: tab.label, image: tabBild(tab, aktiv: false), identifier: tab.id, viewControllerProvider: platzhalter)
-            if #available(iOS 26.1, *) {
-                // Gefüllt, sobald ausgewählt — ohne Umweg über die Web-App
-                uiTab.selectedImage = tabBild(tab, aktiv: true)
-            } else if tab.id == activeTabId {
-                uiTab.image = tabBild(tab, aktiv: true)
-            }
-            return uiTab
+            let bild = tab.action ? aktionsTabBild(tab) : tabBild(tab, aktiv: tab.id == activeTabId)
+            return UITab(title: tab.label, image: bild, identifier: tab.id, viewControllerProvider: platzhalter)
         }
     }
 
@@ -722,14 +713,13 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
     private func syncSystemTabSelection() {
         guard let controller = systemTabController else { return }
         if #available(iOS 26.0, *), tabModusKreis {
-            // Gefülltes Symbol nur beim aktiven Tab (wie die Web-Leiste); ab iOS 26.1 macht das selectedImage
-            if #unavailable(iOS 26.1) {
-                if kreisAktivBild != activeTabId {
-                    kreisAktivBild = activeTabId
-                    for tab in controller.tabs where !(tab is UISearchTab) {
-                        if let eintrag = systemTabs.first(where: { $0.id == tab.identifier }), !eintrag.action {
-                            tab.image = tabBild(eintrag, aktiv: eintrag.id == activeTabId)
-                        }
+            // Gefülltes Symbol nur beim aktiven Tab (wie die Web-Leiste). UITab.selectedImage
+            // kennt das SDK von Xcode 26.3 noch nicht, darum tauscht die Hülle selbst.
+            if kreisAktivBild != activeTabId {
+                kreisAktivBild = activeTabId
+                for tab in controller.tabs where !(tab is UISearchTab) {
+                    if let eintrag = systemTabs.first(where: { $0.id == tab.identifier }), !eintrag.action {
+                        tab.image = tabBild(eintrag, aktiv: eintrag.id == activeTabId)
                     }
                 }
             }
