@@ -1,6 +1,6 @@
 {
   "name": "space-media",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "SPACE Media — AI-Powered Sales & Marketing Automation",
   "main": "main.js",
   "author": {
@@ -82,6 +82,11 @@
           "type": "file"
         }
       ]
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Giannino21x",
+      "repo": "space-media-desktop-app"
     }
   },
   "devDependencies": {
