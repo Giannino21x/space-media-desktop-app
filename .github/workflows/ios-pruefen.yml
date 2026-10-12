@@ -42,11 +42,12 @@ jobs:
             -configuration Debug -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO build > build.log 2>&1 || STATUS=$?
-          grep -E "error:|BUILD (SUCCEEDED|FAILED)" build.log | head -150 || true
+          # Fehler, Warnungen der eigenen Swift-Dateien (z. B. «nearly matches optional requirement»)
+          grep -E "error:|warning: .*(NativeAufnahme|NativeChromeViewController|LiveActivityBridge|AppDelegate|AufnahmeAttributes|SpaceLiveActivity)[.]swift|BUILD (SUCCEEDED|FAILED)" build.log | sort -u | head -150 || true
           exit $STATUS
 
-      - name: Protokoll bei Fehler
-        if: failure()
+      - name: Protokoll
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: xcodebuild-log
