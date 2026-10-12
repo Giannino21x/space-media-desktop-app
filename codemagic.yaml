@@ -61,7 +61,8 @@ workflows:
                   --strict-match-identifier --platform IOS --json \
                 | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[0]["id"] if d else "")')
           if [ -n "$BID" ]; then
-            app-store-connect bundle-ids enable-capabilities "$BID" --capability PUSH_NOTIFICATIONS \
+            # Die CLI will den Anzeigenamen, nicht PUSH_NOTIFICATIONS (Build #4)
+            app-store-connect bundle-ids enable-capabilities "$BID" --capability "Push Notifications" \
               || echo "Push-Fähigkeit: schon eingeschaltet oder nicht setzbar"
           fi
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
@@ -69,19 +70,51 @@ workflows:
             --type IOS_APP_STORE \
             --certificate-key @file:/tmp/ios_distribution_key.pem \
             --create
-          # Früh und deutlich abbrechen, wenn das Profil der App kein Push kann
-          PUSH_OK=0
-          for profil in ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision; do
-            security cms -D -i "$profil" > /tmp/profil.plist 2>/dev/null || continue
-            APP_ID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' /tmp/profil.plist 2>/dev/null || true)
-            case "$APP_ID" in
-              *."$BUNDLE_ID")
-                if /usr/libexec/PlistBuddy -c 'Print :Entitlements:aps-environment' /tmp/profil.plist >/dev/null 2>&1; then
-                  PUSH_OK=1
-                  echo "Profil mit Push: $(/usr/libexec/PlistBuddy -c 'Print :Name' /tmp/profil.plist)"
-                fi;;
-            esac
-          done
+          # Profile der App prüfen. Die CLI speichert sie unter Xcode/UserData (Xcode 16+),
+          # nicht unter MobileDevice (Build #4). Profile ohne Push fliegen von der Platte,
+          # damit use-profiles sie nicht nimmt; ihre UUIDs landen in OHNE_PUSH.
+          profile_pruefen() {
+            PUSH_OK=0
+            OHNE_PUSH=""
+            for profil in ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision \
+                          ~/Library/Developer/Xcode/UserData/Provisioning\ Profiles/*.mobileprovision; do
+              [ -f "$profil" ] || continue
+              security cms -D -i "$profil" > /tmp/profil.plist 2>/dev/null || continue
+              APP_ID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' /tmp/profil.plist 2>/dev/null || true)
+              NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' /tmp/profil.plist 2>/dev/null || true)
+              case "$APP_ID" in
+                *."$BUNDLE_ID")
+                  if /usr/libexec/PlistBuddy -c 'Print :Entitlements:aps-environment' /tmp/profil.plist >/dev/null 2>&1; then
+                    PUSH_OK=1
+                    echo "Profil mit Push: $NAME"
+                  else
+                    echo "Profil ohne Push: $NAME"
+                    OHNE_PUSH="$OHNE_PUSH $(/usr/libexec/PlistBuddy -c 'Print :UUID' /tmp/profil.plist)"
+                    rm -f "$profil"
+                  fi;;
+              esac
+            done
+          }
+          profile_pruefen
+          if [ "$PUSH_OK" != "1" ] && [ -n "$OHNE_PUSH" ]; then
+            # Apple hat das alte Profil nach dem Einschalten nicht ungültig gemacht, und
+            # fetch-signing-files nimmt jedes aktive Profil mit passendem Zertifikat.
+            # Altes Profil löschen, dann legt --create eines mit dem heutigen Push an.
+            for uuid in $OHNE_PUSH; do
+              PID=$(app-store-connect profiles list --type IOS_APP_STORE --state ACTIVE --json \
+                    | python3 -c 'import json,sys; u=sys.argv[1]; print(next((p["id"] for p in json.load(sys.stdin) if p["attributes"]["uuid"]==u), ""))' "$uuid")
+              if [ -n "$PID" ]; then
+                echo "Lösche Profil ohne Push: $PID"
+                app-store-connect profiles delete "$PID"
+              fi
+            done
+            app-store-connect fetch-signing-files "$BUNDLE_ID" \
+              --platform IOS \
+              --type IOS_APP_STORE \
+              --certificate-key @file:/tmp/ios_distribution_key.pem \
+              --create
+            profile_pruefen
+          fi
           if [ "$PUSH_OK" != "1" ]; then
             echo "FEHLER: Kein App-Store-Profil für $BUNDLE_ID mit Push (aps-environment) — App-ID in Apples Portal prüfen."
             exit 1
