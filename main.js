@@ -81,6 +81,12 @@ function createWindow() {
     }
   });
 
+  // The window (taskbar, Alt+Tab) is always «SPACE Media Engine» — without
+  // this Electron takes the page title («SPACE Bot», «Chat · SPACE Bot»).
+  mainWindow.on('page-title-updated', (event) => {
+    event.preventDefault();
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -198,7 +204,7 @@ if (app && app.commandLine) {
   app.commandLine.appendSwitch('disable-features', 'PaintHolding');
 }
 
-// Windows: set app user model ID for notifications to show "SPACE Media App"
+// Windows: set app user model ID for notifications to show "SPACE Media Engine"
 if (process.platform === 'win32') {
   app.setAppUserModelId('ch.space-media.app');
 }

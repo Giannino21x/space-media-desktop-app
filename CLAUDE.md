@@ -92,7 +92,8 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
 
 ## Current State
 
-- **Desktop:** letztes veröffentlichtes GitHub Release ist `v1.0.4` (13.10.2026, neues App-Icon wie auf dem Handy: SPACE Bot
+- **Desktop:** letztes veröffentlichtes GitHub Release ist `v1.0.5` (13.10.2026: Fenster, Verknüpfung und Installer heissen
+  «SPACE Media Engine», der Fenstertitel folgt nicht mehr der Webseite). Davor `v1.0.4` (13.10.2026, neues App-Icon wie auf dem Handy: SPACE Bot
   im blauen Ring, aus `mobile/assets/icon-foreground.png`; `build.publish` steht jetzt in `package.json`, sonst fehlt
   `app-update.yml` im Build und die App findet keine Updates mehr). Davor `v1.0.3` (17.09.2026, Update-Banner-Neustart via
   `contextBridge` gefixt). Lokal gebaut, Release per `gh release create --target <sha>` → das neue Tag hat die
