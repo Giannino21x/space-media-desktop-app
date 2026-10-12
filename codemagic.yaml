@@ -42,8 +42,50 @@ workflows:
           # a fresh distribution cert). Both are passed in as base64 env vars.
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           echo "$IOS_DISTRIBUTION_CERT_BASE64" | base64 --decode > /tmp/ios_distribution.p12
-          echo "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode \
-            > ~/Library/MobileDevice/Provisioning\ Profiles/space_media_app_store.mobileprovision
+          # Schlüssel des vorhandenen Verteilungs-Zertifikats für die API (kein neues Zertifikat).
+          # Nur der reine RSA-Schlüssel (openssl rsa): mit den «Bag Attributes» aus
+          # pkcs12 lehnte die CLI ihn ab (Build #24, 1.0.5), und nichts brach ab.
+          openssl pkcs12 -in /tmp/ios_distribution.p12 -nocerts -nodes \
+            -passin pass:"$IOS_DISTRIBUTION_CERT_PASSWORD" 2>/dev/null > /tmp/ios_distribution_p12_key.pem \
+            || openssl pkcs12 -legacy -in /tmp/ios_distribution.p12 -nocerts -nodes \
+                 -passin pass:"$IOS_DISTRIBUTION_CERT_PASSWORD" > /tmp/ios_distribution_p12_key.pem
+          openssl rsa -in /tmp/ios_distribution_p12_key.pem -out /tmp/ios_distribution_key.pem
+          rm -f /tmp/ios_distribution_p12_key.pem
+
+          # App (ab 1.0.6 Build 5, nativer Push): Push auf der App-ID einschalten und das
+          # App-Store-Profil über den ASC-API-Key holen — Apple macht alte Profile beim
+          # Einschalten ungültig, --create legt dann ein neues MIT aps-environment an.
+          # Das früher von Hand hochgeladene Profil (IOS_PROVISIONING_PROFILE_BASE64) hat
+          # kein Push und wird nicht mehr installiert.
+          BID=$(app-store-connect bundle-ids list --bundle-id-identifier "$BUNDLE_ID" \
+                  --strict-match-identifier --platform IOS --json \
+                | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[0]["id"] if d else "")')
+          if [ -n "$BID" ]; then
+            app-store-connect bundle-ids enable-capabilities "$BID" --capability PUSH_NOTIFICATIONS \
+              || echo "Push-Fähigkeit: schon eingeschaltet oder nicht setzbar"
+          fi
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --platform IOS \
+            --type IOS_APP_STORE \
+            --certificate-key @file:/tmp/ios_distribution_key.pem \
+            --create
+          # Früh und deutlich abbrechen, wenn das Profil der App kein Push kann
+          PUSH_OK=0
+          for profil in ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision; do
+            security cms -D -i "$profil" > /tmp/profil.plist 2>/dev/null || continue
+            APP_ID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' /tmp/profil.plist 2>/dev/null || true)
+            case "$APP_ID" in
+              *."$BUNDLE_ID")
+                if /usr/libexec/PlistBuddy -c 'Print :Entitlements:aps-environment' /tmp/profil.plist >/dev/null 2>&1; then
+                  PUSH_OK=1
+                  echo "Profil mit Push: $(/usr/libexec/PlistBuddy -c 'Print :Name' /tmp/profil.plist)"
+                fi;;
+            esac
+          done
+          if [ "$PUSH_OK" != "1" ]; then
+            echo "FEHLER: Kein App-Store-Profil für $BUNDLE_ID mit Push (aps-environment) — App-ID in Apples Portal prüfen."
+            exit 1
+          fi
           # Live Activity (Dynamic Island) ist eine eigene Widget-Erweiterung mit
           # eigener App-ID ch.spacemedia.app.LiveActivity und eigenem Profil.
           # Vorgegebenes Profil (base64) hat Vorrang; sonst legt der ASC-API-Key
@@ -53,21 +95,13 @@ workflows:
             echo "$IOS_LIVEACTIVITY_PROFILE_BASE64" | base64 --decode \
               > ~/Library/MobileDevice/Provisioning\ Profiles/space_media_live_activity_app_store.mobileprovision
           else
-            # Nur der reine RSA-Schlüssel (openssl rsa): mit den «Bag Attributes» aus
-            # pkcs12 lehnte die CLI ihn ab (Build #24, 1.0.5), und nichts brach ab.
-            openssl pkcs12 -in /tmp/ios_distribution.p12 -nocerts -nodes \
-              -passin pass:"$IOS_DISTRIBUTION_CERT_PASSWORD" 2>/dev/null > /tmp/ios_distribution_p12_key.pem \
-              || openssl pkcs12 -legacy -in /tmp/ios_distribution.p12 -nocerts -nodes \
-                   -passin pass:"$IOS_DISTRIBUTION_CERT_PASSWORD" > /tmp/ios_distribution_p12_key.pem
-            openssl rsa -in /tmp/ios_distribution_p12_key.pem -out /tmp/ios_distribution_key.pem
-            rm -f /tmp/ios_distribution_p12_key.pem
             app-store-connect fetch-signing-files "$BUNDLE_ID.LiveActivity" \
               --platform IOS \
               --type IOS_APP_STORE \
               --certificate-key @file:/tmp/ios_distribution_key.pem \
               --create
-            rm -f /tmp/ios_distribution_key.pem
           fi
+          rm -f /tmp/ios_distribution_key.pem /tmp/profil.plist
           keychain initialize
           keychain add-certificates --certificate /tmp/ios_distribution.p12 \
             --certificate-password "$IOS_DISTRIBUTION_CERT_PASSWORD"

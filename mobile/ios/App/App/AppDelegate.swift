@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import UserNotifications
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -19,8 +20,24 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        // Nativer Push (NativePush.swift): Delegate vor dem Ende des Starts setzen (Apple);
+        // Kaltstart über einen Tipp auf eine Mitteilung: den Pfad für den Controller merken
+        UNUserNotificationCenter.current().delegate = NativePush.shared
+        if let info = launchOptions?[.remoteNotification] as? [AnyHashable: Any],
+           let pfad = info["pfad"] as? String, AppDelegate.istEigenerPfad(pfad) {
+            AppDelegate.wartenderPfad = pfad
+        }
         return true
+    }
+
+    /// Gerätetoken von Apple (nach der Erlaubnis) — NativePush gibt es der Web-App
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
+        NotificationCenter.default.post(name: NativePush.tokenNotification, object: nil, userInfo: ["token": hex])
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        print("[push] Anmeldung bei APNs fehlgeschlagen: \(error.localizedDescription)")
     }
 
     func applicationWillResignActive(_ application: UIApplication) {

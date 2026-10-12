@@ -213,6 +213,7 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         webView.configuration.userContentController.add(self, name: "meldung")
         liveActivity.attach(to: webView)
         aufnahme.attach(to: webView, insel: liveActivity)
+        NativePush.shared.attach(to: webView)
 
         setupChrome()
         applyTheme()

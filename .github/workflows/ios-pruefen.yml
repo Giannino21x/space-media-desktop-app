@@ -43,7 +43,7 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO build > build.log 2>&1 || STATUS=$?
           # Fehler, Warnungen der eigenen Swift-Dateien (z. B. «nearly matches optional requirement»)
-          grep -E "error:|(NativeAufnahme|NativeAktionsleiste|NativeMeldung|NativeKopfleiste|NativeChromeViewController|LiveActivityBridge|AppDelegate|AufnahmeAttributes|SpaceLiveActivity)[.]swift:[0-9]+:[0-9]+: warning:|BUILD (SUCCEEDED|FAILED)" build.log | sort -u | head -150 || true
+          grep -E "error:|(NativeAufnahme|NativeAktionsleiste|NativeMeldung|NativeKopfleiste|NativePush|NativeChromeViewController|LiveActivityBridge|AppDelegate|AufnahmeAttributes|SpaceLiveActivity)[.]swift:[0-9]+:[0-9]+: warning:|BUILD (SUCCEEDED|FAILED)" build.log | sort -u | head -150 || true
           exit $STATUS
 
       - name: Protokoll
