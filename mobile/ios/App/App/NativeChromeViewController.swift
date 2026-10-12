@@ -164,6 +164,8 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
     private var tabModusKreis = false
     /// Tipp auf den Aktions-Tab nur einmal auslösen (manche iOS melden beide Delegate-Wege)
     private var letzteAktion = Date.distantPast
+    /// Dasselbe für die Auswahl eines Tabs
+    private var letzteWahl: (id: String, zeit: Date)?
     private var kreisAktivBild = ""
 
     // MARK: - Lifecycle
@@ -577,8 +579,17 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
                 kreis.image = kreisBild(tab)
                 return kreis
             }
-            let bild = tab.action ? aktionsTabBild(tab) : tabBild(tab, aktiv: tab.id == activeTabId)
-            return UITab(title: tab.label, image: bild, identifier: tab.id, viewControllerProvider: platzhalter)
+            if tab.action {
+                return UITab(title: tab.label, image: aktionsTabBild(tab), identifier: tab.id, viewControllerProvider: platzhalter)
+            }
+            let uiTab = UITab(title: tab.label, image: tabBild(tab, aktiv: false), identifier: tab.id, viewControllerProvider: platzhalter)
+            if #available(iOS 26.1, *) {
+                // Gefüllt, sobald ausgewählt — ohne Umweg über die Web-App
+                uiTab.selectedImage = tabBild(tab, aktiv: true)
+            } else if tab.id == activeTabId {
+                uiTab.image = tabBild(tab, aktiv: true)
+            }
+            return uiTab
         }
     }
 
@@ -711,12 +722,14 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
     private func syncSystemTabSelection() {
         guard let controller = systemTabController else { return }
         if #available(iOS 26.0, *), tabModusKreis {
-            // Gefülltes Symbol nur beim aktiven Tab (wie die Web-Leiste)
-            if kreisAktivBild != activeTabId {
-                kreisAktivBild = activeTabId
-                for tab in controller.tabs where !(tab is UISearchTab) {
-                    if let eintrag = systemTabs.first(where: { $0.id == tab.identifier }), !eintrag.action {
-                        tab.image = tabBild(eintrag, aktiv: eintrag.id == activeTabId)
+            // Gefülltes Symbol nur beim aktiven Tab (wie die Web-Leiste); ab iOS 26.1 macht das selectedImage
+            if #unavailable(iOS 26.1) {
+                if kreisAktivBild != activeTabId {
+                    kreisAktivBild = activeTabId
+                    for tab in controller.tabs where !(tab is UISearchTab) {
+                        if let eintrag = systemTabs.first(where: { $0.id == tab.identifier }), !eintrag.action {
+                            tab.image = tabBild(eintrag, aktiv: eintrag.id == activeTabId)
+                        }
                     }
                 }
             }
@@ -766,28 +779,33 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         guard !syncingSystemSelection, !tabModusKreis else { return }
         let index = viewController.tabBarItem.tag
         guard systemTabs.indices.contains(index) else { return }
-        UISelectionFeedbackGenerator().selectionChanged()
-        navigate(to: systemTabs[index].id)
+        tabGewaehlt(systemTabs[index])
     }
 
-    /// Kreis-Modus (iOS 26): der Kreis neben der Leiste löst aus, statt ausgewählt zu werden
+    /// Ab iOS 18 meldet UIKit Tipps auch über UITab — im Kreis-Modus nur so, und
+    /// für SwiftUI-Leisten meldet iOS 27 die alten Wege gar nicht mehr. Darum hier
+    /// beide Modi; doppelt gemeldete Tipps zählen einmal (aktionAusloesen, tabGewaehlt).
     @available(iOS 18.0, *)
     func tabBarController(_ tabBarController: UITabBarController, shouldSelectTab tab: UITab) -> Bool {
-        guard tabModusKreis else { return true }
-        let eintrag = tab is UISearchTab
-            ? systemTabs.last(where: { $0.action && $0.trailing })
-            : systemTabs.first(where: { $0.id == tab.identifier })
-        guard let eintrag, eintrag.action else { return true }
+        guard let eintrag = eintrag(fuer: tab), eintrag.action else { return true }
         aktionAusloesen(eintrag)
         return false
     }
 
     @available(iOS 18.0, *)
     func tabBarController(_ tabBarController: UITabBarController, didSelectTab selectedTab: UITab, previousTab: UITab?) {
-        guard tabModusKreis, !syncingSystemSelection, !(selectedTab is UISearchTab),
-              let eintrag = systemTabs.first(where: { $0.id == selectedTab.identifier }), !eintrag.action else { return }
-        UISelectionFeedbackGenerator().selectionChanged()
-        navigate(to: eintrag.id)
+        guard !syncingSystemSelection, let eintrag = eintrag(fuer: selectedTab), !eintrag.action else { return }
+        tabGewaehlt(eintrag)
+    }
+
+    /// Unser Tab hinter einem UITab: Kreis über den Such-Tab, Kreis-Modus über die
+    /// Kennung, klassisch (viewControllers) über den Platzhalter und seinen Tag.
+    @available(iOS 18.0, *)
+    private func eintrag(fuer tab: UITab) -> SystemTab? {
+        if tab is UISearchTab { return systemTabs.last { $0.action && $0.trailing } }
+        if tabModusKreis { return systemTabs.first { $0.id == tab.identifier } }
+        guard let index = tab.viewController?.tabBarItem.tag, systemTabs.indices.contains(index) else { return nil }
+        return systemTabs[index]
     }
 
     private func aktionAusloesen(_ tab: SystemTab) {
@@ -795,6 +813,13 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         letzteAktion = Date()
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         runJS("window.__nativeNavigate && window.__nativeNavigate('\(tab.id)')")
+    }
+
+    private func tabGewaehlt(_ tab: SystemTab) {
+        if let letzte = letzteWahl, letzte.id == tab.id, Date().timeIntervalSince(letzte.zeit) < 0.4 { return }
+        letzteWahl = (tab.id, Date())
+        UISelectionFeedbackGenerator().selectionChanged()
+        navigate(to: tab.id)
     }
 
     // MARK: - Aktionen (Nativ -> Web)
