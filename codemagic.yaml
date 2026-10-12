@@ -16,7 +16,7 @@ workflows:
       tag_patterns:
         - pattern: 'ios-*'
           include: true
-    environment:
+    environment: &ios_umgebung
       groups:
         - app_store_credentials   # APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_PRIVATE_KEY
       vars:
@@ -25,7 +25,7 @@ workflows:
         XCODE_SCHEME: App
       node: 22
       xcode: latest
-    scripts:
+    scripts: &ios_skripte
       - name: Install npm dependencies (mobile)
         script: |
           cd mobile
@@ -97,7 +97,7 @@ workflows:
           xcode-project build-ipa \
             --project "$XCODE_PROJECT" \
             --scheme "$XCODE_SCHEME"
-    artifacts:
+    artifacts: &ios_artefakte
       - build/ios/ipa/*.ipa
       - build/ios/xcarchive/*.xcarchive/Info.plist
       - /tmp/xcodebuild_logs/*.log
@@ -112,6 +112,33 @@ workflows:
         submit_to_app_store: true
         release_type: AFTER_APPROVAL
         cancel_previous_submissions: true
+
+  # ---- iOS: nur TestFlight (auf dem Gerät testen, bevor Apple prüft) ----
+  # Trigger: Tag `testflight-*`. Derselbe Build wie ios-workflow (Umgebung, Skripte und
+  # Artefakte per YAML-Anker), lädt aber nur zu TestFlight (Internal Testers) hoch.
+  # Eingereicht wird danach in App Store Connect oder mit einem Tag `ios-*`.
+  ios-testflight:
+    name: iOS (nur TestFlight)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'testflight-*'
+          include: true
+    environment: *ios_umgebung
+    scripts: *ios_skripte
+    artifacts: *ios_artefakte
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
+        beta_groups:
+          - Internal Testers
+        submit_to_app_store: false
 
   # ---- Android: Debug APK (push-triggered) ----
   # Use this for quick installable APKs without Play Store.

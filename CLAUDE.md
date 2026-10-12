@@ -63,6 +63,8 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
 - `ios-workflow` — kein Trigger im YAML, nur manuell über die Codemagic-UI starten. Signiert mit
   vorab erzeugtem Distribution-Zertifikat + Provisioning-Profil (beide als base64-Env-Vars),
   Build-Nummer wird aus App Store Connect hochgezählt, Upload nach TestFlight (`Internal Testers`).
+- `ios-testflight` — Tag `testflight-*`: derselbe Build (YAML-Anker auf `ios-workflow`), lädt aber nur zu
+  TestFlight (Internal Testers) hoch, ohne Review. Eingereicht wird danach in App Store Connect oder per Tag `ios-*`.
 - `android-workflow` — automatisch bei Push auf `master`, liefert eine installierbare Debug-APK.
 - `android-release-workflow` — Trigger `git tag v*`, baut ein signiertes AAB.
   Play-Auto-Publish ist im YAML deaktiviert (kein Service-Account) → AAB manuell in der Play Console hochladen.
@@ -134,8 +136,10 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
     (`shouldSelectTab`), gezeichnet in den `farben` der Web-App (Steno-Gelb bzw. Ring aus den Bot-Farben);
     Grössen über `glass.aktionKreis` / `glass.aktionSymbol` nachjustierbar. Vor iOS 26: Tab in der Leiste.
   - **Prüfen ohne Mac:** `.github/workflows/ios-pruefen.yml` kompiliert bei Push auf `huelle-*` für den
-    Simulator, ohne Signatur und ohne App Store. Auf dem Gerät (TestFlight) prüfen: Ton bei gesperrtem iPhone,
-    Kreis tippbar, Farben, Anruf während der Aufnahme.
+    Simulator, ohne Signatur und ohne App Store (12.10.2026: grün mit Xcode 26.3, keine Warnungen in den eigenen
+    Dateien; `UITab.selectedImage` kennt dieses SDK noch nicht). Danach Tag `testflight-1.0.6` → nur TestFlight.
+    Auf dem Gerät prüfen: Ton bei gesperrtem iPhone, «Fertig» in der Insel, Kreis tippbar und Farben,
+    Anruf während der Aufnahme, Neustart der App mitten in einer Aufnahme.
 - **Android:** Store hat `versionCode 4` / 1.0.3 (gebaut vor dem `resizeOnFullScreen`-Fix — Tastatur
   überdeckt dort den WebView). `master` steht auf `versionCode 5` / `versionName 1.0.4`; AAB via
   Codemagic gebaut (`downloads/app-release-v1.0.4.aab`), Play-Upload läuft manuell.
