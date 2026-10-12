@@ -1,0 +1,53 @@
+# Kompiliert die iOS-Hülle auf einem Mac (Simulator, ohne Signatur) — kein
+# TestFlight, kein App Store. Läuft bei Push auf einen Branch huelle-* oder
+# von Hand. Das Einreichen bleibt beim Tag ios-* (Codemagic, codemagic.yaml).
+name: iOS-Hülle prüfen
+
+on:
+  push:
+    branches: ['huelle-*']
+  workflow_dispatch:
+
+jobs:
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Xcode 26 wählen
+        shell: bash
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$XCODE" ]; then ls -d /Applications/Xcode*.app; echo "Kein Xcode 26 auf dem Runner"; exit 1; fi
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      - name: Capacitor
+        working-directory: mobile
+        shell: bash
+        run: |
+          npm ci --no-audit --no-fund
+          npx cap sync ios
+
+      - name: Bauen (Simulator, ohne Signatur)
+        shell: bash
+        run: |
+          STATUS=0
+          xcodebuild -project mobile/ios/App/App.xcodeproj -scheme App \
+            -configuration Debug -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build > build.log 2>&1 || STATUS=$?
+          grep -E "error:|BUILD (SUCCEEDED|FAILED)" build.log | head -150 || true
+          exit $STATUS
+
+      - name: Protokoll bei Fehler
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: build.log

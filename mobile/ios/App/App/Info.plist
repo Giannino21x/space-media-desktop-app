@@ -24,7 +24,7 @@
 		</dict>
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>SPACE Media Engine nutzt das Mikrofon für Sprachnachrichten und Spracheingabe an den SPACE Bot.</string>
+	<string>Das Mikrofon nimmt Diktate und Sitzungen für Steno auf, auch bei gesperrtem iPhone, und nimmt deine Aufträge an das Bot-Team entgegen.</string>
 	<key>CFBundleDisplayName</key>
         <string>SPACE Media Engine</string>
 	<key>CFBundleExecutable</key>

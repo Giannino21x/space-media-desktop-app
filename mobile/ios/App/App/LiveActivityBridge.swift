@@ -48,9 +48,14 @@ final class LiveActivityBridge: NSObject, WKScriptMessageHandler {
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard #available(iOS 16.2, *),
-              let body = message.body as? [String: Any],
-              let action = body["action"] as? String else { return }
+        guard let body = message.body as? [String: Any] else { return }
+        nativeMeldung(body)
+    }
+
+    /// Dieselben Meldungen vom Rekorder der Hülle (NativeAufnahme, ab 1.0.6): er führt
+    /// die Insel während seiner Aufnahme selbst, auch wenn die WebView schläft.
+    func nativeMeldung(_ body: [String: Any]) {
+        guard #available(iOS 16.2, *), let action = body["action"] as? String else { return }
         Task { @MainActor in
             switch action {
             case "aufnahme": await self.aufnahme(body)

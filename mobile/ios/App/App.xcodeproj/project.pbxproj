@@ -10,6 +10,7 @@
 		A71CE0000000000000000001 /* AufnahmeAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A71CE0000000000000000006 /* AufnahmeAttributes.swift */; };
 		A71CE0000000000000000002 /* AufnahmeAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A71CE0000000000000000006 /* AufnahmeAttributes.swift */; };
 		A71CE0000000000000000003 /* LiveActivityBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A71CE0000000000000000007 /* LiveActivityBridge.swift */; };
+		A71CE0000000000000000021 /* NativeAufnahme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A71CE0000000000000000022 /* NativeAufnahme.swift */; };
 		A71CE0000000000000000004 /* SpaceLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A71CE0000000000000000008 /* SpaceLiveActivity.swift */; };
 		A71CE0000000000000000005 /* SpaceLiveActivity.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A71CE000000000000000000A /* SpaceLiveActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
@@ -50,6 +51,7 @@
 /* Begin PBXFileReference section */
 		A71CE0000000000000000006 /* AufnahmeAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AufnahmeAttributes.swift; sourceTree = "<group>"; };
 		A71CE0000000000000000007 /* LiveActivityBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityBridge.swift; sourceTree = "<group>"; };
+		A71CE0000000000000000022 /* NativeAufnahme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeAufnahme.swift; sourceTree = "<group>"; };
 		A71CE0000000000000000008 /* SpaceLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpaceLiveActivity.swift; sourceTree = "<group>"; };
 		A71CE0000000000000000009 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A71CE000000000000000000A /* SpaceLiveActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SpaceLiveActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -112,6 +114,7 @@
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				5A1CE0021AB2C3D4E5F60002 /* NativeChromeViewController.swift */,
 				A71CE0000000000000000007 /* LiveActivityBridge.swift */,
+				A71CE0000000000000000022 /* NativeAufnahme.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -253,6 +256,7 @@
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				5A1CE0011AB2C3D4E5F60001 /* NativeChromeViewController.swift in Sources */,
 				A71CE0000000000000000003 /* LiveActivityBridge.swift in Sources */,
+				A71CE0000000000000000021 /* NativeAufnahme.swift in Sources */,
 				A71CE0000000000000000001 /* AufnahmeAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

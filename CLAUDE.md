@@ -119,6 +119,23 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
   `ch.spacemedia.app.LiveActivity` + App-Store-Profil selbst an (`app-store-connect fetch-signing-files --create`, ASC-Key
   aus `app_store_credentials`, Schlüssel des vorhandenen Verteilungs-Zertifikats); ein vorgegebenes Profil in
   `IOS_LIVEACTIVITY_PROFILE_BASE64` hat Vorrang.
+- **iOS 1.0.6 (Branch `huelle-1.0.6`, noch nicht eingereicht) — Mobile 2.0, Bauplan Etappe 3:**
+  - Insel «Steno schreibt» / «Protokoll bereit» (`html[data-native-insel="2"]`), «Fertig» als App Intent
+    (`AufnahmeFertigIntent`), Links `spacemedia://oeffne?pfad=…` und `spacemedia://konto/…`.
+  - **Aufnahme bei gesperrtem iPhone:** `App/NativeAufnahme.swift` (Kanal `nativeAufnahme`, Flag
+    `html[data-native-aufnahme="1"]`, Gegenstück `src/lib/mobile/native-recorder.ts` + `useRecording.ts`).
+    `AVAudioRecorder` schreibt AAC in ADTS-Rahmen (`.aac`, 48 kbit/s Mono); alle 30 s gehen die neuen Bytes als Teil
+    an `audio/upload`, am Ende `audio/finalize` — beides mit einem Aufnahme-Ticket der Web-App
+    (`Authorization: Bearer`, `POST /api/meetings/[id]/audio/ticket`), nicht mit der Sitzung der WebView. Stand und
+    Teile liegen in Application Support/Aufnahmen/<sitzung>; nach einem Absturz gehen sie beim nächsten Start hoch.
+    Die Hülle führt die Insel während ihrer Aufnahme selbst. Notschalter im Web (`HUELLE_NIMMT_AUF`).
+  - **Diktier-Kreis:** `html[data-native-kreis="1"]` — ein Aktions-Tab mit `placement: "trailing"` wird unter
+    iOS 26 ein `UISearchTab` (Apples abgesetzter Kreis rechts neben der Leiste), nie ausgewählt
+    (`shouldSelectTab`), gezeichnet in den `farben` der Web-App (Steno-Gelb bzw. Ring aus den Bot-Farben);
+    Grössen über `glass.aktionKreis` / `glass.aktionSymbol` nachjustierbar. Vor iOS 26: Tab in der Leiste.
+  - **Prüfen ohne Mac:** `.github/workflows/ios-pruefen.yml` kompiliert bei Push auf `huelle-*` für den
+    Simulator, ohne Signatur und ohne App Store. Auf dem Gerät (TestFlight) prüfen: Ton bei gesperrtem iPhone,
+    Kreis tippbar, Farben, Anruf während der Aufnahme.
 - **Android:** Store hat `versionCode 4` / 1.0.3 (gebaut vor dem `resizeOnFullScreen`-Fix — Tastatur
   überdeckt dort den WebView). `master` steht auf `versionCode 5` / `versionName 1.0.4`; AAB via
   Codemagic gebaut (`downloads/app-release-v1.0.4.aab`), Play-Upload läuft manuell.
