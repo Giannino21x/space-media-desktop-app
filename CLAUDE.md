@@ -135,9 +135,14 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
     iOS 26 ein `UISearchTab` (Apples abgesetzter Kreis rechts neben der Leiste), nie ausgewählt
     (`shouldSelectTab`), gezeichnet in den `farben` der Web-App (Steno-Gelb bzw. Ring aus den Bot-Farben);
     Grössen über `glass.aktionKreis` / `glass.aktionSymbol` nachjustierbar. Vor iOS 26: Tab in der Leiste.
+  - **Aktionsleiste in Liquid Glass:** `html[data-native-aktionen="1"]`, Feld `aktionen` ({text?, knoepfe:[{id, label,
+    stil: haupt|neben, aus?}], akzent?, tinte?} | null) → `App/NativeAktionsleiste.swift` (iOS 26: `.glass()` /
+    `.prominentGlass()` über weichem Rand; davor Material). Tipp → `window.__nativeAktion(id)`, Höhe →
+    `--native-aktionen-h`. Gegenstück `src/lib/mobile/native-aktionen.ts` + `useNativeAktionsleiste` (Dokument).
+    Apples Tab-Leiste geht ab iOS 18 mit `setTabBarHidden(_:animated:)` weg (Chat, Dokument).
   - **Prüfen ohne Mac:** `.github/workflows/ios-pruefen.yml` kompiliert bei Push auf `huelle-*` für den
     Simulator, ohne Signatur und ohne App Store (12.10.2026: grün mit Xcode 26.3, keine Warnungen in den eigenen
-    Dateien; `UITab.selectedImage` kennt dieses SDK noch nicht). Danach Tag `testflight-1.0.6` → nur TestFlight.
+    Dateien; `UITab.selectedImage` kennt dieses SDK noch nicht). Danach Tags `testflight-1.0.6`, `testflight-1.0.6-2` (mit Aktionsleiste) → nur TestFlight.
     Auf dem Gerät prüfen: Ton bei gesperrtem iPhone, «Fertig» in der Insel, Kreis tippbar und Farben,
     Anruf während der Aufnahme, Neustart der App mitten in einer Aufnahme.
 - **Android:** Store hat `versionCode 4` / 1.0.3 (gebaut vor dem `resizeOnFullScreen`-Fix — Tastatur
