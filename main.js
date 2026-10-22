@@ -219,6 +219,9 @@ ipcMain.handle('connector:koppeln', (event, input) => {
   }
   return connector.koppeln(code, origin);
 });
+// Claude Code's own sign-in (opens Anthropic's page in the browser); resolves when confirmed or cancelled.
+ipcMain.handle('connector:anmelden', (event) => { connectorSenderOrigin(event); return connector.anmelden(); });
+ipcMain.handle('connector:anmelden-abbrechen', (event) => { connectorSenderOrigin(event); return connector.anmeldenAbbrechen(); });
 ipcMain.handle('connector:starten', (event) => { connectorSenderOrigin(event); return connector.starten(); });
 ipcMain.handle('connector:stoppen', (event) => { connectorSenderOrigin(event); return connector.stoppen(); });
 ipcMain.handle('connector:entkoppeln', (event) => { connectorSenderOrigin(event); return connector.entkoppeln(); });
