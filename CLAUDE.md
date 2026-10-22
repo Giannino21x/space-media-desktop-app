@@ -100,7 +100,9 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
 
 ## Current State
 
-- **Desktop:** letztes veröffentlichtes GitHub Release ist `v1.0.6` (22.10.2026: «Eigenes Claude-Abo» ohne Terminal —
+- **Desktop:** letztes veröffentlichtes GitHub Release ist `v1.0.7` (22.10.2026: «Claude-Abo verbinden» startet bei Bedarf
+  die Anmeldung von Claude Code selbst — `claude auth login` öffnet Anthropics Seite im Browser, «Autorisieren», fertig;
+  Brücke v2 mit `anmelden()`/`anmeldenAbbrechen()`). Davor `v1.0.6` (22.10.2026: «Eigenes Claude-Abo» ohne Terminal —
   `connector.js` koppelt diesen Rechner aus Einstellungen → Datenschutz und lässt den SPACE Connector laufen, solange die
   App offen ist). Davor `v1.0.5` (13.10.2026: Fenster, Verknüpfung und Installer heissen
   «SPACE Media Engine», der Fenstertitel folgt nicht mehr der Webseite). Davor `v1.0.4` (13.10.2026, neues App-Icon wie auf dem Handy: SPACE Bot
@@ -162,7 +164,8 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
   überdeckt dort den WebView). `master` steht auf `versionCode 5` / `versionName 1.0.4`; AAB via
   Codemagic gebaut (`downloads/app-release-v1.0.4.aab`), Play-Upload läuft manuell.
 - **Eigenes Claude-Abo ohne Terminal (22.10.2026):** `connector.js` + Brücke `window.spaceConnector`, released mit
-  Desktop `v1.0.6`. Gegenstück im Web: Karte `ClaudeAboKarte.tsx` und der Connector mit `windowsHide` (ohne das öffnet
+  Desktop `v1.0.6`, Anmeldung bei Claude aus der App seit `v1.0.7` (nur Claude Codes eigener Login, die Ausgabe wird
+  nicht gelesen; Ergebnis kommt aus `claude auth status`). Gegenstück im Web: Karte `ClaudeAboKarte.tsx` und der Connector mit `windowsHide` (ohne das öffnet
   jeder Lauf unter Windows ein Konsolenfenster) — beide müssen live sein. Mac: noch kein DMG mit diesem Stand.
 - Offene Punkte und die manuellen Store-Schritte sind in `RESUME.md` dokumentiert, die fertigen
   Store-Texte in `STORE_LISTING.md`, das Play-Setup in `PLAY_STORE_SETUP.md`.
