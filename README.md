@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Giannino21x/space-media-desktop-app/main/icon.png" width="128" height="128" alt="SPACE Media App">
+  <img src="https://raw.githubusercontent.com/Giannino21x/space-media-desktop-app/main/icon.png" width="128" height="128" alt="SPACE Media Engine">
 </p>
 
-<h1 align="center">SPACE Media Desktop App</h1>
+<h1 align="center">SPACE Media Engine — Desktop</h1>
 
 <p align="center">
-  <strong>Die offizielle SPACE Media App als native Desktop-Anwendung.</strong><br>
-  Alle Features der Web-App — plus Desktop-Notifications, System Tray und Auto-Updates.
+  <strong>Die SPACE Media App als native Desktop-Anwendung.</strong><br>
+  Alle Features der Web-App — plus Desktop-Benachrichtigungen, Auto-Updates und das eigene Claude-Abo ohne Terminal.
 </p>
 
 <p align="center">
@@ -20,49 +20,41 @@
 
 | Plattform | Download | Architektur |
 |-----------|----------|-------------|
-| **Windows** | [**SPACE Media App Setup.exe**](https://github.com/Giannino21x/space-media-desktop-app/releases/latest) | x64 |
-| **macOS (Apple Silicon)** | [**SPACE Media App.dmg**](https://github.com/Giannino21x/space-media-desktop-app/releases/latest) | Apple M1/M2/M3/M4 |
-| **macOS (Intel)** | [**SPACE Media App.dmg**](https://github.com/Giannino21x/space-media-desktop-app/releases/latest) | Intel |
+| **Windows** | [**SPACE-Media-Engine-Setup-x.x.x.exe**](https://github.com/Giannino21x/space-media-desktop-app/releases/latest) | x64 |
+| **macOS** | Ältere Version 1.0.0 unter [Release v1.0.1](https://github.com/Giannino21x/space-media-desktop-app/releases/tag/v1.0.1) (ohne Auto-Update) — die aktuelle Version folgt | Apple Silicon / Intel |
 
 > Alle Downloads unter [**Releases**](https://github.com/Giannino21x/space-media-desktop-app/releases).
+> Ohne Installation geht alles auch im Browser: [app.space-media.ch](https://app.space-media.ch)
 
 ---
 
 ## Features
 
-- **Vollständige Web-App** — Identisch mit [space-media-app.vercel.app](https://space-media-app.vercel.app)
-- **Auto-Updates** — Neue Versionen werden automatisch heruntergeladen und installiert
-- **Desktop-Notifications** — Native Benachrichtigungen für neue Nachrichten
-- **System Tray** — App läuft im Hintergrund weiter
-- **Auto-Start** — Optional beim Systemstart öffnen
-- **GPU-beschleunigt** — Schnelles, flüssiges Rendering
+- **Vollständige Web-App** — identisch mit [app.space-media.ch](https://app.space-media.ch); Änderungen an der Web-App sind sofort da
+- **Auto-Updates** — die App prüft beim Start und alle 30 Minuten, lädt neue Versionen im Hintergrund und installiert sie beim Neustart
+- **Desktop-Benachrichtigungen** — native Mitteilungen und die Zahl ungelesener Benachrichtigungen in der Taskleiste
+- **Eigenes Claude-Abo** — unter Einstellungen → Datenschutz «Claude-Abo verbinden»: die Anmeldung läuft bei Anthropic im Browser («Autorisieren»), danach läuft der Chat über dein eigenes Claude-Abo, solange die App offen ist. Voraussetzung: [Claude Code](https://claude.com/claude-code) ist installiert. SPACE sieht dein Claude-Zugangstoken nie.
+- **GPU-beschleunigt** — schnelles, flüssiges Rendering
 
 ## Installation
 
 ### Windows
 1. `.exe` herunterladen
-2. Installer starten — App wird automatisch installiert und geöffnet
-3. Fertig! Updates kommen automatisch.
+2. Installer starten — die App wird installiert und geöffnet
+3. Fertig. Updates kommen automatisch.
 
-### macOS
-1. `.dmg` herunterladen (Apple Silicon oder Intel)
-2. App in den Applications-Ordner ziehen
-3. Fertig! Updates kommen automatisch.
+> **Windows SmartScreen:** Beim ersten Start kann «Der Computer wurde durch Windows geschützt» erscheinen. Auf «Weitere Informationen» → «Trotzdem ausführen» klicken. Passiert nur einmal.
 
 ## Auto-Updates
 
-Die App prüft automatisch alle 4 Stunden auf neue Versionen:
-
-1. Update wird im Hintergrund heruntergeladen
-2. Banner erscheint: *"Neue Version bereit — Jetzt neu starten"*
-3. Klick auf "Neu starten" installiert das Update
-
-**Nie wieder manuell herunterladen.**
+1. Ein neues Update wird im Hintergrund heruntergeladen
+2. Unten rechts erscheint: *«Update bereit — klicke zum Neustarten»*
+3. Ein Klick startet die App neu und installiert das Update — oder es wird beim nächsten Schliessen installiert
 
 ## Voraussetzungen
 
 - **Windows:** Windows 10 oder neuer
-- **macOS:** macOS 11 (Big Sur) oder neuer
+- **Eigenes Claude-Abo:** Claude Code auf demselben Rechner und ein Claude-Abo (Pro oder Max)
 
 ## Support
 
