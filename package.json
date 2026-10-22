@@ -10,6 +10,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
+    "test": "node --test connector.test.js",
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
     "build:all": "electron-builder --win --mac"
@@ -25,6 +26,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "connector.js",
       "assets/**/*"
     ],
     "win": {

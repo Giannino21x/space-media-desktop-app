@@ -1,6 +1,8 @@
-const { app, BrowserWindow, shell, Menu, ipcMain, nativeImage, dialog } = require('electron');
+const { app, BrowserWindow, shell, Menu, ipcMain, nativeImage, dialog, net } = require('electron');
 const { autoUpdater } = require('electron-updater');
+const os = require('os');
 const path = require('path');
+const { connectorOrigin, createConnectorHost } = require('./connector');
 
 const APP_URL = 'https://app.space-media.ch';
 // Former production host. Still served by Vercel; keep it navigable so
@@ -193,6 +195,34 @@ ipcMain.on('set-badge-count', (event, count) => {
   }
 });
 
+// «Eigenes Claude-Abo»: the SPACE Connector runs in the background while the app is open (connector.js).
+// Only the app's own pages may drive it; the origin comes from the asking frame, never from the page's arguments.
+let connector = null;
+
+function connectorSenderOrigin(event) {
+  const url = (event.senderFrame && event.senderFrame.url) || event.sender.getURL();
+  const origin = connectorOrigin(url, { allowed: [APP_URL, LEGACY_APP_URL], isDev });
+  if (!origin || !connector) throw new Error('SPACE Connector ist hier nicht verfügbar.');
+  return origin;
+}
+
+ipcMain.handle('connector:status', (event, opts) => {
+  connectorSenderOrigin(event);
+  return connector.status({ frisch: Boolean(opts && opts.frisch) });
+});
+ipcMain.handle('connector:koppeln', (event, input) => {
+  const origin = connectorSenderOrigin(event);
+  const code = input && typeof input.code === 'string' ? input.code.trim() : '';
+  // The page may name its origin; it has to be the one it actually runs on.
+  if (input && input.url && connectorOrigin(input.url, { allowed: [origin], isDev: false }) !== origin) {
+    throw new Error('Adresse passt nicht zur App.');
+  }
+  return connector.koppeln(code, origin);
+});
+ipcMain.handle('connector:starten', (event) => { connectorSenderOrigin(event); return connector.starten(); });
+ipcMain.handle('connector:stoppen', (event) => { connectorSenderOrigin(event); return connector.stoppen(); });
+ipcMain.handle('connector:entkoppeln', (event) => { connectorSenderOrigin(event); return connector.entkoppeln(); });
+
 // GPU flags — before app.ready
 if (app && app.commandLine) {
   app.commandLine.appendSwitch('enable-gpu-rasterization');
@@ -233,6 +263,25 @@ app.on('ready', () => {
   Menu.setApplicationMenu(null);
   createWindow();
 
+  connector = createConnectorHost({
+    userDataDir: app.getPath('userData'),
+    isDev,
+    allowedOrigins: [APP_URL, LEGACY_APP_URL],
+    fetchText: async (url) => {
+      const res = await net.fetch(url, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.text();
+    },
+    execPath: process.execPath,
+    home: os.homedir(),
+    deviceName: `${os.hostname()} (SPACE App)`,
+    onChange: (status) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('connector:changed', status);
+    },
+  });
+  // A few seconds after start, so the connector never competes with the first paint.
+  setTimeout(() => connector.autostart(), 4000);
+
   // Check for updates (not in dev mode)
   if (!isDev) {
     setTimeout(() => autoUpdater.checkForUpdates(), 5000);
@@ -243,6 +292,11 @@ app.on('ready', () => {
 
 app.on('activate', () => {
   if (mainWindow === null) createWindow();
+});
+
+// Stop the connector with the app (also before an update installs — it runs from the app's own exe).
+app.on('will-quit', () => {
+  if (connector) connector.shutdown();
 });
 
 app.on('window-all-closed', () => {

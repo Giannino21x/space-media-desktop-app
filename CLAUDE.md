@@ -19,7 +19,10 @@ main.js            → Electron Main: BrowserWindow (frameless), Auto-Updater, T
                      GPU-Flags, adaptive Windows-Titlebar (capturePage-Sampling event-getrieben: Theme-/Routenwechsel,
                      Fokus, Load + 10-s-Sicherheitstick bei Fokus; wechselt erst nach 2 gleichen Samples)
 preload.js         → Drag-Region (body::after, 40 px), Badge-Observer (rAF-gedrosselt), Titlebar-Resync-IPC,
-                     window.__electronRestart
+                     window.__electronRestart, window.spaceConnector («Eigenes Claude-Abo»)
+connector.js       → SPACE Connector im Hintergrund: Bundle von <App>/connector/space-connector.mjs laden, mit
+                     Electrons Node (ELECTRON_RUN_AS_NODE) `pair`/`run` starten, beim Beenden stoppen;
+                     reine Teile in connector.test.js (`npm test`)
 assets/            → icon.ico, icon.png, entitlements.mac.plist (buildResources)
 .github/workflows/ → build.yml — Desktop-Build + GitHub Release
 codemagic.yaml     → 3 Mobile-Workflows (iOS TestFlight, Android Debug-APK, Android Release-AAB)
@@ -89,6 +92,11 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
 - `datenschutz.html` und die Google-Verifizierungsdatei müssen auf `space-media.ch` erreichbar sein
   (Pflicht für beide Stores). Details in `DEPLOY_TO_SPACE_MEDIA.md`.
 - `dist/`, `downloads/` und `node_modules/` gehören nicht in Commits.
+- **«Eigenes Claude-Abo» (connector.js):** nur die unveränderte `claude`-Binary, die Person meldet sich selbst in
+  Claude Code an, die Hülle liest von `claude auth status` nur `loggedIn` und sieht nie ein Claude-Token. Die IPC
+  `connector:*` nimmt die Adresse aus dem anfragenden Frame (nur `APP_URL`/`LEGACY_APP_URL`, localhost nur mit
+  `--dev`). Kopplung + Gerätetoken liegen in `<userData>/connector/` (Dev: `connector-dev/`), Protokoll dort in
+  `connector.log`. Der Connector selbst (CLI, Bundle) lebt im Web-Repo unter `src/lib/connector/client/`.
 
 ## Current State
 
@@ -151,5 +159,8 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
 - **Android:** Store hat `versionCode 4` / 1.0.3 (gebaut vor dem `resizeOnFullScreen`-Fix — Tastatur
   überdeckt dort den WebView). `master` steht auf `versionCode 5` / `versionName 1.0.4`; AAB via
   Codemagic gebaut (`downloads/app-release-v1.0.4.aab`), Play-Upload läuft manuell.
+- **Eigenes Claude-Abo ohne Terminal (22.10.2026):** `connector.js` + Brücke auf `master`, **nicht released**.
+  Braucht ein Desktop-Release (1.0.4) und vorher den Web-Deploy der Karte (`ClaudeAboKarte.tsx`) und des
+  Connectors mit `windowsHide` (sonst öffnet jeder Lauf unter Windows ein Konsolenfenster).
 - Offene Punkte und die manuellen Store-Schritte sind in `RESUME.md` dokumentiert, die fertigen
   Store-Texte in `STORE_LISTING.md`, das Play-Setup in `PLAY_STORE_SETUP.md`.

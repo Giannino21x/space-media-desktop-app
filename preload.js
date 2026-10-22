@@ -7,6 +7,23 @@ const { contextBridge, ipcRenderer } = require('electron');
 // executeJavaScript into the main world) can only see it through contextBridge.
 contextBridge.exposeInMainWorld('__electronRestart', () => ipcRenderer.send('restart-for-update'));
 
+// «Eigenes Claude-Abo»: the settings card (web app, ClaudeAboKarte.tsx) pairs this computer with one click and
+// the SPACE Connector runs in the background while the app is open (main.js → connector.js). Without this
+// bridge (browser) the card shows the terminal command instead.
+contextBridge.exposeInMainWorld('spaceConnector', {
+  version: 1,
+  status: (opts) => ipcRenderer.invoke('connector:status', opts),
+  koppeln: (code, url) => ipcRenderer.invoke('connector:koppeln', { code, url }),
+  starten: () => ipcRenderer.invoke('connector:starten'),
+  stoppen: () => ipcRenderer.invoke('connector:stoppen'),
+  entkoppeln: () => ipcRenderer.invoke('connector:entkoppeln'),
+  onStatus: (callback) => {
+    const listener = (_event, status) => callback(status);
+    ipcRenderer.on('connector:changed', listener);
+    return () => ipcRenderer.removeListener('connector:changed', listener);
+  },
+});
+
 window.addEventListener('DOMContentLoaded', () => {
   const style = document.createElement('style');
   style.textContent = `
