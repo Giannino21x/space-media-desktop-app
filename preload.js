@@ -11,11 +11,12 @@ contextBridge.exposeInMainWorld('__electronRestart', () => ipcRenderer.send('res
 // the SPACE Connector runs in the background while the app is open (main.js → connector.js). Without this
 // bridge (browser) the card shows the terminal command instead.
 contextBridge.exposeInMainWorld('spaceConnector', {
-  version: 2,
+  version: 3,
   status: (opts) => ipcRenderer.invoke('connector:status', opts),
   koppeln: (code, url) => ipcRenderer.invoke('connector:koppeln', { code, url }),
-  // v2: Claude Code's own sign-in — opens Anthropic's page in the browser, resolves when confirmed
-  anmelden: () => ipcRenderer.invoke('connector:anmelden'),
+  // v2: Claude Code's own sign-in — opens Anthropic's page in the browser, resolves when confirmed.
+  // v3: anmelden({ immer: true }) shows the page even when Claude Code is already signed in.
+  anmelden: (opts) => ipcRenderer.invoke('connector:anmelden', opts),
   anmeldenAbbrechen: () => ipcRenderer.invoke('connector:anmelden-abbrechen'),
   starten: () => ipcRenderer.invoke('connector:starten'),
   stoppen: () => ipcRenderer.invoke('connector:stoppen'),

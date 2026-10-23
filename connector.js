@@ -131,6 +131,16 @@ function claudeLoginArgs() {
   return ['auth', 'login', '--claudeai'];
 }
 
+/**
+ * Did the sign-in work? A forced sign-in (the person clicked «Claude-Abo verbinden», Claude Code may already be
+ * signed in) only counts when they confirmed on Anthropic's page — `claude auth login` ended with 0. Otherwise a
+ * «Ablehnen» or a closed tab would pass because of the earlier sign-in.
+ */
+function anmeldungGeklappt({ exitCode, angemeldet, immer, abgebrochen }) {
+  if (abgebrochen || angemeldet !== true) return false;
+  return immer ? exitCode === 0 : true;
+}
+
 /** Does a download look like the connector bundle (and not an error or login page)? */
 function looksLikeConnector(text) {
   return typeof text === 'string'
@@ -385,11 +395,12 @@ function createConnectorHost(o) {
    * sign-in in the browser; resolves once the person confirmed there (or cancelled / 10 min passed). Its output
    * is not read — the result comes from `claude auth status` (loggedIn only).
    */
-  const anmelden = async () => {
+  const anmelden = async ({ immer = false } = {}) => {
     if (login) return { ok: false, meldung: MELDUNG.anmeldungLaeuft, status: snapshot() };
     const c = await checkClaude(true);
     if (!c.gefunden) return { ok: false, grund: 'claude-fehlt', meldung: MELDUNG.claudeFehlt, status: snapshot() };
-    if (c.angemeldet === true) return { ok: true, status: snapshot() };
+    // `immer`: always show Anthropic's page, even when Claude Code is already signed in
+    if (c.angemeldet === true && !immer) return { ok: true, status: snapshot() };
 
     let abgebrochen = false;
     const proc = spawn(c.bin, claudeLoginArgs(), {
@@ -410,7 +421,7 @@ function createConnectorHost(o) {
     const nach = await checkClaude(true);
     log(`Claude-Anmeldung beendet (Code ${code}, angemeldet: ${nach.angemeldet})`);
     set(zustand, meldung);
-    if (nach.angemeldet === true) return { ok: true, status: snapshot() };
+    if (anmeldungGeklappt({ exitCode: code, angemeldet: nach.angemeldet, immer, abgebrochen })) return { ok: true, status: snapshot() };
     return { ok: false, meldung: abgebrochen ? MELDUNG.anmeldungAbgebrochen : MELDUNG.anmeldungOffen, status: snapshot() };
   };
 
@@ -509,6 +520,7 @@ function createConnectorHost(o) {
 module.exports = {
   CLAUDE_INSTALL_URL,
   HOST_SCRIPT,
+  anmeldungGeklappt,
   claudeEnv,
   claudeLoginArgs,
   claudeSearchDirs,
