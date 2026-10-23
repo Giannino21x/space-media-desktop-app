@@ -141,6 +141,19 @@ function anmeldungGeklappt({ exitCode, angemeldet, immer, abgebrochen }) {
   return immer ? exitCode === 0 : true;
 }
 
+/**
+ * Anthropic's sign-in page among the arguments of a second app start (BROWSER = this app, see main.js).
+ * Only https on claude.com / claude.ai / anthropic.com — anything else is ignored.
+ */
+function anmeldeAdresse(argv) {
+  for (const arg of argv || []) {
+    let u;
+    try { u = new URL(arg); } catch { continue; }
+    if (u.protocol === 'https:' && /(^|\.)(claude\.com|claude\.ai|anthropic\.com)$/i.test(u.hostname)) return u.href;
+  }
+  return null;
+}
+
 /** Does a download look like the connector bundle (and not an error or login page)? */
 function looksLikeConnector(text) {
   return typeof text === 'string'
@@ -223,7 +236,7 @@ function createConnectorHost(o) {
   let shuttingDown = false;
   let claude = { at: 0, gefunden: false, angemeldet: null, bin: null };
   let logStarted = false;
-  let login = null; // running `claude auth login`: { proc, abbrechen }
+  let login = null; // running `claude auth login`: { proc, abbrechen, url }
 
   const log = (line) => {
     try {
@@ -261,6 +274,8 @@ function createConnectorHost(o) {
       installUrl: CLAUDE_INSTALL_URL,
       /** `claude auth login` waits for the person to confirm in the browser */
       anmeldung: Boolean(login),
+      /** the app knows the sign-in page and can open it again (v4) */
+      anmeldeseite: Boolean(login && login.url),
     };
   };
   const set = (z, m = null) => {
@@ -403,8 +418,12 @@ function createConnectorHost(o) {
     if (c.angemeldet === true && !immer) return { ok: true, status: snapshot() };
 
     let abgebrochen = false;
+    const env = claudeEnv(baseEnv, { platform, home: o.home, connectorHome: dir, bundle: files.bundle });
+    // Windows: Claude Code opens the page via rundll32 from a background process — the browser then opens behind
+    // other windows. With BROWSER = this app, the URL comes back here (second instance) and the app opens it itself.
+    if (o.browserHelper) env.BROWSER = o.browserHelper;
     const proc = spawn(c.bin, claudeLoginArgs(), {
-      env: claudeEnv(baseEnv, { platform, home: o.home, connectorHome: dir, bundle: files.bundle }),
+      env,
       stdio: ['pipe', 'ignore', 'ignore'],
       windowsHide: true,
     });
@@ -412,7 +431,7 @@ function createConnectorHost(o) {
       proc.on('error', () => resolve(-1));
       proc.on('exit', (code) => resolve(code ?? -1));
     });
-    login = { proc, abbrechen: () => { abgebrochen = true; killTree(proc); } };
+    login = { proc, url: null, abbrechen: () => { abgebrochen = true; killTree(proc); } };
     const timer = setTimeout(() => login && login.abbrechen(), LOGIN_TIMEOUT_MS);
     set(zustand, meldung);
     const code = await ende;
@@ -474,6 +493,21 @@ function createConnectorHost(o) {
     },
     koppeln,
     anmelden,
+    /** Second app start with Anthropic's page as argument: open it from here, only while a sign-in waits. */
+    anmeldeseiteAnnehmen(url) {
+      if (!login || !url || anmeldeAdresse([url]) !== url) return false;
+      login.url = url;
+      log('Anmeldeseite geöffnet');
+      try { o.openExternal?.(url); } catch { /* browser missing */ }
+      set(zustand, meldung);
+      return true;
+    },
+    /** «Seite nochmals öffnen» — the URL never goes to the page, only to the system browser. */
+    anmeldeseiteOeffnen() {
+      if (!login || !login.url) return false;
+      try { o.openExternal?.(login.url); } catch { /* browser missing */ }
+      return true;
+    },
     anmeldenAbbrechen() {
       if (login) login.abbrechen();
       return snapshot();
@@ -520,6 +554,7 @@ function createConnectorHost(o) {
 module.exports = {
   CLAUDE_INSTALL_URL,
   HOST_SCRIPT,
+  anmeldeAdresse,
   anmeldungGeklappt,
   claudeEnv,
   claudeLoginArgs,
