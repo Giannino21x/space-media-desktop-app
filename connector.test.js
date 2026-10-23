@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
 const {
-  claudeEnv, claudeLoginArgs, claudeSearchDirs, connectorEnv, connectorEvent, connectorOrigin, isPairingCode,
+  anmeldungGeklappt, claudeEnv, claudeLoginArgs, claudeSearchDirs, connectorEnv, connectorEvent, connectorOrigin, isPairingCode,
   looksLikeConnector, parseAuthStatus, resolveClaudeBin, restartDelay, HOST_SCRIPT,
 } = require('./connector');
 
@@ -97,6 +97,17 @@ test('claude itself runs without Electron node mode and without API keys', () =>
   assert.equal('SPACE_CONNECTOR_BUNDLE' in env, false);
   assert.equal('ANTHROPIC_API_KEY' in env, false);
   assert.ok(env.PATH.includes('/Users/anna/.local/bin'));
+});
+
+test('forced sign-in only counts when confirmed on Anthropic\'s page', () => {
+  // Normal: signed in afterwards is enough
+  assert.equal(anmeldungGeklappt({ exitCode: 0, angemeldet: true, immer: false, abgebrochen: false }), true);
+  // Forced: «Autorisieren» (exit 0) yes; «Ablehnen» (exit 1) no, even though the old sign-in is still there
+  assert.equal(anmeldungGeklappt({ exitCode: 0, angemeldet: true, immer: true, abgebrochen: false }), true);
+  assert.equal(anmeldungGeklappt({ exitCode: 1, angemeldet: true, immer: true, abgebrochen: false }), false);
+  // Cancelled or not signed in: never
+  assert.equal(anmeldungGeklappt({ exitCode: 0, angemeldet: true, immer: false, abgebrochen: true }), false);
+  assert.equal(anmeldungGeklappt({ exitCode: 0, angemeldet: false, immer: false, abgebrochen: false }), false);
 });
 
 test('sign-in is Claude Code\'s own subscription login, nothing else', () => {
