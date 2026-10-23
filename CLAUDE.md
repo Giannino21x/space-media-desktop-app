@@ -100,7 +100,9 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
 
 ## Current State
 
-- **Desktop:** letztes veröffentlichtes GitHub Release ist `v1.0.7` (22.10.2026: «Claude-Abo verbinden» startet bei Bedarf
+- **Desktop:** letztes veröffentlichtes GitHub Release ist `v1.0.8` (23.10.2026: «Claude-Abo verbinden» öffnet immer
+  Anthropics Seite «Autorisieren», auch wenn Claude Code schon angemeldet ist; nur «Autorisieren» zählt — Brücke v3,
+  `anmelden({ immer: true })`). Davor `v1.0.7` (22.10.2026: «Claude-Abo verbinden» startet bei Bedarf
   die Anmeldung von Claude Code selbst — `claude auth login` öffnet Anthropics Seite im Browser, «Autorisieren», fertig;
   Brücke v2 mit `anmelden()`/`anmeldenAbbrechen()`). Davor `v1.0.6` (22.10.2026: «Eigenes Claude-Abo» ohne Terminal —
   `connector.js` koppelt diesen Rechner aus Einstellungen → Datenschutz und lässt den SPACE Connector laufen, solange die
