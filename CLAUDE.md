@@ -100,7 +100,10 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
 
 ## Current State
 
-- **Desktop:** letztes veröffentlichtes GitHub Release ist `v1.0.9` (23.10.2026: die App öffnet Anthropics Anmeldeseite
+- **Desktop:** letztes veröffentlichtes GitHub Release ist `v1.0.10` (23.10.2026: läuft im Hintergrund — X versteckt das
+  Fenster (Windows), Symbol im Infobereich mit «SPACE öffnen» / «Mit Windows starten» / «Beenden»; Koppeln schaltet den
+  Start mit Windows ein (`--im-hintergrund`, startet versteckt); `before-quit` lässt «Beenden» und Updates wirklich schliessen;
+  einmaliger Hinweis, Merker in `<userData>/hintergrund.json`). Davor `v1.0.9` (23.10.2026: die App öffnet Anthropics Anmeldeseite
   selbst — `claude auth login` mit `BROWSER` = App-exe, die zweite Instanz reicht die Adresse per `second-instance` an
   die laufende App, die sie mit `shell.openExternal` aus dem Vordergrund öffnet; vorher kam der Browser über rundll32
   im Hintergrund und blieb hinter den Fenstern. Neu: nur eine App pro Benutzer (`requestSingleInstanceLock`, gepackt),
