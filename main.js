@@ -1,4 +1,5 @@
-const { app, BrowserWindow, shell, Menu, ipcMain, nativeImage, dialog, net } = require('electron');
+const { app, BrowserWindow, shell, Menu, ipcMain, nativeImage, dialog, net, Tray, Notification } = require('electron');
+const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
 const os = require('os');
 const path = require('path');
@@ -22,6 +23,15 @@ function isAppUrl(url) {
   return url.startsWith(APP_URL) || url.startsWith(LEGACY_APP_URL) || url.startsWith('http://localhost');
 }
 const isDev = process.argv.includes('--dev');
+
+// Background (Windows): the X hides the window, the app keeps running in the notification area so the
+// SPACE Connector («Eigenes Claude-Abo») keeps serving the person's chat — also from the phone. «Beenden» in
+// the tray menu (or an update) really quits. Started with Windows (login item) the app comes up hidden.
+const IM_HINTERGRUND_ARG = '--im-hintergrund';
+const hintergrund = process.platform === 'win32';
+const versteckterStart = process.argv.includes(IM_HINTERGRUND_ARG);
+let beenden = false;
+let tray = null;
 
 let mainWindow;
 
@@ -66,9 +76,16 @@ function createWindow() {
     }
   });
 
-  // Show after first paint is composited (prevents flash)
+  // Show after first paint is composited (prevents flash). Started with Windows: stay in the tray.
   mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
+    if (!versteckterStart) mainWindow.show();
+  });
+
+  mainWindow.on('close', (event) => {
+    if (beenden || !hintergrund || !tray) return;
+    event.preventDefault();
+    mainWindow.hide();
+    hintergrundHinweis();
   });
 
   // --dev loads a local Next dev server; SPACE_DEV_URL overrides the port
@@ -181,6 +198,59 @@ function createBadgeIcon(count) {
   );
 }
 
+/** Bring the window back (tray click, second app start, notification). */
+function zeigen() {
+  if (!mainWindow) createWindow();
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+const hintergrundDatei = () => path.join(app.getPath('userData'), 'hintergrund.json');
+
+/** Once: tell the person the app is still running (where to find it, how to quit). */
+function hintergrundHinweis() {
+  try {
+    if (JSON.parse(fs.readFileSync(hintergrundDatei(), 'utf8')).hinweis) return;
+  } catch { /* first time */ }
+  try { fs.writeFileSync(hintergrundDatei(), JSON.stringify({ hinweis: true })); } catch { /* best effort */ }
+  if (!Notification.isSupported()) return;
+  const n = new Notification({
+    title: 'SPACE läuft im Hintergrund weiter',
+    body: 'Öffnen oder beenden über das SPACE-Symbol unten rechts neben der Uhr.',
+    icon: path.join(__dirname, 'assets', 'icon.png'),
+  });
+  n.on('click', zeigen);
+  n.show();
+}
+
+/** Start with Windows (hidden, in the tray). */
+function mitWindowsStarten(an) {
+  if (!hintergrund || !app.isPackaged) return;
+  app.setLoginItemSettings({ openAtLogin: an, args: [IM_HINTERGRUND_ARG] });
+  trayMenue();
+}
+
+function trayMenue() {
+  if (!tray) return;
+  const autostart = app.getLoginItemSettings({ args: [IM_HINTERGRUND_ARG] }).openAtLogin;
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'SPACE öffnen', click: zeigen },
+    { type: 'separator' },
+    { label: 'Mit Windows starten', type: 'checkbox', checked: autostart, enabled: app.isPackaged, click: (item) => mitWindowsStarten(item.checked) },
+    { type: 'separator' },
+    { label: 'Beenden', click: () => { beenden = true; app.quit(); } },
+  ]));
+}
+
+function trayAnlegen() {
+  if (!hintergrund || tray) return;
+  tray = new Tray(path.join(__dirname, 'assets', 'icon.ico'));
+  tray.setToolTip('SPACE Media Engine');
+  tray.on('click', zeigen);
+  trayMenue();
+}
+
 // Restart app to install update
 ipcMain.on('restart-for-update', () => {
   // setImmediate: let the IPC handler return before the windows are torn down.
@@ -238,10 +308,7 @@ ipcMain.handle('connector:anmeldeseite-oeffnen', (event) => { connectorSenderOri
 
 app.on('second-instance', (_event, argv) => {
   if (connector && connector.anmeldeseiteAnnehmen(anmeldeAdresse(argv))) return;
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
-  }
+  zeigen();
 });
 ipcMain.handle('connector:starten', (event) => { connectorSenderOrigin(event); return connector.starten(); });
 ipcMain.handle('connector:stoppen', (event) => { connectorSenderOrigin(event); return connector.stoppen(); });
@@ -306,7 +373,11 @@ app.on('ready', () => {
     onChange: (status) => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('connector:changed', status);
     },
+    // Paired with one click: from now on the app starts with Windows (hidden), so the chat keeps running
+    // over the subscription after a restart. «Mit Windows starten» in the tray menu turns it off.
+    onGekoppelt: () => mitWindowsStarten(true),
   });
+  trayAnlegen();
   // A few seconds after start, so the connector never competes with the first paint.
   setTimeout(() => connector.autostart(), 4000);
 
@@ -321,6 +392,9 @@ app.on('ready', () => {
 app.on('activate', () => {
   if (mainWindow === null) createWindow();
 });
+
+// Quitting for real (tray «Beenden», update, Windows shutdown): let the window close instead of hiding it.
+app.on('before-quit', () => { beenden = true; });
 
 // Stop the connector with the app (also before an update installs — it runs from the app's own exe).
 app.on('will-quit', () => {

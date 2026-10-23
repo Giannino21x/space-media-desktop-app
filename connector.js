@@ -479,6 +479,7 @@ function createConnectorHost(o) {
       writePrefs({ ...readPrefs(), pausiert: false });
       failures = 0;
       await start();
+      try { o.onGekoppelt?.(); } catch { /* optional */ }
       return { ok: true, status: snapshot() };
     } finally {
       pairing = false;
