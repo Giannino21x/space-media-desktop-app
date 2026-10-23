@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
 const {
-  anmeldungGeklappt, claudeEnv, claudeLoginArgs, claudeSearchDirs, connectorEnv, connectorEvent, connectorOrigin, isPairingCode,
+  anmeldeAdresse, anmeldungGeklappt, claudeEnv, claudeLoginArgs, claudeSearchDirs, connectorEnv, connectorEvent, connectorOrigin, isPairingCode,
   looksLikeConnector, parseAuthStatus, resolveClaudeBin, restartDelay, HOST_SCRIPT,
 } = require('./connector');
 
@@ -108,6 +108,17 @@ test('forced sign-in only counts when confirmed on Anthropic\'s page', () => {
   // Cancelled or not signed in: never
   assert.equal(anmeldungGeklappt({ exitCode: 0, angemeldet: true, immer: false, abgebrochen: true }), false);
   assert.equal(anmeldungGeklappt({ exitCode: 0, angemeldet: false, immer: false, abgebrochen: false }), false);
+});
+
+test('anmeldeAdresse: only Anthropic sign-in pages from a second app start', () => {
+  const auth = 'https://claude.com/cai/oauth/authorize?code=true&client_id=x&redirect_uri=http%3A%2F%2Flocalhost%3A64608%2Fcallback';
+  assert.equal(anmeldeAdresse(['C:\\app\\SPACE Media Engine.exe', auth]), new URL(auth).href);
+  assert.equal(anmeldeAdresse(['x.exe', 'https://claude.ai/oauth/authorize?a=1']), 'https://claude.ai/oauth/authorize?a=1');
+  assert.equal(anmeldeAdresse(['x.exe', 'https://evil.example/claude.com']), null);
+  assert.equal(anmeldeAdresse(['x.exe', 'https://claude.com.evil.example/']), null);
+  assert.equal(anmeldeAdresse(['x.exe', 'http://claude.com/']), null);
+  assert.equal(anmeldeAdresse(['x.exe', '--dev']), null);
+  assert.equal(anmeldeAdresse(undefined), null);
 });
 
 test('sign-in is Claude Code\'s own subscription login, nothing else', () => {

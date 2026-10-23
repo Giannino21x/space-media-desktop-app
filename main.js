@@ -2,7 +2,16 @@ const { app, BrowserWindow, shell, Menu, ipcMain, nativeImage, dialog, net } = r
 const { autoUpdater } = require('electron-updater');
 const os = require('os');
 const path = require('path');
-const { connectorOrigin, createConnectorHost } = require('./connector');
+const { anmeldeAdresse, connectorOrigin, createConnectorHost } = require('./connector');
+
+// Tests can run a second copy next to the installed app with their own data.
+if (process.env.SPACE_USER_DATA) app.setPath('userData', process.env.SPACE_USER_DATA);
+
+// One app per user (packaged). A second start hands its arguments to this one — opening the app again focuses
+// the window, and Claude Code's sign-in (BROWSER = this exe) delivers Anthropic's page here, so the app opens it
+// from the foreground and the browser comes to the front (connector.js anmelden).
+const einzigeInstanz = !app.isPackaged || app.requestSingleInstanceLock();
+if (!einzigeInstanz) app.quit();
 
 const APP_URL = 'https://app.space-media.ch';
 // Former production host. Still served by Vercel; keep it navigable so
@@ -225,6 +234,15 @@ ipcMain.handle('connector:anmelden', (event, opts) => {
   return connector.anmelden({ immer: Boolean(opts && opts.immer) });
 });
 ipcMain.handle('connector:anmelden-abbrechen', (event) => { connectorSenderOrigin(event); return connector.anmeldenAbbrechen(); });
+ipcMain.handle('connector:anmeldeseite-oeffnen', (event) => { connectorSenderOrigin(event); return connector.anmeldeseiteOeffnen(); });
+
+app.on('second-instance', (_event, argv) => {
+  if (connector && connector.anmeldeseiteAnnehmen(anmeldeAdresse(argv))) return;
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+});
 ipcMain.handle('connector:starten', (event) => { connectorSenderOrigin(event); return connector.starten(); });
 ipcMain.handle('connector:stoppen', (event) => { connectorSenderOrigin(event); return connector.stoppen(); });
 ipcMain.handle('connector:entkoppeln', (event) => { connectorSenderOrigin(event); return connector.entkoppeln(); });
@@ -266,6 +284,7 @@ autoUpdater.on('update-downloaded', (info) => {
 });
 
 app.on('ready', () => {
+  if (!einzigeInstanz) return;
   Menu.setApplicationMenu(null);
   createWindow();
 
@@ -279,6 +298,9 @@ app.on('ready', () => {
       return res.text();
     },
     execPath: process.execPath,
+    // Windows, packaged: Claude Code's sign-in hands the page to this app instead of rundll32 (see above)
+    browserHelper: app.isPackaged && process.platform === 'win32' ? process.execPath : null,
+    openExternal: (url) => shell.openExternal(url),
     home: os.homedir(),
     deviceName: `${os.hostname()} (SPACE App)`,
     onChange: (status) => {
