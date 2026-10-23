@@ -100,7 +100,11 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
 
 ## Current State
 
-- **Desktop:** letztes veröffentlichtes GitHub Release ist `v1.0.8` (23.10.2026: «Claude-Abo verbinden» öffnet immer
+- **Desktop:** letztes veröffentlichtes GitHub Release ist `v1.0.9` (23.10.2026: die App öffnet Anthropics Anmeldeseite
+  selbst — `claude auth login` mit `BROWSER` = App-exe, die zweite Instanz reicht die Adresse per `second-instance` an
+  die laufende App, die sie mit `shell.openExternal` aus dem Vordergrund öffnet; vorher kam der Browser über rundll32
+  im Hintergrund und blieb hinter den Fenstern. Neu: nur eine App pro Benutzer (`requestSingleInstanceLock`, gepackt),
+  `SPACE_USER_DATA` für Tests, Brücke v4 `anmeldeseiteOeffnen()`). Davor `v1.0.8` (23.10.2026: «Claude-Abo verbinden» öffnet immer
   Anthropics Seite «Autorisieren», auch wenn Claude Code schon angemeldet ist; nur «Autorisieren» zählt — Brücke v3,
   `anmelden({ immer: true })`). Davor `v1.0.7` (22.10.2026: «Claude-Abo verbinden» startet bei Bedarf
   die Anmeldung von Claude Code selbst — `claude auth login` öffnet Anthropics Seite im Browser, «Autorisieren», fertig;
