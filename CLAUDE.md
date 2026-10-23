@@ -66,6 +66,8 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
 - `ios-workflow` — kein Trigger im YAML, nur manuell über die Codemagic-UI starten. Signiert mit
   vorab erzeugtem Distribution-Zertifikat + Provisioning-Profil (beide als base64-Env-Vars),
   Build-Nummer wird aus App Store Connect hochgezählt, Upload nach TestFlight (`Internal Testers`).
+- `ios-testflight` — Tag `testflight-*`: derselbe Build (YAML-Anker auf `ios-workflow`), lädt aber nur zu
+  TestFlight (Internal Testers) hoch, ohne Review. Eingereicht wird danach in App Store Connect oder per Tag `ios-*`.
 - `android-workflow` — automatisch bei Push auf `master`, liefert eine installierbare Debug-APK.
 - `android-release-workflow` — Trigger `git tag v*`, baut ein signiertes AAB.
   Play-Auto-Publish ist im YAML deaktiviert (kein Service-Account) → AAB manuell in der Play Console hochladen.
@@ -98,7 +100,14 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
 
 ## Current State
 
-- **Desktop:** letztes veröffentlichtes GitHub Release ist `v1.0.3` (17.09.2026, Update-Banner-Neustart via
+- **Desktop:** letztes veröffentlichtes GitHub Release ist `v1.0.7` (22.10.2026: «Claude-Abo verbinden» startet bei Bedarf
+  die Anmeldung von Claude Code selbst — `claude auth login` öffnet Anthropics Seite im Browser, «Autorisieren», fertig;
+  Brücke v2 mit `anmelden()`/`anmeldenAbbrechen()`). Davor `v1.0.6` (22.10.2026: «Eigenes Claude-Abo» ohne Terminal —
+  `connector.js` koppelt diesen Rechner aus Einstellungen → Datenschutz und lässt den SPACE Connector laufen, solange die
+  App offen ist). Davor `v1.0.5` (13.10.2026: Fenster, Verknüpfung und Installer heissen
+  «SPACE Media Engine», der Fenstertitel folgt nicht mehr der Webseite). Davor `v1.0.4` (13.10.2026, neues App-Icon wie auf dem Handy: SPACE Bot
+  im blauen Ring, aus `mobile/assets/icon-foreground.png`; `build.publish` steht jetzt in `package.json`, sonst fehlt
+  `app-update.yml` im Build und die App findet keine Updates mehr). Davor `v1.0.3` (17.09.2026, Update-Banner-Neustart via
   `contextBridge` gefixt). Lokal gebaut, Release per `gh release create --target <sha>` → das neue Tag hat die
   GitHub-Actions-Pipeline gestartet (sofort per `gh run cancel` abgebrochen, sonst überschreibt deren Release-Job
   die Assets ohne passendes `latest.yml`) und Codemagic `android-release-workflow` (harmlos, kein Auto-Publish).
@@ -110,11 +119,53 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
   Apples System-Tab-Bar unten (`useSystemTabBar`). **Codemagic `ios-workflow` manuell starten**, dann TestFlight
   testen, dann ASC 1.0.4 einreichen. Store: 1.0.3 live seit 21.08.2026 (Build 19). Die Tastatur handhabt die Web-App
   selbst (`KeyboardViewport` + `keyboard-mobile.css` im Web-Repo).
+- **iOS 1.0.5 — Tab-Leiste aus der Web-App (11.10.2026):** die Hülle setzt `html[data-native-tabs]` und nimmt das
+  Feld `tabs` ([{id, symbol, label, action?}]) der nativeChrome-Meldung an → Apples echte `UITabBarController`-Leiste
+  unten mit genau diesen Tabs, oben nichts Natives. Welche Tabs: `src/lib/navigation/mobile-tabs.ts` im Web-Repo (pro
+  Paket: SPACE Bot vs. Betrieb). `action` = Aktions-Tab (Diktat, blauer Kreis, wählt nicht aus). Ohne `tabs` gilt das
+  alte Verhalten (Pille oben). Gebaut + eingereicht per Tag `ios-*` (Codemagic `ios-workflow`, `submit_to_app_store`,
+  «Neu in dieser Version» aus `release_notes.json`).
+- **iOS 1.0.5 (11.10.2026): Live Activity «Aufnahme läuft»** in Dynamic Island + Sperrbildschirm.
+  Widget-Erweiterung `SpaceLiveActivity` (eigenes Target, Bundle-ID `ch.spacemedia.app.LiveActivity`, ab iOS 16.2,
+  von Hand in `project.pbxproj` eingetragen — IDs `A71CE…`), gemeinsame `Shared/AufnahmeAttributes.swift` in beiden
+  Targets, `App/LiveActivityBridge.swift` (Kanal `webkit.messageHandlers.liveActivity`, Gegenstück
+  `src/lib/mobile/live-activity.ts` + `useRecording.ts` im Web-Repo). «Stopp» öffnet die App über
+  `spacemedia://aufnahme/stopp` (AppDelegate → `window.__nativeAufnahme('stopp')`). Info.plist: `NSSupportsLiveActivities`,
+  URL-Schema `spacemedia`, `UIBackgroundModes` audio (damit die WebView-Aufnahme bei gesperrtem Telefon weiterlaufen
+  kann — auf dem Gerät prüfen, ob wirklich Ton ankommt). Signieren: der Codemagic-Schritt legt App-ID
+  `ch.spacemedia.app.LiveActivity` + App-Store-Profil selbst an (`app-store-connect fetch-signing-files --create`, ASC-Key
+  aus `app_store_credentials`, Schlüssel des vorhandenen Verteilungs-Zertifikats); ein vorgegebenes Profil in
+  `IOS_LIVEACTIVITY_PROFILE_BASE64` hat Vorrang.
+- **iOS 1.0.6 (Branch `huelle-1.0.6`, noch nicht eingereicht) — Mobile 2.0, Bauplan Etappe 3:**
+  - Insel «Steno schreibt» / «Protokoll bereit» (`html[data-native-insel="2"]`), «Fertig» als App Intent
+    (`AufnahmeFertigIntent`), Links `spacemedia://oeffne?pfad=…` und `spacemedia://konto/…`.
+  - **Aufnahme bei gesperrtem iPhone:** `App/NativeAufnahme.swift` (Kanal `nativeAufnahme`, Flag
+    `html[data-native-aufnahme="1"]`, Gegenstück `src/lib/mobile/native-recorder.ts` + `useRecording.ts`).
+    `AVAudioRecorder` schreibt AAC in ADTS-Rahmen (`.aac`, 48 kbit/s Mono); alle 30 s gehen die neuen Bytes als Teil
+    an `audio/upload`, am Ende `audio/finalize` — beides mit einem Aufnahme-Ticket der Web-App
+    (`Authorization: Bearer`, `POST /api/meetings/[id]/audio/ticket`), nicht mit der Sitzung der WebView. Stand und
+    Teile liegen in Application Support/Aufnahmen/<sitzung>; nach einem Absturz gehen sie beim nächsten Start hoch.
+    Die Hülle führt die Insel während ihrer Aufnahme selbst. Notschalter im Web (`HUELLE_NIMMT_AUF`).
+  - **Diktier-Kreis:** `html[data-native-kreis="1"]` — ein Aktions-Tab mit `placement: "trailing"` wird unter
+    iOS 26 ein `UISearchTab` (Apples abgesetzter Kreis rechts neben der Leiste), nie ausgewählt
+    (`shouldSelectTab`), gezeichnet in den `farben` der Web-App (Steno-Gelb bzw. Ring aus den Bot-Farben);
+    Grössen über `glass.aktionKreis` / `glass.aktionSymbol` nachjustierbar. Vor iOS 26: Tab in der Leiste.
+  - **Aktionsleiste in Liquid Glass:** `html[data-native-aktionen="1"]`, Feld `aktionen` ({text?, knoepfe:[{id, label,
+    stil: haupt|neben, aus?}], akzent?, tinte?} | null) → `App/NativeAktionsleiste.swift` (iOS 26: `.glass()` /
+    `.prominentGlass()` über weichem Rand; davor Material). Tipp → `window.__nativeAktion(id)`, Höhe →
+    `--native-aktionen-h`. Gegenstück `src/lib/mobile/native-aktionen.ts` + `useNativeAktionsleiste` (Dokument).
+    Apples Tab-Leiste geht ab iOS 18 mit `setTabBarHidden(_:animated:)` weg (Chat, Dokument).
+  - **Prüfen ohne Mac:** `.github/workflows/ios-pruefen.yml` kompiliert bei Push auf `huelle-*` für den
+    Simulator, ohne Signatur und ohne App Store (12.10.2026: grün mit Xcode 26.3, keine Warnungen in den eigenen
+    Dateien; `UITab.selectedImage` kennt dieses SDK noch nicht). Danach Tags `testflight-1.0.6`, `testflight-1.0.6-2` (mit Aktionsleiste) → nur TestFlight.
+    Auf dem Gerät prüfen: Ton bei gesperrtem iPhone, «Fertig» in der Insel, Kreis tippbar und Farben,
+    Anruf während der Aufnahme, Neustart der App mitten in einer Aufnahme.
 - **Android:** Store hat `versionCode 4` / 1.0.3 (gebaut vor dem `resizeOnFullScreen`-Fix — Tastatur
   überdeckt dort den WebView). `master` steht auf `versionCode 5` / `versionName 1.0.4`; AAB via
   Codemagic gebaut (`downloads/app-release-v1.0.4.aab`), Play-Upload läuft manuell.
-- **Eigenes Claude-Abo ohne Terminal (22.10.2026):** `connector.js` + Brücke auf `master`, **nicht released**.
-  Braucht ein Desktop-Release (1.0.4) und vorher den Web-Deploy der Karte (`ClaudeAboKarte.tsx`) und des
-  Connectors mit `windowsHide` (sonst öffnet jeder Lauf unter Windows ein Konsolenfenster).
+- **Eigenes Claude-Abo ohne Terminal (22.10.2026):** `connector.js` + Brücke `window.spaceConnector`, released mit
+  Desktop `v1.0.6`, Anmeldung bei Claude aus der App seit `v1.0.7` (nur Claude Codes eigener Login, die Ausgabe wird
+  nicht gelesen; Ergebnis kommt aus `claude auth status`). Gegenstück im Web: Karte `ClaudeAboKarte.tsx` und der Connector mit `windowsHide` (ohne das öffnet
+  jeder Lauf unter Windows ein Konsolenfenster) — beide müssen live sein. Mac: noch kein DMG mit diesem Stand.
 - Offene Punkte und die manuellen Store-Schritte sind in `RESUME.md` dokumentiert, die fertigen
   Store-Texte in `STORE_LISTING.md`, das Play-Setup in `PLAY_STORE_SETUP.md`.

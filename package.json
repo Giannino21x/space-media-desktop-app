@@ -1,6 +1,6 @@
 {
   "name": "space-media",
-  "version": "1.0.3",
+  "version": "1.0.7",
   "description": "SPACE Media — AI-Powered Sales & Marketing Automation",
   "main": "main.js",
   "author": {
@@ -39,7 +39,7 @@
         }
       ],
       "icon": "assets/icon.ico",
-      "artifactName": "SPACE-Media-App-Setup-${version}.${ext}"
+      "artifactName": "SPACE-Media-Engine-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": true,
@@ -47,7 +47,7 @@
       "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "SPACE Media App"
+      "shortcutName": "SPACE Media Engine"
     },
     "mac": {
       "target": [
@@ -61,7 +61,7 @@
       ],
       "icon": "assets/icon.png",
       "category": "public.app-category.business",
-      "artifactName": "SPACE-Media-App-${version}-${arch}.${ext}",
+      "artifactName": "SPACE-Media-Engine-${version}-${arch}.${ext}",
       "darkModeSupport": true,
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
@@ -84,6 +84,11 @@
           "type": "file"
         }
       ]
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Giannino21x",
+      "repo": "space-media-desktop-app"
     }
   },
   "devDependencies": {

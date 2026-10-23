@@ -1,0 +1,148 @@
+# iOS-Hülle zu TestFlight über GitHub (macOS-Runner, für dieses öffentliche Repo
+# gratis und ohne Warteschlange). Codemagic im Gratis-Plan liess am 12.10.2026
+# jeden Build 40–100 Minuten auf einen Mac warten.
+#
+# Signieren ohne .p12: Xcode holt Zertifikat und Profile über den App-Store-
+# Connect-API-Schlüssel selbst (-allowProvisioningUpdates, cloud-verwaltet).
+# Der Schlüssel braucht die Rolle «Admin».
+#
+# Geheimnisse (Repo › Settings › Secrets › Actions):
+#   ASC_KEY_ID      Schlüssel-ID (z. B. ABCD123456)
+#   ASC_ISSUER_ID   Issuer-ID (UUID oben auf der Seite der API-Schlüssel)
+#   ASC_KEY_P8      Inhalt der AuthKey_<ID>.p8
+#
+# Start: Actions › «iOS TestFlight» › Run workflow (Branch wählen) oder ein Tag
+# `testflight-*`. Das Einreichen zur Review bleibt bei Codemagic (Tag `ios-*`).
+name: iOS TestFlight
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['testflight-*']
+
+concurrency:
+  group: ios-testflight
+  cancel-in-progress: false
+
+jobs:
+  testflight:
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      TEAM_ID: 699K5VAG3G
+      PROJEKT: mobile/ios/App/App.xcodeproj
+      SCHEMA: App
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Xcode 26 wählen
+        shell: bash
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$XCODE" ]; then ls -d /Applications/Xcode*.app; echo "Kein Xcode 26 auf dem Runner"; exit 1; fi
+          sudo xcode-select -s "$XCODE"
+          xcodebuild -version
+
+      - name: Capacitor
+        working-directory: mobile
+        shell: bash
+        run: |
+          npm ci --no-audit --no-fund
+          npx cap sync ios
+
+      - name: API-Schlüssel ablegen
+        shell: bash
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_KEY_P8" ]; then
+            echo "Geheimnisse ASC_KEY_ID / ASC_KEY_P8 fehlen (siehe Kopf dieser Datei)."; exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/asc"
+          printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/asc/AuthKey_$ASC_KEY_ID.p8"
+          echo "ASC_KEY_PATH=$RUNNER_TEMP/asc/AuthKey_$ASC_KEY_ID.p8" >> "$GITHUB_ENV"
+
+      - name: Build-Nummer
+        shell: bash
+        run: |
+          # Über allem, was Codemagic hochgeladen hat (bis 1.0.6 (24), danach PROJECT_BUILD_NUMBER+100),
+          # und je Lauf eindeutig. Ein späterer Codemagic-Build muss darüber liegen.
+          NR=$(( 1000 + GITHUB_RUN_NUMBER ))
+          echo "BUILD_NR=$NR" >> "$GITHUB_ENV"
+          echo "Build-Nummer: $NR"
+
+      - name: Archivieren
+        shell: bash
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -o pipefail
+          # Das Projekt signiert von Hand (Profile aus Codemagic) — hier automatisch,
+          # Xcode legt fehlende Profile über den API-Schlüssel selbst an.
+          xcodebuild -project "$PROJEKT" -scheme "$SCHEMA" -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER= \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CURRENT_PROJECT_VERSION="$BUILD_NR" \
+            archive 2>&1 | tee archive.log | grep -E "error:|warning: .*(sign|profile|entitlement)|ARCHIVE (SUCCEEDED|FAILED)" || true
+          grep -q "ARCHIVE SUCCEEDED" archive.log
+
+      - name: Zu TestFlight hochladen
+        shell: bash
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -o pipefail
+          cat > "$RUNNER_TEMP/export.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+            <key>uploadSymbols</key><true/>
+          </dict>
+          </plist>
+          EOF
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/export.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" 2>&1 | tee export.log | grep -E "error:|Upload|EXPORT (SUCCEEDED|FAILED)" || true
+          grep -q "EXPORT SUCCEEDED" export.log
+          echo "1.0.6 ($BUILD_NR) ist bei Apple. In TestFlight erscheint der Build nach der Verarbeitung (meist 5–15 Minuten)."
+
+      - name: Protokolle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: testflight-logs
+          path: |
+            archive.log
+            export.log
+          if-no-files-found: ignore
+
+      - name: Schlüssel entfernen
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/asc/"*.p8

@@ -21,7 +21,20 @@ import Capacitor
 ///                 window.__nativeOpenDrawer(),
 ///                 --native-tabbar-h + html[data-native-tabbar] (nur System-Leiste)
 ///   Web  -> Nativ: webkit.messageHandlers.nativeChrome.postMessage(
-///                 {hidden?, active?, theme?, accent?, glass?})
+///                 {hidden?, active?, theme?, accent?, glass?, tabs?})
+/// Ab 1.0.5: html[data-native-tabs="1"] — die Hülle nimmt `tabs`
+/// ([{id, symbol, label, action?}]) an. Dann gibt es nur Apples System-Leiste
+/// unten mit genau diesen Tabs (pro Paket verschieden), Tipp ruft
+/// window.__nativeNavigate(id); oben bleibt nichts Natives.
+/// Ab 1.0.6: html[data-native-kreis="1"] — ein Aktions-Tab mit
+/// `placement: "trailing"` sitzt unter iOS 26 als eigener Kreis rechts neben
+/// der Leiste (Platz des Such-Tabs, UISearchTab) und wird nie ausgewählt;
+/// `farben` ({fill, ink, ring}) färbt ihn wie im Web (Steno-Gelb, Ring aus den
+/// Bot-Farben). Ältere iOS zeigen ihn als Tab in der Leiste.
+/// Ab 1.0.6: html[data-native-aktionen="1"] — Feld `aktionen` ({text?, knoepfe,
+/// akzent?, tinte?} | null): die Aktionsleiste der Seite in echtem Liquid Glass
+/// (NativeAktionsleiste.swift), Tipp ruft window.__nativeAktion(id). Apples
+/// Tab-Leiste geht ab iOS 18 mit setTabBarHidden weg und wieder herein.
 /// Das Chrome bleibt unsichtbar, bis die erste Web-Meldung eintrifft — Login-
 /// Seite und alte Web-Stände ohne Bridge zeigen so nichts Natives.
 /// iOS < 26 fällt auf `UIBlurEffect` zurück. Ab 1024 pt Breite (iPad, Desktop-
@@ -57,8 +70,30 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         var topInset: CGFloat = 4
         var useSystemTabBar = false     // Apples Leiste unten statt Pille oben
         var labelSize: CGFloat = 10.5   // nur System-Leiste
+        var aktionKreis: CGFloat = 44   // Scheibe bzw. Ring im Kreis neben der Leiste (iOS 26)
+        var aktionSymbol: CGFloat = 21  // Mikrofon darin
     }
     private var glassConfig = GlassConfig()
+
+    /// Laufende Aufnahmen in Dynamic Island + Sperrbildschirm (LiveActivityBridge.swift)
+    private let liveActivity = LiveActivityBridge()
+    /// Aufnahme bei gesperrtem iPhone (NativeAufnahme.swift, ab 1.0.6)
+    private let aufnahme = NativeAufnahme()
+    /// Aktionsleiste der Seite in Liquid Glass (NativeAktionsleiste.swift, ab 1.0.6)
+    private let aktionsleiste = NativeAktionsleiste()
+    private var aktionsInhalt: NativeAktionsleiste.Inhalt?
+    private var aktionenSichtbar = false
+    private var gemeldeteAktionsHoehe: CGFloat = -1
+    /// Meldung (Toast) in Liquid Glass über der Leiste (NativeMeldung.swift, ab 1.0.6 Build 3)
+    private let meldung = NativeMeldung()
+    private var meldungUnten: NSLayoutConstraint?
+    /// Kopfleiste oben in Liquid Glass (NativeKopfleiste.swift, ab 1.0.6 Build 4, nur iOS 26)
+    private let kopfleiste = NativeKopfleiste()
+    /// PDFs und andere Dateien in QuickLook statt im App-Fenster (NativeDatei.swift, ab 1.0.6 Build 25)
+    private let datei = NativeDatei()
+    private let dateiNavigation = NativeDateiNavigation()
+    private var kopfInhalt: NativeKopfleiste.Inhalt?
+    private var kopfSichtbar = false
 
     // MARK: - State
 
@@ -107,13 +142,59 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
     }
 
     /// IDs = Routen der Web-App, Symbole spiegeln ihren ViewSwitcher.
-    private let tabs: [(id: String, symbol: String, label: String)] = [
+    private let pillTabs: [(id: String, symbol: String, label: String)] = [
         ("chat", "message", "Chat"),
         ("mail", "envelope", "Mail"),
         ("calendar", "calendar", "Kalender"),
     ]
 
+    /// Tabs der System-Leiste unten. Ab 1.0.5 schickt die Web-App sie selbst
+    /// (Feld `tabs`, pro Paket verschieden) — neue Tabs ohne App-Store-Durchlauf.
+    /// Ohne Feld (ältere Web-Stände) gilt die Pillen-Liste.
+    private struct SystemTab: Equatable {
+        let id: String
+        let symbol: String
+        let label: String
+        /// Aktions-Tab (Diktat): farbiges Symbol, löst aus statt auszuwählen.
+        let action: Bool
+        /// Ab 1.0.6: als eigener Kreis rechts neben der Leiste (iOS 26)
+        var trailing = false
+        /// Farben aus der Web-App (Tokens des Produkts) — leer = Systemfarben
+        var fill: [UIColor] = []
+        var ink: UIColor?
+        var ring: [UIColor] = []
+    }
+    private var webTabs: [SystemTab] = []
+    private var systemTabs: [SystemTab] {
+        if !webTabs.isEmpty { return webTabs }
+        return pillTabs.map { SystemTab(id: $0.id, symbol: $0.symbol, label: $0.label, action: false) }
+    }
+    /// Web-App führt die Tabs: dann gibt es nur die Leiste unten — Menü, Pille
+    /// und Scrim oben entfallen (Kopfzeile und «Mehr» liefert die Web-App).
+    private var webTabsMode: Bool { !webTabs.isEmpty }
+
+    /// iOS 26: der Aktions-Tab, der als eigener Kreis neben der Leiste sitzt
+    private var kreisTab: SystemTab? {
+        guard #available(iOS 26.0, *) else { return nil }
+        return systemTabs.last { $0.action && $0.trailing }
+    }
+    /// Die Leiste ist mit UITab gebaut (Kreis) statt mit viewControllers —
+    /// beides lässt sich nicht mischen, ein Wechsel baut sie neu.
+    private var tabModusKreis = false
+    /// Tipp auf den Aktions-Tab nur einmal auslösen (manche iOS melden beide Delegate-Wege)
+    private var letzteAktion = Date.distantPast
+    /// Dasselbe für die Auswahl eines Tabs
+    private var letzteWahl: (id: String, zeit: Date)?
+    private var kreisAktivBild = ""
+
     // MARK: - Lifecycle
+
+    /// Vor dem ersten Laden: Datei-Links fängt dieses Plugin ab (NativeDatei.swift)
+    override func capacitorDidLoad() {
+        super.capacitorDidLoad()
+        dateiNavigation.datei = datei
+        bridge?.registerPluginInstance(dateiNavigation)
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -121,17 +202,39 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
 
         // Web-App informieren, dass natives Chrome verfügbar ist (überlebt
         // Reloads), und den Rückkanal registrieren.
+        // nativeKopf: Zurück und Kopf-Knöpfe zeichnet die Hülle in Liquid Glass (nur iOS 26)
+        var kopfFlag = ""
+        if #available(iOS 26.0, *) { kopfFlag = ";document.documentElement.dataset.nativeKopf = '1'" }
         let flagScript = WKUserScript(
-            source: "document.documentElement.dataset.nativeChrome = '1'",
+            // nativeTabs: diese Hülle nimmt Tabs von der Web-App an (ab 1.0.5);
+            // nativeKreis: der Aktions-Tab darf als Kreis neben der Leiste sitzen (ab 1.0.6)
+            source: "document.documentElement.dataset.nativeChrome = '1';"
+                + "document.documentElement.dataset.nativeTabs = '1';"
+                + "document.documentElement.dataset.nativeKreis = '1';"
+                + "document.documentElement.dataset.nativeAktionen = '1';"
+                + "document.documentElement.dataset.nativeMeldung = '1'"
+                + kopfFlag,
             injectionTime: .atDocumentEnd,
             forMainFrameOnly: true
         )
         webView.configuration.userContentController.addUserScript(flagScript)
         webView.configuration.userContentController.add(self, name: "nativeChrome")
+        // Eigener Kanal: eine Meldung darf das Chrome nicht «bereit» schalten (Login-Seite)
+        webView.configuration.userContentController.add(self, name: "meldung")
+        liveActivity.attach(to: webView)
+        aufnahme.attach(to: webView, insel: liveActivity)
+        NativePush.shared.attach(to: webView)
+        datei.attach(to: webView, anzeiger: self)
 
         setupChrome()
         applyTheme()
 
+        // Links aus der Insel und dem Browser (spacemedia://oeffne, spacemedia://konto)
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(pfadOeffnen), name: AppDelegate.oeffnePfad, object: nil)
+        if AppDelegate.wartenderPfad != nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.pfadOeffnen() }
+        }
         NotificationCenter.default.addObserver(
             self, selector: #selector(keyboardWillShow), name: UIResponder.keyboardWillShowNotification, object: nil)
         NotificationCenter.default.addObserver(
@@ -144,6 +247,8 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         applyChromeVisibility()
         layoutIndicator(animated: false)
         reportBottomInset()
+        meldeAktionsHoehe()
+        layoutMeldung()
     }
 
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
@@ -151,6 +256,8 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         coordinator.animate(alongsideTransition: nil) { [weak self] _ in
             self?.applyChromeVisibility()
             self?.layoutIndicator(animated: false)
+            self?.applyAktionsleiste()
+            self?.applyKopfleiste()
         }
     }
 
@@ -194,6 +301,54 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
     }
 
     private func setupChrome() {
+        // Aktionsleiste unten (Seiten ohne Tab-Leiste): erst sichtbar, wenn die Web-App Knöpfe meldet
+        aktionsleiste.translatesAutoresizingMaskIntoConstraints = false
+        aktionsleiste.isHidden = true
+        aktionsleiste.alpha = 0
+        aktionsleiste.onTipp = { [weak self] id in
+            self?.runJS("window.__nativeAktion && window.__nativeAktion('\(id)')")
+        }
+        view.addSubview(aktionsleiste)
+        NSLayoutConstraint.activate([
+            aktionsleiste.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            aktionsleiste.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            aktionsleiste.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+
+        // Kopfleiste: auf der 44-pt-Zeile der Web-Kopfzeile, unter der Statusleiste
+        kopfleiste.translatesAutoresizingMaskIntoConstraints = false
+        kopfleiste.isHidden = true
+        kopfleiste.alpha = 0
+        kopfleiste.onTipp = { [weak self] id in
+            guard id.range(of: "^[a-z0-9-]{1,32}$", options: .regularExpression) != nil else { return }
+            self?.runJS("window.__nativeKopf && window.__nativeKopf('\(id)')")
+        }
+        view.addSubview(kopfleiste)
+        NSLayoutConstraint.activate([
+            kopfleiste.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            kopfleiste.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
+            kopfleiste.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+            kopfleiste.heightAnchor.constraint(equalToConstant: 44),
+        ])
+
+        // Meldung: 12 pt über dem, was unten belegt ist (layoutMeldung), nie unter der Tastatur
+        meldung.translatesAutoresizingMaskIntoConstraints = false
+        meldung.onAntwort = { [weak self] id, art in
+            guard id.range(of: "^[a-z0-9-]{1,32}$", options: .regularExpression) != nil,
+                  ["gezeigt", "aktion", "zu"].contains(art) else { return }
+            self?.runJS("window.__nativeMeldung && window.__nativeMeldung('\(id)','\(art)')")
+        }
+        view.addSubview(meldung)
+        let unten = meldung.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -60)
+        unten.priority = .defaultHigh
+        meldungUnten = unten
+        NSLayoutConstraint.activate([
+            meldung.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
+            meldung.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+            meldung.bottomAnchor.constraint(lessThanOrEqualTo: view.keyboardLayoutGuide.topAnchor, constant: -12),
+            unten,
+        ])
+
         // Scrim hinter der Status-Leiste — das Web-Chrome samt Scrim ist aus.
         scrimView.isUserInteractionEnabled = false
         scrimView.translatesAutoresizingMaskIntoConstraints = false
@@ -250,7 +405,7 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         stack.axis = .horizontal
         stack.distribution = .fillEqually
         stack.translatesAutoresizingMaskIntoConstraints = false
-        for (index, tab) in tabs.enumerated() {
+        for (index, tab) in pillTabs.enumerated() {
             var config = UIButton.Configuration.plain()
             config.image = symbolImage(tab.symbol, active: false)
             config.contentInsets = .zero
@@ -313,7 +468,7 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
     }
 
     private func pillWidthValue() -> CGFloat {
-        CGFloat(tabs.count) * glassConfig.tabWidth + 8
+        CGFloat(pillTabs.count) * glassConfig.tabWidth + 8
     }
 
     private func makeIndicatorView() -> UIView {
@@ -364,11 +519,8 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
             withConfiguration: UIImage.SymbolConfiguration(pointSize: glassConfig.iconSize, weight: .medium))
         menuButton.configuration = menuConfig
 
-        if glassConfig.useSystemTabBar {
-            if #available(iOS 26.0, *) { enableSystemTabBar() }
-        } else {
-            disableSystemTabBar()
-        }
+        updateSystemTabBarPresence()
+        if tabModusKreis { reloadSystemTabs() }
         applySystemTabAppearance()
         applyScrim()
         UIView.animate(withDuration: 0.25) { self.view.layoutIfNeeded() }
@@ -386,6 +538,7 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         statusBarStyle = isLightTheme ? .darkContent : .lightContent
         setNeedsStatusBarAppearanceUpdate()
         applyScrim()
+        applyAktionsleiste()
         // Blur-Fallback: neutrales Material passt sich per Style an.
         if #unavailable(iOS 26.0) {
             let blur = UIBlurEffect(style: .systemMaterial)
@@ -412,21 +565,15 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
     private func enableSystemTabBar() {
         guard systemTabController == nil else { return }
         let controller = UITabBarController()
-        controller.viewControllers = tabs.enumerated().map { pair -> UIViewController in
-            let index = pair.offset
-            let tab = pair.element
-            let placeholder = UIViewController()
-            placeholder.view.backgroundColor = .clear
-            placeholder.view.isUserInteractionEnabled = false
-            let filled = UIImage(systemName: tab.symbol + ".fill")
-            placeholder.tabBarItem = UITabBarItem(
-                title: tab.label,
-                image: UIImage(systemName: tab.symbol),
-                selectedImage: filled ?? UIImage(systemName: tab.symbol))
-            placeholder.tabBarItem.tag = index
-            return placeholder
-        }
         controller.delegate = self
+        tabModusKreis = false
+        if #available(iOS 26.0, *), kreisTab != nil {
+            controller.tabs = makeKreisTabs()
+            tabModusKreis = true
+        } else {
+            controller.viewControllers = makeSystemTabControllers()
+        }
+        kreisAktivBild = ""
         controller.view.backgroundColor = .clear
 
         let overlay = PassthroughView()
@@ -458,6 +605,176 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         applyChromeVisibility()
     }
 
+    /// Leiste unten an/aus: die Web-App führt Tabs (immer, jede iOS-Version)
+    /// oder `glass.useSystemTabBar` (nur iOS 26, sonst bleibt die Pille).
+    private func updateSystemTabBarPresence() {
+        guard chromeContainer != nil else { return }
+        var wanted = webTabsMode
+        if #available(iOS 26.0, *) { wanted = wanted || glassConfig.useSystemTabBar }
+        if wanted { enableSystemTabBar() } else { disableSystemTabBar() }
+    }
+
+    /// Leere, durchsichtige Platzhalter — den Inhalt liefert die WebView.
+    private func makeSystemTabControllers() -> [UIViewController] {
+        systemTabs.enumerated().map { pair -> UIViewController in
+            let index = pair.offset
+            let tab = pair.element
+            let placeholder = UIViewController()
+            placeholder.view.backgroundColor = .clear
+            placeholder.view.isUserInteractionEnabled = false
+            if tab.action {
+                placeholder.tabBarItem = UITabBarItem(title: tab.label, image: aktionsTabBild(tab), selectedImage: aktionsTabBild(tab))
+            } else {
+                let filled = UIImage(systemName: tab.symbol + ".fill")
+                placeholder.tabBarItem = UITabBarItem(
+                    title: tab.label,
+                    image: UIImage(systemName: tab.symbol),
+                    selectedImage: filled ?? UIImage(systemName: tab.symbol))
+            }
+            placeholder.tabBarItem.tag = index
+            return placeholder
+        }
+    }
+
+    /// Mikrofon im Kreis als Tab in der Leiste (ältere iOS, ältere Web-Stände):
+    /// bleibt in jedem Zustand gleich. Ab 1.0.6 in den Farben des Produkts.
+    private func aktionsTabBild(_ tab: SystemTab) -> UIImage? {
+        let kreisSymbol = tab.symbol.hasSuffix(".circle.fill")
+            ? tab.symbol
+            : tab.symbol.replacingOccurrences(of: ".fill", with: "") + ".circle.fill"
+        let vorne = tab.ink ?? .white
+        let hinten = tab.fill.last ?? tab.ring.first ?? .systemBlue
+        let config = UIImage.SymbolConfiguration(pointSize: 24, weight: .semibold)
+            .applying(UIImage.SymbolConfiguration(paletteColors: [vorne, hinten]))
+        let image = UIImage(systemName: kreisSymbol, withConfiguration: config)
+            ?? UIImage(systemName: tab.symbol, withConfiguration: config)
+        return image?.withRenderingMode(.alwaysOriginal)
+    }
+
+    /// iOS 26: Tabs als UITab, der Aktions-Tab als Such-Tab — das System setzt ihn
+    /// als eigenen Glas-Kreis rechts neben die Leiste. Ausgewählt wird er nie.
+    @available(iOS 26.0, *)
+    private func makeKreisTabs() -> [UITab] {
+        systemTabs.map { tab -> UITab in
+            let platzhalter: (UITab) -> UIViewController = { _ in
+                let leer = UIViewController()
+                leer.view.backgroundColor = .clear
+                leer.view.isUserInteractionEnabled = false
+                return leer
+            }
+            if tab.action && tab.trailing {
+                let kreis = UISearchTab(viewControllerProvider: platzhalter)
+                kreis.title = tab.label
+                kreis.image = kreisBild(tab)
+                return kreis
+            }
+            let bild = tab.action ? aktionsTabBild(tab) : tabBild(tab, aktiv: tab.id == activeTabId)
+            return UITab(title: tab.label, image: bild, identifier: tab.id, viewControllerProvider: platzhalter)
+        }
+    }
+
+    private func tabBild(_ tab: SystemTab, aktiv: Bool) -> UIImage? {
+        if aktiv, let gefuellt = UIImage(systemName: tab.symbol + ".fill") { return gefuellt }
+        return UIImage(systemName: tab.symbol)
+    }
+
+    /// Bild im Kreis neben der Leiste. Steno: Scheibe im Verlauf (Steno-Gelb) mit
+    /// Mikrofon; Bot-Team: Ring aus den Bot-Farben ums Mikrofon. Die Grössen kommen
+    /// aus der Glas-Konfiguration der Web-App (nachjustieren ohne App Store).
+    private func kreisBild(_ tab: SystemTab) -> UIImage? {
+        let d = glassConfig.aktionKreis
+        let groesse = CGSize(width: d, height: d)
+        let ringModus = !tab.ring.isEmpty
+        let ink = tab.ink ?? (ringModus
+            ? (isLightTheme ? UIColor.black : UIColor.white)
+            : UIColor(red: 26 / 255, green: 20 / 255, blue: 6 / 255, alpha: 1))
+        let symbolName = tab.symbol.hasSuffix(".fill") ? tab.symbol : tab.symbol + ".fill"
+        let symbol = (UIImage(systemName: symbolName) ?? UIImage(systemName: tab.symbol))?
+            .applyingSymbolConfiguration(UIImage.SymbolConfiguration(pointSize: glassConfig.aktionSymbol, weight: .semibold))?
+            .withTintColor(ink, renderingMode: .alwaysOriginal)
+        let format = UIGraphicsImageRendererFormat.preferred()
+        format.opaque = false
+        let bild = UIGraphicsImageRenderer(size: groesse, format: format).image { ctx in
+            let rect = CGRect(origin: .zero, size: groesse)
+            if ringModus {
+                // Wie conic-gradient(from 200deg, …) im Web: Bogenstücke mit weich gemischten Farben
+                let breite: CGFloat = 2.5
+                let mitte = CGPoint(x: d / 2, y: d / 2)
+                let radius = d / 2 - breite / 2
+                let farben = tab.ring + [tab.ring[0]]
+                let start = -CGFloat.pi / 2 + CGFloat(200) / 180 * CGFloat.pi
+                let stuecke = 120
+                for i in 0..<stuecke {
+                    let t0 = CGFloat(i) / CGFloat(stuecke)
+                    let t1 = CGFloat(i + 1) / CGFloat(stuecke)
+                    let bogen = UIBezierPath(
+                        arcCenter: mitte, radius: radius,
+                        startAngle: start + t0 * 2 * .pi, endAngle: start + t1 * 2 * .pi + 0.01,
+                        clockwise: true)
+                    bogen.lineWidth = breite
+                    Self.mischen(farben, bei: (t0 + t1) / 2).setStroke()
+                    bogen.stroke()
+                }
+            } else {
+                let farben = tab.fill.isEmpty
+                    ? [UIColor(red: 1, green: 213 / 255, blue: 107 / 255, alpha: 1),
+                       UIColor(red: 246 / 255, green: 181 / 255, blue: 30 / 255, alpha: 1)]
+                    : tab.fill
+                let cg = ctx.cgContext
+                cg.saveGState()
+                UIBezierPath(ovalIn: rect).addClip()
+                if farben.count >= 2,
+                   let verlauf = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                                            colors: farben.map { $0.cgColor } as CFArray, locations: nil) {
+                    cg.drawLinearGradient(verlauf, start: CGPoint(x: d / 2, y: 0), end: CGPoint(x: d / 2, y: d), options: [])
+                } else {
+                    farben[0].setFill()
+                    UIRectFill(rect)
+                }
+                cg.restoreGState()
+            }
+            if let symbol {
+                let s = symbol.size
+                symbol.draw(in: CGRect(x: (d - s.width) / 2, y: (d - s.height) / 2, width: s.width, height: s.height))
+            }
+        }
+        return bild.withRenderingMode(.alwaysOriginal)
+    }
+
+    /// Farbe an der Stelle t (0…1) zwischen gleichmässig verteilten Stopps
+    private static func mischen(_ farben: [UIColor], bei t: CGFloat) -> UIColor {
+        guard farben.count > 1 else { return farben.first ?? .white }
+        let pos = max(0, min(1, t)) * CGFloat(farben.count - 1)
+        let i = min(Int(pos), farben.count - 2)
+        let f = pos - CGFloat(i)
+        var r0: CGFloat = 0, g0: CGFloat = 0, b0: CGFloat = 0, a0: CGFloat = 0
+        var r1: CGFloat = 0, g1: CGFloat = 0, b1: CGFloat = 0, a1: CGFloat = 0
+        farben[i].getRed(&r0, green: &g0, blue: &b0, alpha: &a0)
+        farben[i + 1].getRed(&r1, green: &g1, blue: &b1, alpha: &a1)
+        return UIColor(red: r0 + (r1 - r0) * f, green: g0 + (g1 - g0) * f,
+                       blue: b0 + (b1 - b0) * f, alpha: a0 + (a1 - a0) * f)
+    }
+
+    /// Neue Tab-Liste (Paketwechsel, Login): Leiste neu bestücken.
+    private func reloadSystemTabs() {
+        guard let controller = systemTabController else { return }
+        // Wechsel zwischen Kreis und Tab in der Leiste: Leiste neu bauen
+        if (kreisTab != nil) != tabModusKreis {
+            disableSystemTabBar()
+            updateSystemTabBarPresence()
+            return
+        }
+        syncingSystemSelection = true
+        if #available(iOS 26.0, *), tabModusKreis {
+            controller.tabs = makeKreisTabs()
+            kreisAktivBild = activeTabId
+        } else {
+            controller.viewControllers = makeSystemTabControllers()
+        }
+        syncingSystemSelection = false
+        syncSystemTabSelection()
+    }
+
     private func disableSystemTabBar() {
         guard let controller = systemTabController else { return }
         controller.willMove(toParent: nil)
@@ -484,7 +801,25 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
 
     private func syncSystemTabSelection() {
         guard let controller = systemTabController else { return }
-        guard let index = tabs.firstIndex(where: { $0.id == activeTabId }),
+        if #available(iOS 26.0, *), tabModusKreis {
+            // Gefülltes Symbol nur beim aktiven Tab (wie die Web-Leiste). UITab.selectedImage
+            // kennt das SDK von Xcode 26.3 noch nicht, darum tauscht die Hülle selbst.
+            if kreisAktivBild != activeTabId {
+                kreisAktivBild = activeTabId
+                for tab in controller.tabs where !(tab is UISearchTab) {
+                    if let eintrag = systemTabs.first(where: { $0.id == tab.identifier }), !eintrag.action {
+                        tab.image = tabBild(eintrag, aktiv: eintrag.id == activeTabId)
+                    }
+                }
+            }
+            guard let ziel = controller.tabs.first(where: { $0.identifier == activeTabId && !($0 is UISearchTab) }),
+                  controller.selectedTab !== ziel else { return }
+            syncingSystemSelection = true
+            controller.selectedTab = ziel
+            syncingSystemSelection = false
+            return
+        }
+        guard let index = systemTabs.firstIndex(where: { $0.id == activeTabId }),
               controller.viewControllers?.indices.contains(index) == true,
               controller.selectedIndex != index else { return }
         syncingSystemSelection = true
@@ -509,18 +844,74 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
             + "document.documentElement.dataset.nativeTabbar=\(flag);")
     }
 
-    func tabBarController(_ tabBarController: UITabBarController, didSelect viewController: UIViewController) {
-        guard !syncingSystemSelection else { return }
+    /// Aktions-Tab (Diktat) wählt nicht aus, sondern löst aus — wie ein Knopf.
+    func tabBarController(_ tabBarController: UITabBarController, shouldSelect viewController: UIViewController) -> Bool {
+        // Kreis-Modus: entscheidet shouldSelectTab (UITab)
+        guard !tabModusKreis else { return true }
         let index = viewController.tabBarItem.tag
-        guard tabs.indices.contains(index) else { return }
+        guard systemTabs.indices.contains(index), systemTabs[index].action else { return true }
+        aktionAusloesen(systemTabs[index])
+        return false
+    }
+
+    func tabBarController(_ tabBarController: UITabBarController, didSelect viewController: UIViewController) {
+        guard !syncingSystemSelection, !tabModusKreis else { return }
+        let index = viewController.tabBarItem.tag
+        guard systemTabs.indices.contains(index) else { return }
+        tabGewaehlt(systemTabs[index])
+    }
+
+    /// Ab iOS 18 meldet UIKit Tipps auch über UITab — im Kreis-Modus nur so, und
+    /// für SwiftUI-Leisten meldet iOS 27 die alten Wege gar nicht mehr. Darum hier
+    /// beide Modi; doppelt gemeldete Tipps zählen einmal (aktionAusloesen, tabGewaehlt).
+    @available(iOS 18.0, *)
+    func tabBarController(_ tabBarController: UITabBarController, shouldSelectTab tab: UITab) -> Bool {
+        guard let eintrag = eintrag(fuer: tab), eintrag.action else { return true }
+        aktionAusloesen(eintrag)
+        return false
+    }
+
+    @available(iOS 18.0, *)
+    func tabBarController(_ tabBarController: UITabBarController, didSelectTab selectedTab: UITab, previousTab: UITab?) {
+        guard !syncingSystemSelection, let eintrag = eintrag(fuer: selectedTab), !eintrag.action else { return }
+        tabGewaehlt(eintrag)
+    }
+
+    /// Unser Tab hinter einem UITab: Kreis über den Such-Tab, Kreis-Modus über die
+    /// Kennung, klassisch (viewControllers) über den Platzhalter und seinen Tag.
+    @available(iOS 18.0, *)
+    private func eintrag(fuer tab: UITab) -> SystemTab? {
+        if tab is UISearchTab { return systemTabs.last { $0.action && $0.trailing } }
+        if tabModusKreis { return systemTabs.first { $0.id == tab.identifier } }
+        guard let index = tab.viewController?.tabBarItem.tag, systemTabs.indices.contains(index) else { return nil }
+        return systemTabs[index]
+    }
+
+    private func aktionAusloesen(_ tab: SystemTab) {
+        guard Date().timeIntervalSince(letzteAktion) > 0.4 else { return }
+        letzteAktion = Date()
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        runJS("window.__nativeNavigate && window.__nativeNavigate('\(tab.id)')")
+    }
+
+    private func tabGewaehlt(_ tab: SystemTab) {
+        if let letzte = letzteWahl, letzte.id == tab.id, Date().timeIntervalSince(letzte.zeit) < 0.4 { return }
+        letzteWahl = (tab.id, Date())
         UISelectionFeedbackGenerator().selectionChanged()
-        navigate(to: tabs[index].id)
+        navigate(to: tab.id)
     }
 
     // MARK: - Aktionen (Nativ -> Web)
 
     private func runJS(_ js: String) {
         webView?.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    /// Wartenden Pfad in der Web-App öffnen (nur geprüfte eigene Pfade, AppDelegate.istEigenerPfad)
+    @objc private func pfadOeffnen() {
+        guard let pfad = AppDelegate.wartenderPfad, AppDelegate.istEigenerPfad(pfad) else { return }
+        AppDelegate.wartenderPfad = nil
+        runJS("window.location.assign('\(pfad)')")
     }
 
     @objc private func menuTapped() {
@@ -530,7 +921,7 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
 
     @objc private func tabTapped(_ sender: UIButton) {
         UISelectionFeedbackGenerator().selectionChanged()
-        navigate(to: tabs[sender.tag].id)
+        navigate(to: pillTabs[sender.tag].id)
     }
 
     /// Optimistisch sofort umschalten; die Web-App bestätigt nach Navigation
@@ -546,6 +937,10 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
     // MARK: - Web -> Nativ
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "meldung" {
+            meldungEmpfangen(message.body)
+            return
+        }
         guard message.name == "nativeChrome", let body = message.body as? [String: Any] else { return }
         chromeReady = true
         if let hidden = body["hidden"] as? Bool {
@@ -566,6 +961,30 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         if let active = body["active"] as? String {
             activeTabId = active
         }
+        if let rawTabs = body["tabs"] as? [[String: Any]] {
+            let next: [SystemTab] = rawTabs.compactMap { (raw: [String: Any]) -> SystemTab? in
+                guard let id = raw["id"] as? String, let symbol = raw["symbol"] as? String,
+                      let label = raw["label"] as? String,
+                      id.range(of: "^[a-z0-9-]{1,32}$", options: .regularExpression) != nil
+                else { return nil }
+                let farben = raw["farben"] as? [String: Any]
+                return SystemTab(
+                    id: id, symbol: symbol, label: label, action: raw["action"] as? Bool ?? false,
+                    trailing: (raw["placement"] as? String) == "trailing",
+                    fill: (farben?["fill"] as? [String] ?? []).compactMap { Self.color(fromHex: $0) },
+                    ink: (farben?["ink"] as? String).flatMap { Self.color(fromHex: $0) },
+                    ring: (farben?["ring"] as? [String] ?? []).compactMap { Self.color(fromHex: $0) })
+            }
+            if next != webTabs {
+                let modeChanged = next.isEmpty != webTabs.isEmpty
+                webTabs = next
+                if modeChanged {
+                    lastAppliedHidden = nil
+                    updateSystemTabBarPresence()
+                }
+                reloadSystemTabs()
+            }
+        }
         if let raw = body["glass"] as? [String: Any] {
             let next = Self.parseGlassConfig(from: raw, base: glassConfig)
             if next != glassConfig {
@@ -573,8 +992,171 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
                 applyGlassConfig()
             }
         }
+        // Aktionsleiste der Seite (ab 1.0.6): null = keine (auch während ein Blatt offen ist)
+        if body.keys.contains("aktionen") {
+            aktionsInhalt = Self.parseAktionen(body["aktionen"])
+        }
+        // Kopfleiste der Seite (ab 1.0.6 Build 4): null = keine (auch während ein Blatt offen ist)
+        if body.keys.contains("kopf") {
+            kopfInhalt = Self.parseKopf(body["kopf"])
+        }
         applyActiveTab(animated: true)
         applyChromeVisibility()
+        applyAktionsleiste()
+        applyKopfleiste()
+    }
+
+    /// Kopf aus der Web-App: eigene Kennungen, nur bekannte SF Symbols
+    private static func parseKopf(_ roh: Any?) -> NativeKopfleiste.Inhalt? {
+        guard let raw = roh as? [String: Any] else { return nil }
+        let zurueck = (raw["zurueck"] as? [String: Any])?["label"] as? String
+        let liste = raw["knoepfe"] as? [[String: Any]] ?? []
+        let knoepfe = liste.compactMap { (k: [String: Any]) -> NativeKopfleiste.Knopf? in
+            guard let id = k["id"] as? String, let symbol = k["symbol"] as? String,
+                  let label = k["label"] as? String, !label.isEmpty,
+                  id.range(of: "^[a-z0-9-]{1,32}$", options: .regularExpression) != nil,
+                  symbol.range(of: "^[a-z0-9.]{1,64}$", options: .regularExpression) != nil,
+                  UIImage(systemName: symbol) != nil
+            else { return nil }
+            return NativeKopfleiste.Knopf(id: id, symbol: symbol, label: String(label.prefix(60)), aus: k["aus"] as? Bool ?? false)
+        }
+        guard zurueck != nil || !knoepfe.isEmpty else { return nil }
+        return NativeKopfleiste.Inhalt(zurueck: zurueck.map { String($0.prefix(40)) }, knoepfe: Array(knoepfe.prefix(2)))
+    }
+
+    /// Kopfleiste zeigen oder weg: nur iOS 26, Handy-Breite, Inhalt gemeldet
+    private func applyKopfleiste() {
+        var zeigen = false
+        if #available(iOS 26.0, *) {
+            zeigen = chromeReady && kopfInhalt != nil && view.bounds.width < 1024
+        }
+        if let inhalt = kopfInhalt {
+            kopfleiste.setze(inhalt, hell: isLightTheme)
+        }
+        guard zeigen != kopfSichtbar else { return }
+        kopfSichtbar = zeigen
+        if zeigen {
+            kopfleiste.isHidden = false
+            view.bringSubviewToFront(kopfleiste)
+        }
+        UIView.animate(withDuration: 0.2, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+            self.kopfleiste.alpha = zeigen ? 1 : 0
+        } completion: { _ in
+            if !self.kopfSichtbar { self.kopfleiste.isHidden = true }
+        }
+    }
+
+    /// Knöpfe aus der Web-App: nur eigene Kennungen (sie landen in einem JS-Aufruf)
+    private static func parseAktionen(_ roh: Any?) -> NativeAktionsleiste.Inhalt? {
+        guard let raw = roh as? [String: Any], let liste = raw["knoepfe"] as? [[String: Any]] else { return nil }
+        let knoepfe = liste.compactMap { (k: [String: Any]) -> NativeAktionsleiste.Knopf? in
+            guard let id = k["id"] as? String, let label = k["label"] as? String, !label.isEmpty,
+                  id.range(of: "^[a-z0-9-]{1,32}$", options: .regularExpression) != nil
+            else { return nil }
+            return NativeAktionsleiste.Knopf(
+                id: id, label: String(label.prefix(60)),
+                haupt: (k["stil"] as? String) == "haupt", aus: k["aus"] as? Bool ?? false)
+        }
+        guard !knoepfe.isEmpty else { return nil }
+        return NativeAktionsleiste.Inhalt(
+            text: (raw["text"] as? String).map { String($0.prefix(160)) },
+            knoepfe: Array(knoepfe.prefix(3)),
+            akzent: (raw["akzent"] as? String).flatMap { Self.color(fromHex: $0) },
+            tinte: (raw["tinte"] as? String).flatMap { Self.color(fromHex: $0) })
+    }
+
+    /// Aktionsleiste zeigen oder weg: Knöpfe gemeldet, keine Tastatur, Handy-Breite
+    private func applyAktionsleiste() {
+        let desktopChrome = view.bounds.width >= 1024
+        let zeigen = chromeReady && !hiddenByKeyboard && !desktopChrome && aktionsInhalt != nil
+        if let inhalt = aktionsInhalt {
+            aktionsleiste.setze(inhalt, hell: isLightTheme, grund: scrimColor)
+        }
+        guard zeigen != aktionenSichtbar else { return }
+        aktionenSichtbar = zeigen
+        let ruhig = UIAccessibility.isReduceMotionEnabled
+        let weg = ruhig ? CGAffineTransform.identity : CGAffineTransform(translationX: 0, y: 28)
+        if zeigen {
+            aktionsleiste.isHidden = false
+            view.bringSubviewToFront(aktionsleiste)
+            aktionsleiste.transform = weg
+            UIView.animate(
+                withDuration: ruhig ? 0.2 : 0.46, delay: 0, usingSpringWithDamping: 0.86,
+                initialSpringVelocity: 0, options: [.allowUserInteraction, .beginFromCurrentState]
+            ) {
+                self.aktionsleiste.alpha = 1
+                self.aktionsleiste.transform = .identity
+            }
+            view.layoutIfNeeded()
+            meldeAktionsHoehe()
+            layoutMeldung()
+        } else {
+            UIView.animate(withDuration: 0.2, delay: 0, options: [.curveEaseIn, .beginFromCurrentState]) {
+                self.aktionsleiste.alpha = 0
+                self.aktionsleiste.transform = weg
+            } completion: { _ in
+                if !self.aktionenSichtbar { self.aktionsleiste.isHidden = true }
+                self.layoutMeldung()
+            }
+        }
+    }
+
+    /// Wie viel die Aktionsleiste unten belegt — die Seite polstert darüber (--native-aktionen-h)
+    private func meldeAktionsHoehe() {
+        guard aktionenSichtbar else { return }
+        let hoehe = aktionsleiste.bounds.height.rounded()
+        guard hoehe > 0, hoehe != gemeldeteAktionsHoehe else { return }
+        gemeldeteAktionsHoehe = hoehe
+        runJS("document.documentElement.style.setProperty('--native-aktionen-h','\(Int(hoehe))px')")
+    }
+
+    // MARK: - Meldung (Toast)
+
+    private static let meldungTypen: Set<String> = ["erfolg", "fehler", "info", "warnung", "laden", "normal"]
+
+    /// {meldung: {id, typ, titel, text?, aktion?, hell} | null} — nur eigene Kennungen,
+    /// Texte gekürzt (sie landen in einem Label, nicht in JS)
+    private func meldungEmpfangen(_ roh: Any) {
+        guard let body = roh as? [String: Any] else { return }
+        guard let m = body["meldung"] as? [String: Any],
+              let id = m["id"] as? String, id.range(of: "^[a-z0-9-]{1,32}$", options: .regularExpression) != nil,
+              let titel = m["titel"] as? String, !titel.isEmpty
+        else {
+            meldung.verstecke()
+            return
+        }
+        let typ = (m["typ"] as? String).flatMap { Self.meldungTypen.contains($0) ? $0 : nil } ?? "normal"
+        let inhalt = NativeMeldung.Inhalt(
+            id: id, typ: typ, titel: String(titel.prefix(120)),
+            text: (m["text"] as? String).map { String($0.prefix(200)) },
+            aktion: (m["aktion"] as? String).map { String($0.prefix(24)) },
+            hell: m["hell"] as? Bool ?? isLightTheme)
+        layoutMeldung()
+        view.bringSubviewToFront(meldung)
+        meldung.zeige(inhalt, akzent: accent)
+        meldung.onAntwort?(id, "gezeigt")
+    }
+
+    /// Die Meldung sitzt 12 pt über dem, was unten belegt ist: Home-Indikator,
+    /// Apples Tab-Leiste (sichtbar) oder die Aktionsleiste der Seite.
+    private func layoutMeldung() {
+        guard let unten = meldungUnten else { return }
+        var belegt = view.safeAreaInsets.bottom
+        if let controller = systemTabController, lastAppliedHidden == false {
+            let barTop = controller.tabBar.convert(controller.tabBar.bounds, to: view).minY
+            belegt = max(belegt, view.bounds.height - barTop)
+        }
+        if aktionenSichtbar {
+            belegt = max(belegt, view.bounds.height - aktionsleiste.frame.minY - 14)
+        }
+        let neu = -(belegt.rounded() + 12)
+        guard unten.constant != neu else { return }
+        unten.constant = neu
+        if meldung.sichtbar {
+            UIView.animate(withDuration: 0.25, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+                self.view.layoutIfNeeded()
+            }
+        }
     }
 
     // MARK: - Auswahl (Lozenge + Icons)
@@ -602,11 +1184,11 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
 
     private func applyActiveTab(animated: Bool) {
         guard !tabButtons.isEmpty else { return }
-        let newIndex = tabs.firstIndex { $0.id == activeTabId }
+        let newIndex = pillTabs.firstIndex { $0.id == activeTabId }
         let changed = newIndex != currentActiveIndex
         currentActiveIndex = newIndex
 
-        for (index, tab) in tabs.enumerated() {
+        for (index, tab) in pillTabs.enumerated() {
             let isActive = index == newIndex
             let button = tabButtons[index]
             var config = button.configuration
@@ -676,7 +1258,7 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
     private func layoutIndicator(animated: Bool) {
         guard let indicator = indicatorView, let stack = tabStack, !tabButtons.isEmpty,
               systemTabController == nil else { return }
-        guard let index = tabs.firstIndex(where: { $0.id == activeTabId }),
+        guard let index = pillTabs.firstIndex(where: { $0.id == activeTabId }),
               tabButtons.indices.contains(index) else {
             // Route ohne eigenen Tab (Dashboard, Einstellungen): kein Lozenge.
             setIndicator(hidden: true, animated: animated)
@@ -709,7 +1291,7 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
                 animations: { indicator.alpha = 0 },
                 completion: { [weak self] _ in
                     guard let self else { return }
-                    guard self.tabs.firstIndex(where: { $0.id == self.activeTabId }) == index else { return }
+                    guard self.pillTabs.firstIndex(where: { $0.id == self.activeTabId }) == index else { return }
                     apply()
                     UIView.animate(
                         withDuration: 0.18, delay: 0,
@@ -774,6 +1356,8 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         if let v = raw["topInset"] as? Double { config.topInset = CGFloat(v) }
         if let v = raw["useSystemTabBar"] as? Bool { config.useSystemTabBar = v }
         if let v = raw["labelSize"] as? Double { config.labelSize = CGFloat(v) }
+        if let v = raw["aktionKreis"] as? Double { config.aktionKreis = CGFloat(max(24, min(60, v))) }
+        if let v = raw["aktionSymbol"] as? Double { config.aktionSymbol = CGFloat(max(12, min(30, v))) }
         return config
     }
 
@@ -793,11 +1377,13 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
     @objc private func keyboardWillShow() {
         hiddenByKeyboard = true
         applyChromeVisibility()
+        applyAktionsleiste()
     }
 
     @objc private func keyboardWillHide() {
         hiddenByKeyboard = false
         applyChromeVisibility()
+        applyAktionsleiste()
     }
 
     private func applyChromeVisibility() {
@@ -807,21 +1393,32 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         let hidden = !chromeReady || hiddenByWeb || hiddenByKeyboard || desktopChrome
         if hidden == lastAppliedHidden { return }
         lastAppliedHidden = hidden
-        chromeContainer.isUserInteractionEnabled = !hidden
-        scrimView.isHidden = desktopChrome
+        // Tabs aus der Web-App: oben bleibt nichts Natives (Menü/Scrim)
+        let topHidden = hidden || webTabsMode
+        chromeContainer.isUserInteractionEnabled = !topHidden
+        scrimView.isHidden = desktopChrome || webTabsMode
         UIView.animate(withDuration: 0.24, delay: 0, options: [.curveEaseOut]) {
-            self.chromeContainer.alpha = hidden ? 0 : 1
-            self.chromeContainer.transform = hidden ? CGAffineTransform(translationX: 0, y: -10) : .identity
-            self.scrimView.alpha = hidden && !self.hiddenByKeyboard ? 0 : 1
+            self.chromeContainer.alpha = topHidden ? 0 : 1
+            self.chromeContainer.transform = topHidden ? CGAffineTransform(translationX: 0, y: -10) : .identity
+            self.scrimView.alpha = topHidden && !self.hiddenByKeyboard ? 0 : 1
         }
         if let overlay = tabOverlay {
             overlay.isUserInteractionEnabled = !hidden
-            UIView.animate(withDuration: 0.24, delay: 0, options: [.curveEaseOut]) {
-                overlay.alpha = hidden ? 0 : 1
-                overlay.transform = hidden ? CGAffineTransform(translationX: 0, y: 12) : .identity
+            if #available(iOS 18.0, *), let controller = systemTabController {
+                // Apples eigenes Aus- und Einblenden: die Leiste gleitet weg wie beim
+                // Öffnen eines Gesprächs (Chat, Dokument) und kommt mit Glas-Animation zurück
+                overlay.alpha = 1
+                overlay.transform = .identity
+                controller.setTabBarHidden(hidden, animated: !UIAccessibility.isReduceMotionEnabled)
+            } else {
+                UIView.animate(withDuration: 0.24, delay: 0, options: [.curveEaseOut]) {
+                    overlay.alpha = hidden ? 0 : 1
+                    overlay.transform = hidden ? CGAffineTransform(translationX: 0, y: 12) : .identity
+                }
             }
         }
         reportBottomInset()
+        layoutMeldung()
     }
 }
 
@@ -854,6 +1451,11 @@ final class PassthroughView: UIView {
         while let current = node {
             if current === interactive { return hit }
             node = current.superview
+        }
+        // iOS 26: der abgesetzte Kreis (Such-Tab) muss nicht in der Leiste hängen —
+        // im Streifen der Leiste gilt jeder Treffer (die Web-App lässt ihn ohnehin frei)
+        if !interactive.isHidden, hit !== self, interactive.convert(interactive.bounds, to: self).contains(point) {
+            return hit
         }
         return nil
     }

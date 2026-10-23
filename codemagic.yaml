@@ -2,14 +2,21 @@
 # Docs: https://docs.codemagic.io/yaml-quick-start/building-a-native-android-app/
 
 workflows:
-  # ---- iOS: Build + auto-submit to TestFlight ----
-  # Trigger: manual (via Codemagic UI). Avoid auto-trigger so Apple Compliance review isn't
-  # disturbed by repeated TestFlight uploads.
+  # ---- iOS: Build + TestFlight + App-Store-Review ----
+  # Trigger: manuell (Codemagic-UI) oder ein Tag `ios-*` (wie in der Sport-Nexus-Hülle).
+  # Jeder Lauf reicht die Version direkt zur App-Review ein (release_notes.json = «Neu in
+  # dieser Version»); freigegeben geht sie von selbst live.
   ios-workflow:
-    name: iOS (TestFlight)
+    name: iOS (TestFlight + App Store)
     instance_type: mac_mini_m2
     max_build_duration: 60
-    environment:
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'ios-*'
+          include: true
+    environment: &ios_umgebung
       groups:
         - app_store_credentials   # APP_STORE_CONNECT_KEY_IDENTIFIER, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_PRIVATE_KEY
       vars:
@@ -18,7 +25,7 @@ workflows:
         XCODE_SCHEME: App
       node: 22
       xcode: latest
-    scripts:
+    scripts: &ios_skripte
       - name: Install npm dependencies (mobile)
         script: |
           cd mobile
@@ -29,13 +36,105 @@ workflows:
           npx cap sync ios
       - name: Install signing certificate + provisioning profile
         script: |
+          set -eo pipefail
           # We pre-generated the distribution certificate and provisioning
           # profile manually (Apple's API can't re-export the private key for
           # a fresh distribution cert). Both are passed in as base64 env vars.
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           echo "$IOS_DISTRIBUTION_CERT_BASE64" | base64 --decode > /tmp/ios_distribution.p12
-          echo "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode \
-            > ~/Library/MobileDevice/Provisioning\ Profiles/space_media_app_store.mobileprovision
+          # Schlüssel des vorhandenen Verteilungs-Zertifikats für die API (kein neues Zertifikat).
+          # Nur der reine RSA-Schlüssel (openssl rsa): mit den «Bag Attributes» aus
+          # pkcs12 lehnte die CLI ihn ab (Build #24, 1.0.5), und nichts brach ab.
+          openssl pkcs12 -in /tmp/ios_distribution.p12 -nocerts -nodes \
+            -passin pass:"$IOS_DISTRIBUTION_CERT_PASSWORD" 2>/dev/null > /tmp/ios_distribution_p12_key.pem \
+            || openssl pkcs12 -legacy -in /tmp/ios_distribution.p12 -nocerts -nodes \
+                 -passin pass:"$IOS_DISTRIBUTION_CERT_PASSWORD" > /tmp/ios_distribution_p12_key.pem
+          openssl rsa -in /tmp/ios_distribution_p12_key.pem -out /tmp/ios_distribution_key.pem
+          rm -f /tmp/ios_distribution_p12_key.pem
+
+          # App (ab 1.0.6 Build 5, nativer Push): Push auf der App-ID einschalten und das
+          # App-Store-Profil über den ASC-API-Key holen — Apple macht alte Profile beim
+          # Einschalten ungültig, --create legt dann ein neues MIT aps-environment an.
+          # Das früher von Hand hochgeladene Profil (IOS_PROVISIONING_PROFILE_BASE64) hat
+          # kein Push und wird nicht mehr installiert.
+          BID=$(app-store-connect bundle-ids list --bundle-id-identifier "$BUNDLE_ID" \
+                  --strict-match-identifier --platform IOS --json \
+                | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d[0]["id"] if d else "")')
+          if [ -n "$BID" ]; then
+            # Die CLI will den Anzeigenamen, nicht PUSH_NOTIFICATIONS (Build #4)
+            app-store-connect bundle-ids enable-capabilities "$BID" --capability "Push Notifications" \
+              || echo "Push-Fähigkeit: schon eingeschaltet oder nicht setzbar"
+          fi
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --platform IOS \
+            --type IOS_APP_STORE \
+            --certificate-key @file:/tmp/ios_distribution_key.pem \
+            --create
+          # Profile der App prüfen. Die CLI speichert sie unter Xcode/UserData (Xcode 16+),
+          # nicht unter MobileDevice (Build #4). Profile ohne Push fliegen von der Platte,
+          # damit use-profiles sie nicht nimmt; ihre UUIDs landen in OHNE_PUSH.
+          profile_pruefen() {
+            PUSH_OK=0
+            OHNE_PUSH=""
+            for profil in ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision \
+                          ~/Library/Developer/Xcode/UserData/Provisioning\ Profiles/*.mobileprovision; do
+              [ -f "$profil" ] || continue
+              security cms -D -i "$profil" > /tmp/profil.plist 2>/dev/null || continue
+              APP_ID=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' /tmp/profil.plist 2>/dev/null || true)
+              NAME=$(/usr/libexec/PlistBuddy -c 'Print :Name' /tmp/profil.plist 2>/dev/null || true)
+              case "$APP_ID" in
+                *."$BUNDLE_ID")
+                  if /usr/libexec/PlistBuddy -c 'Print :Entitlements:aps-environment' /tmp/profil.plist >/dev/null 2>&1; then
+                    PUSH_OK=1
+                    echo "Profil mit Push: $NAME"
+                  else
+                    echo "Profil ohne Push: $NAME"
+                    OHNE_PUSH="$OHNE_PUSH $(/usr/libexec/PlistBuddy -c 'Print :UUID' /tmp/profil.plist)"
+                    rm -f "$profil"
+                  fi;;
+              esac
+            done
+          }
+          profile_pruefen
+          if [ "$PUSH_OK" != "1" ] && [ -n "$OHNE_PUSH" ]; then
+            # Apple hat das alte Profil nach dem Einschalten nicht ungültig gemacht, und
+            # fetch-signing-files nimmt jedes aktive Profil mit passendem Zertifikat.
+            # Altes Profil löschen, dann legt --create eines mit dem heutigen Push an.
+            for uuid in $OHNE_PUSH; do
+              PID=$(app-store-connect profiles list --type IOS_APP_STORE --state ACTIVE --json \
+                    | python3 -c 'import json,sys; u=sys.argv[1]; print(next((p["id"] for p in json.load(sys.stdin) if p["attributes"]["uuid"]==u), ""))' "$uuid")
+              if [ -n "$PID" ]; then
+                echo "Lösche Profil ohne Push: $PID"
+                app-store-connect profiles delete "$PID"
+              fi
+            done
+            app-store-connect fetch-signing-files "$BUNDLE_ID" \
+              --platform IOS \
+              --type IOS_APP_STORE \
+              --certificate-key @file:/tmp/ios_distribution_key.pem \
+              --create
+            profile_pruefen
+          fi
+          if [ "$PUSH_OK" != "1" ]; then
+            echo "FEHLER: Kein App-Store-Profil für $BUNDLE_ID mit Push (aps-environment) — App-ID in Apples Portal prüfen."
+            exit 1
+          fi
+          # Live Activity (Dynamic Island) ist eine eigene Widget-Erweiterung mit
+          # eigener App-ID ch.spacemedia.app.LiveActivity und eigenem Profil.
+          # Vorgegebenes Profil (base64) hat Vorrang; sonst legt der ASC-API-Key
+          # aus app_store_credentials App-ID + App-Store-Profil selbst an — mit
+          # dem Schlüssel des vorhandenen Verteilungs-Zertifikats (kein neues).
+          if [ -n "$IOS_LIVEACTIVITY_PROFILE_BASE64" ]; then
+            echo "$IOS_LIVEACTIVITY_PROFILE_BASE64" | base64 --decode \
+              > ~/Library/MobileDevice/Provisioning\ Profiles/space_media_live_activity_app_store.mobileprovision
+          else
+            app-store-connect fetch-signing-files "$BUNDLE_ID.LiveActivity" \
+              --platform IOS \
+              --type IOS_APP_STORE \
+              --certificate-key @file:/tmp/ios_distribution_key.pem \
+              --create
+          fi
+          rm -f /tmp/ios_distribution_key.pem /tmp/profil.plist
           keychain initialize
           keychain add-certificates --certificate /tmp/ios_distribution.p12 \
             --certificate-password "$IOS_DISTRIBUTION_CERT_PASSWORD"
@@ -60,20 +159,54 @@ workflows:
           ANY_BUILD=${ANY_BUILD:-0}
           LATEST_BUILD=$(( TF_BUILD > AS_BUILD ? TF_BUILD : AS_BUILD ))
           LATEST_BUILD=$(( ANY_BUILD > LATEST_BUILD ? ANY_BUILD : LATEST_BUILD ))
-          NEW_BUILD=$(( BUILD_NUMBER > LATEST_BUILD ? BUILD_NUMBER : LATEST_BUILD + 1 ))
+          # $BUILD_NUMBER zählt je Ablauf: der TestFlight-Ablauf begann bei 1 und lag
+          # am 12.10. bei 6, dazu meldete die ASC-Abfrage wieder 23 statt 24 → Build #6
+          # wählte 24 → 409. $PROJECT_BUILD_NUMBER zählt über alle Abläufe der App und
+          # wiederholt sich nie; +100 hebt ihn über alles bisher Hochgeladene (bis 26).
+          BASIS=$(( ${PROJECT_BUILD_NUMBER:-$BUILD_NUMBER} + 100 ))
+          NEW_BUILD=$(( BASIS > LATEST_BUILD ? BASIS : LATEST_BUILD + 1 ))
           # Notbremse: beim API-Trigger als environment.variables.IOS_BUILD_NUMBER mitgeben.
           if [ -n "$IOS_BUILD_NUMBER" ]; then NEW_BUILD=$IOS_BUILD_NUMBER; fi
-          echo "Codemagic: $BUILD_NUMBER, TestFlight: $TF_BUILD, App Store: $AS_BUILD, alle: $ANY_BUILD -> Build-Nummer: $NEW_BUILD"
+          echo "Codemagic: $BUILD_NUMBER (App: ${PROJECT_BUILD_NUMBER:-?}), TestFlight: $TF_BUILD, App Store: $AS_BUILD, alle: $ANY_BUILD -> Build-Nummer: $NEW_BUILD"
           agvtool new-version -all $NEW_BUILD
       - name: Build .ipa
         script: |
           xcode-project build-ipa \
             --project "$XCODE_PROJECT" \
             --scheme "$XCODE_SCHEME"
-    artifacts:
+    artifacts: &ios_artefakte
       - build/ios/ipa/*.ipa
       - build/ios/xcarchive/*.xcarchive/Info.plist
       - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
+        beta_groups:
+          - Internal Testers
+        submit_to_app_store: true
+        release_type: AFTER_APPROVAL
+        cancel_previous_submissions: true
+
+  # ---- iOS: nur TestFlight (auf dem Gerät testen, bevor Apple prüft) ----
+  # Trigger: Tag `testflight-*`. Derselbe Build wie ios-workflow (Umgebung, Skripte und
+  # Artefakte per YAML-Anker), lädt aber nur zu TestFlight (Internal Testers) hoch.
+  # Eingereicht wird danach in App Store Connect oder mit einem Tag `ios-*`.
+  ios-testflight:
+    name: iOS (nur TestFlight)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'testflight-*'
+          include: true
+    environment: *ios_umgebung
+    scripts: *ios_skripte
+    artifacts: *ios_artefakte
     publishing:
       app_store_connect:
         api_key: $APP_STORE_CONNECT_PRIVATE_KEY

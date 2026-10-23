@@ -5,7 +5,8 @@
 // Electron's own Node (ELECTRON_RUN_AS_NODE) — `pair`, then `run` — and keep it alive while the app is open.
 //
 // Anthropic's rules (docs/plans/2026-10-21-eigenes-claude-abo.md in the web repo): the connector drives the
-// unmodified `claude` binary; the person signs in to Claude Code themselves; this shell never reads, stores or
+// unmodified `claude` binary; the person signs in to Claude Code themselves — `anmelden()` only starts Claude Code's
+// own `claude auth login`, which completes in Anthropic's flow in the browser; this shell never reads, stores or
 // forwards a Claude token. The only secret here is the SPACE device token, which the connector itself writes
 // to config.json and which never goes to the page.
 
@@ -18,15 +19,19 @@ const CLAUDE_INSTALL_URL = 'https://claude.com/claude-code';
 const BUNDLE_PATH = '/connector/space-connector.mjs';
 const MAX_BUNDLE_BYTES = 2 * 1024 * 1024;
 const CLAUDE_CHECK_TTL_MS = 30_000;
+const LOGIN_TIMEOUT_MS = 10 * 60_000;
 
 const MELDUNG = {
-  claudeFehlt: 'Claude Code ist auf diesem Rechner nicht installiert. Installiere es, melde dich einmal mit deinem Claude-Konto an und klicke dann nochmals auf «Diesen Rechner koppeln».',
-  nichtAngemeldet: 'Claude Code ist installiert, aber nicht angemeldet. Öffne Claude Code einmal und melde dich mit deinem Claude-Konto an, dann nochmals «Diesen Rechner koppeln».',
+  claudeFehlt: 'Claude Code ist auf diesem Rechner nicht installiert. Installiere es und klicke dann nochmals auf «Claude-Abo verbinden».',
+  nichtAngemeldet: 'Claude Code ist installiert, aber nicht angemeldet. «Claude-Abo verbinden» öffnet die Anmeldung von Claude im Browser.',
   abgelehnt: 'Die App kennt diesen Rechner nicht mehr. Koppel ihn neu, wenn der Chat wieder über dein Abo laufen soll.',
   laden: 'Der SPACE Connector liess sich nicht laden. Prüfe die Internetverbindung und versuche es nochmals.',
   fremdeAdresse: 'Die gespeicherte Kopplung gehört zu einer anderen Adresse. Bitte neu koppeln.',
   code: 'Der Koppel-Code ist ungültig.',
   koppelnLaeuft: 'Dieser Rechner wird gerade gekoppelt.',
+  anmeldungLaeuft: 'Die Anmeldung läuft schon — bestätige sie im Browser.',
+  anmeldungOffen: 'Die Anmeldung bei Claude wurde nicht abgeschlossen. Versuche es nochmals.',
+  anmeldungAbgebrochen: 'Anmeldung abgebrochen.',
 };
 
 // ── Pure helpers (connector.test.js) ─────────────────────────────────────────
@@ -108,6 +113,22 @@ function connectorEnv(base, { platform, home, connectorHome, bundle, claudeBin }
   delete env.ANTHROPIC_API_KEY;
   delete env.ANTHROPIC_AUTH_TOKEN;
   return env;
+}
+
+/** Environment for running `claude` itself: like the connector's, but without Electron's node mode. */
+function claudeEnv(base, opts) {
+  const env = connectorEnv(base, opts);
+  delete env.ELECTRON_RUN_AS_NODE;
+  delete env.SPACE_CONNECTOR_BUNDLE;
+  return env;
+}
+
+/**
+ * Claude Code's own sign-in with the Claude subscription. The unmodified binary opens Anthropic's page in the
+ * browser and receives the result on its own localhost callback — no code to copy, nothing passes through us.
+ */
+function claudeLoginArgs() {
+  return ['auth', 'login', '--claudeai'];
 }
 
 /** Does a download look like the connector bundle (and not an error or login page)? */
@@ -192,6 +213,7 @@ function createConnectorHost(o) {
   let shuttingDown = false;
   let claude = { at: 0, gefunden: false, angemeldet: null, bin: null };
   let logStarted = false;
+  let login = null; // running `claude auth login`: { proc, abbrechen }
 
   const log = (line) => {
     try {
@@ -227,6 +249,8 @@ function createConnectorHost(o) {
       zustand: cfg || zustand === 'koppelt' ? zustand : 'aus',
       meldung,
       installUrl: CLAUDE_INSTALL_URL,
+      /** `claude auth login` waits for the person to confirm in the browser */
+      anmeldung: Boolean(login),
     };
   };
   const set = (z, m = null) => {
@@ -241,8 +265,7 @@ function createConnectorHost(o) {
     let angemeldet = null;
     if (bin) {
       angemeldet = await new Promise((resolve) => {
-        const env = connectorEnv(baseEnv, { platform, home: o.home, connectorHome: dir, bundle: files.bundle });
-        delete env.ELECTRON_RUN_AS_NODE;
+        const env = claudeEnv(baseEnv, { platform, home: o.home, connectorHome: dir, bundle: files.bundle });
         execFile(bin, ['auth', 'status', '--json'], { timeout: 20_000, windowsHide: true, env },
           (_err, stdout) => resolve(parseAuthStatus(stdout)));
       });
@@ -357,6 +380,40 @@ function createConnectorHost(o) {
     return starting;
   };
 
+  /**
+   * Sign in to Claude Code without a terminal: start the unmodified `claude auth login`, which opens Anthropic's
+   * sign-in in the browser; resolves once the person confirmed there (or cancelled / 10 min passed). Its output
+   * is not read — the result comes from `claude auth status` (loggedIn only).
+   */
+  const anmelden = async () => {
+    if (login) return { ok: false, meldung: MELDUNG.anmeldungLaeuft, status: snapshot() };
+    const c = await checkClaude(true);
+    if (!c.gefunden) return { ok: false, grund: 'claude-fehlt', meldung: MELDUNG.claudeFehlt, status: snapshot() };
+    if (c.angemeldet === true) return { ok: true, status: snapshot() };
+
+    let abgebrochen = false;
+    const proc = spawn(c.bin, claudeLoginArgs(), {
+      env: claudeEnv(baseEnv, { platform, home: o.home, connectorHome: dir, bundle: files.bundle }),
+      stdio: ['pipe', 'ignore', 'ignore'],
+      windowsHide: true,
+    });
+    const ende = new Promise((resolve) => {
+      proc.on('error', () => resolve(-1));
+      proc.on('exit', (code) => resolve(code ?? -1));
+    });
+    login = { proc, abbrechen: () => { abgebrochen = true; killTree(proc); } };
+    const timer = setTimeout(() => login && login.abbrechen(), LOGIN_TIMEOUT_MS);
+    set(zustand, meldung);
+    const code = await ende;
+    clearTimeout(timer);
+    login = null;
+    const nach = await checkClaude(true);
+    log(`Claude-Anmeldung beendet (Code ${code}, angemeldet: ${nach.angemeldet})`);
+    set(zustand, meldung);
+    if (nach.angemeldet === true) return { ok: true, status: snapshot() };
+    return { ok: false, meldung: abgebrochen ? MELDUNG.anmeldungAbgebrochen : MELDUNG.anmeldungOffen, status: snapshot() };
+  };
+
   /** Pair with a fresh code from the app (POST /api/connector/pairing), then start. */
   const koppeln = async (code, origin) => {
     if (pairing) return { ok: false, meldung: MELDUNG.koppelnLaeuft, status: snapshot() };
@@ -405,6 +462,11 @@ function createConnectorHost(o) {
       return snapshot();
     },
     koppeln,
+    anmelden,
+    anmeldenAbbrechen() {
+      if (login) login.abbrechen();
+      return snapshot();
+    },
     async starten() {
       writePrefs({ ...readPrefs(), pausiert: false });
       failures = 0;
@@ -435,6 +497,7 @@ function createConnectorHost(o) {
     /** App quit: synchronous, so the installer of an update never finds a running connector. */
     shutdown() {
       shuttingDown = true;
+      if (login) login.abbrechen();
       clearTimeout(restartTimer);
       clearTimeout(healthyTimer);
       killTree(child);
@@ -446,6 +509,8 @@ function createConnectorHost(o) {
 module.exports = {
   CLAUDE_INSTALL_URL,
   HOST_SCRIPT,
+  claudeEnv,
+  claudeLoginArgs,
   claudeSearchDirs,
   connectorEnv,
   connectorEvent,

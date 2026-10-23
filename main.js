@@ -83,6 +83,12 @@ function createWindow() {
     }
   });
 
+  // The window (taskbar, Alt+Tab) is always «SPACE Media Engine» — without
+  // this Electron takes the page title («SPACE Bot», «Chat · SPACE Bot»).
+  mainWindow.on('page-title-updated', (event) => {
+    event.preventDefault();
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -213,6 +219,9 @@ ipcMain.handle('connector:koppeln', (event, input) => {
   }
   return connector.koppeln(code, origin);
 });
+// Claude Code's own sign-in (opens Anthropic's page in the browser); resolves when confirmed or cancelled.
+ipcMain.handle('connector:anmelden', (event) => { connectorSenderOrigin(event); return connector.anmelden(); });
+ipcMain.handle('connector:anmelden-abbrechen', (event) => { connectorSenderOrigin(event); return connector.anmeldenAbbrechen(); });
 ipcMain.handle('connector:starten', (event) => { connectorSenderOrigin(event); return connector.starten(); });
 ipcMain.handle('connector:stoppen', (event) => { connectorSenderOrigin(event); return connector.stoppen(); });
 ipcMain.handle('connector:entkoppeln', (event) => { connectorSenderOrigin(event); return connector.entkoppeln(); });
@@ -228,7 +237,7 @@ if (app && app.commandLine) {
   app.commandLine.appendSwitch('disable-features', 'PaintHolding');
 }
 
-// Windows: set app user model ID for notifications to show "SPACE Media App"
+// Windows: set app user model ID for notifications to show "SPACE Media Engine"
 if (process.platform === 'win32') {
   app.setAppUserModelId('ch.space-media.app');
 }

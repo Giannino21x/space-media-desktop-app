@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
 const {
-  claudeSearchDirs, connectorEnv, connectorEvent, connectorOrigin, isPairingCode,
+  claudeEnv, claudeLoginArgs, claudeSearchDirs, connectorEnv, connectorEvent, connectorOrigin, isPairingCode,
   looksLikeConnector, parseAuthStatus, resolveClaudeBin, restartDelay, HOST_SCRIPT,
 } = require('./connector');
 
@@ -86,6 +86,21 @@ test('connectorEnv: Electron node mode, connector home, Windows Path key kept, n
   assert.ok(env.Path.includes('C:\\Users\\anna\\.local\\bin'));
   assert.equal('ANTHROPIC_API_KEY' in env, false);
   assert.equal('ANTHROPIC_AUTH_TOKEN' in env, false);
+});
+
+test('claude itself runs without Electron node mode and without API keys', () => {
+  const env = claudeEnv(
+    { PATH: '/usr/bin', ANTHROPIC_API_KEY: 'sk-ant-api', ELECTRON_RUN_AS_NODE: '1' },
+    { platform: 'darwin', home: '/Users/anna', connectorHome: '/data/connector', bundle: '/data/connector/space-connector.mjs' },
+  );
+  assert.equal('ELECTRON_RUN_AS_NODE' in env, false);
+  assert.equal('SPACE_CONNECTOR_BUNDLE' in env, false);
+  assert.equal('ANTHROPIC_API_KEY' in env, false);
+  assert.ok(env.PATH.includes('/Users/anna/.local/bin'));
+});
+
+test('sign-in is Claude Code\'s own subscription login, nothing else', () => {
+  assert.deepEqual(claudeLoginArgs(), ['auth', 'login', '--claudeai']);
 });
 
 test('looksLikeConnector: bundle yes, login page or empty no', () => {

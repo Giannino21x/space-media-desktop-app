@@ -1,4 +1,4 @@
-# SPACE Media App — Desktop
+# SPACE Media Engine — Desktop
 
 Electron-Wrapper für die SPACE Media Web-App. Lädt `app.space-media.ch` in einem nativen Fenster.
 
@@ -8,9 +8,9 @@ Electron-Wrapper für die SPACE Media Web-App. Lädt `app.space-media.ch` in ein
 
 | Plattform | Datei |
 |-----------|-------|
-| Windows | `SPACE-Media-App-Setup-x.x.x.exe` |
-| Mac (Apple Silicon) | `SPACE-Media-App-x.x.x-arm64.dmg` |
-| Mac (Intel) | `SPACE-Media-App-x.x.x-x64.dmg` |
+| Windows | `SPACE-Media-Engine-Setup-x.x.x.exe` |
+| Mac (Apple Silicon) | `SPACE-Media-Engine-x.x.x-arm64.dmg` |
+| Mac (Intel) | `SPACE-Media-Engine-x.x.x-x64.dmg` |
 
 > **Windows SmartScreen:** Beim ersten Start erscheint "Der Computer wurde durch Windows geschützt". Auf "Weitere Informationen" → "Trotzdem ausführen" klicken. Passiert nur einmal.
 
