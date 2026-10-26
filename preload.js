@@ -1,4 +1,4 @@
-// Preload — drag region + taskbar badge observer + titlebar theme resync
+// Preload — drag region + taskbar badge observer + titlebar theme resync + bridges (spaceConnector, spaceDateien)
 
 const { contextBridge, ipcRenderer } = require('electron');
 
@@ -27,6 +27,59 @@ contextBridge.exposeInMainWorld('spaceConnector', {
     const listener = (_event, status) => callback(status);
     ipcRenderer.on('connector:changed', listener);
     return () => ipcRenderer.removeListener('connector:changed', listener);
+  },
+});
+
+// «Dateien»: PC folders for the web app — the page «Dateien», the sync into «Meine Dateien» and the bots' live
+// access while the app is open. main.js → dateien.js does the reading: only folders the person picked in the system
+// dialog, never writing. Contract «Vertrag D» in the web repo (docs/plans/2026-10-26-dateien.md). Main answers
+// { ok, wert } / { ok: false, meldung }, so a refusal reaches the page as an Error with the German message.
+const dateienAufruf = async (kanal, ...args) => {
+  const antwort = await ipcRenderer.invoke(kanal, ...args);
+  if (antwort && antwort.ok) return antwort.wert;
+  throw new Error((antwort && antwort.meldung) || 'Der Ordner auf diesem PC liess sich nicht lesen.');
+};
+
+contextBridge.exposeInMainWorld('spaceDateien', {
+  version: 1,
+  ordnerWaehlen: async () => {
+    // Only right after a click or key press of the person — no page pops the dialog up on its own.
+    if (navigator.userActivation && !navigator.userActivation.isActive) {
+      throw new Error('Ordner wählen geht nur direkt nach einem Klick.');
+    }
+    return dateienAufruf('dateien:ordner-waehlen');
+  },
+  freigaben: () => dateienAufruf('dateien:freigaben'),
+  freigabeAendern: (id, felder) => dateienAufruf('dateien:freigabe-aendern', id, felder),
+  freigabeEntfernen: async (id) => { await dateienAufruf('dateien:freigabe-entfernen', id); },
+  liste: (id, unterpfad) => dateienAufruf('dateien:liste', id, unterpfad),
+  alle: (id) => dateienAufruf('dateien:alle', id),
+  lesen: async (id, pfad) => {
+    const datei = await dateienAufruf('dateien:lesen', id, pfad);
+    const bytes = datei.daten; // a Buffer in main arrives as Uint8Array
+    return { ...datei, daten: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) };
+  },
+  beobachten: (id, melden) => {
+    const abo = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    let aktiv = true;
+    const listener = (_event, nachricht) => {
+      if (aktiv && nachricht && nachricht.abo === abo) melden(nachricht.aenderungen);
+    };
+    ipcRenderer.on('dateien:aenderungen', listener);
+    // A share that is gone (or forgotten on this computer) is reported like a deleted folder.
+    const angemeldet = ipcRenderer.invoke('dateien:beobachten', { id, abo }).then((antwort) => {
+      if (antwort && antwort.ok) return true;
+      if (aktiv && antwort && (antwort.grund === 'weg' || antwort.grund === 'unbekannt')) melden([{ pfad: '', art: 'geloescht' }]);
+      else console.warn(`SPACE Dateien: ${(antwort && antwort.meldung) || 'Beobachten geht nicht.'}`);
+      return false;
+    }, () => false);
+    return () => {
+      if (!aktiv) return;
+      aktiv = false;
+      ipcRenderer.removeListener('dateien:aenderungen', listener);
+      // After the subscription stands, so main never keeps a watcher nobody listens to.
+      void angemeldet.then((ok) => ok && ipcRenderer.invoke('dateien:beobachten-ende', { abo }));
+    };
   },
 });
 

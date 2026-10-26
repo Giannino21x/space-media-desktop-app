@@ -4,6 +4,7 @@ const { autoUpdater } = require('electron-updater');
 const os = require('os');
 const path = require('path');
 const { anmeldeAdresse, connectorOrigin, createConnectorHost } = require('./connector');
+const { DateienFehler, createDateienHost, fehlerMeldung, grundVon } = require('./dateien');
 
 // Tests can run a second copy next to the installed app with their own data.
 if (process.env.SPACE_USER_DATA) app.setPath('userData', process.env.SPACE_USER_DATA);
@@ -274,13 +275,18 @@ ipcMain.on('set-badge-count', (event, count) => {
   }
 });
 
+// Only the app's own pages may use the bridges (connector, PC folders); the origin comes from the asking frame,
+// never from the page's arguments. localhost only with --dev. No frame (already navigated away) → refused.
+function appSenderOrigin(event) {
+  if (!event.senderFrame) return null;
+  return connectorOrigin(event.senderFrame.url, { allowed: [APP_URL, LEGACY_APP_URL], isDev });
+}
+
 // «Eigenes Claude-Abo»: the SPACE Connector runs in the background while the app is open (connector.js).
-// Only the app's own pages may drive it; the origin comes from the asking frame, never from the page's arguments.
 let connector = null;
 
 function connectorSenderOrigin(event) {
-  const url = (event.senderFrame && event.senderFrame.url) || event.sender.getURL();
-  const origin = connectorOrigin(url, { allowed: [APP_URL, LEGACY_APP_URL], isDev });
+  const origin = appSenderOrigin(event);
   if (!origin || !connector) throw new Error('SPACE Connector ist hier nicht verfügbar.');
   return origin;
 }
@@ -313,6 +319,90 @@ app.on('second-instance', (_event, argv) => {
 ipcMain.handle('connector:starten', (event) => { connectorSenderOrigin(event); return connector.starten(); });
 ipcMain.handle('connector:stoppen', (event) => { connectorSenderOrigin(event); return connector.stoppen(); });
 ipcMain.handle('connector:entkoppeln', (event) => { connectorSenderOrigin(event); return connector.entkoppeln(); });
+
+// «Dateien» (window.spaceDateien, dateien.js): PC folders the person picked in the system dialog. The web app lists,
+// reads and watches them — sync into «Meine Dateien», the bots' live access while the app is open. Read only.
+// Answers are { ok, wert } / { ok: false, grund, meldung }, so the page gets the German message, not Electron's
+// «Error invoking remote method …».
+let dateien = null;
+let ordnerDialogOffen = false;
+/** webContents id → { seite, abos: Map(abo → abmelden) }; seite counts the page's navigations */
+const dateienSeiten = new Map();
+
+function dateienKanal(kanal, handler) {
+  ipcMain.handle(kanal, async (event, ...args) => {
+    try {
+      if (!dateien || !appSenderOrigin(event)) throw new DateienFehler('nichtVerfuegbar');
+      return { ok: true, wert: await handler(event, ...args) };
+    } catch (err) {
+      return { ok: false, grund: grundVon(err), meldung: fehlerMeldung(err) };
+    }
+  });
+}
+
+/** The page behind a webContents went away (reload, navigation, crash, window destroyed) → its watchers too. */
+function dateienSeiteFuer(wc) {
+  let eintrag = dateienSeiten.get(wc.id);
+  if (eintrag) return eintrag;
+  eintrag = { seite: 0, abos: new Map() };
+  dateienSeiten.set(wc.id, eintrag);
+  const abmelden = () => {
+    for (const ab of eintrag.abos.values()) ab();
+    eintrag.abos.clear();
+    eintrag.seite++;
+  };
+  wc.on('did-navigate', abmelden);
+  wc.on('render-process-gone', abmelden);
+  wc.once('destroyed', () => { abmelden(); dateienSeiten.delete(wc.id); });
+  return eintrag;
+}
+
+dateienKanal('dateien:ordner-waehlen', async (event) => {
+  if (ordnerDialogOffen) throw new DateienFehler('dialogOffen');
+  ordnerDialogOffen = true;
+  try {
+    const fenster = BrowserWindow.fromWebContents(event.sender);
+    const optionen = {
+      title: 'Ordner für SPACE freigeben',
+      buttonLabel: 'Freigeben',
+      message: 'SPACE darf diesen Ordner lesen, aber nie ändern.',
+      properties: ['openDirectory', 'dontAddToRecent'],
+    };
+    const { canceled, filePaths } = fenster ? await dialog.showOpenDialog(fenster, optionen) : await dialog.showOpenDialog(optionen);
+    if (canceled || !filePaths || !filePaths[0]) return null;
+    return dateien.freigabeAnlegen(filePaths[0]);
+  } finally {
+    ordnerDialogOffen = false;
+  }
+});
+dateienKanal('dateien:freigaben', () => dateien.freigaben());
+dateienKanal('dateien:freigabe-aendern', (_event, id, felder) => dateien.freigabeAendern(id, felder));
+dateienKanal('dateien:freigabe-entfernen', (_event, id) => { dateien.freigabeEntfernen(id); });
+dateienKanal('dateien:liste', (_event, id, unterpfad) => dateien.liste(id, unterpfad));
+dateienKanal('dateien:alle', (_event, id) => dateien.alle(id));
+dateienKanal('dateien:lesen', (_event, id, pfad) => dateien.lesen(id, pfad));
+dateienKanal('dateien:beobachten', async (event, input) => {
+  const abo = input && typeof input.abo === 'string' && /^[\w-]{1,64}$/.test(input.abo) ? input.abo : null;
+  if (!abo) throw new DateienFehler('allgemein');
+  const wc = event.sender;
+  const eintrag = dateienSeiteFuer(wc);
+  if (eintrag.abos.has(abo)) return;
+  const seite = eintrag.seite;
+  const abmelden = await dateien.beobachten(input.id, (aenderungen) => {
+    if (!wc.isDestroyed()) wc.send('dateien:aenderungen', { abo, aenderungen });
+  });
+  // The page navigated while the watcher started: nobody listens any more.
+  if (seite !== eintrag.seite || wc.isDestroyed()) return abmelden();
+  eintrag.abos.set(abo, abmelden);
+});
+dateienKanal('dateien:beobachten-ende', (event, input) => {
+  const eintrag = dateienSeiten.get(event.sender.id);
+  const abo = input && input.abo;
+  const abmelden = eintrag && eintrag.abos.get(abo);
+  if (!abmelden) return;
+  abmelden();
+  eintrag.abos.delete(abo);
+});
 
 // GPU flags — before app.ready
 if (app && app.commandLine) {
@@ -377,6 +467,7 @@ app.on('ready', () => {
     // over the subscription after a restart. «Mit Windows starten» in the tray menu turns it off.
     onGekoppelt: () => mitWindowsStarten(true),
   });
+  dateien = createDateienHost({ userDataDir: app.getPath('userData'), isDev, home: os.homedir() });
   trayAnlegen();
   // A few seconds after start, so the connector never competes with the first paint.
   setTimeout(() => connector.autostart(), 4000);
@@ -399,6 +490,7 @@ app.on('before-quit', () => { beenden = true; });
 // Stop the connector with the app (also before an update installs — it runs from the app's own exe).
 app.on('will-quit', () => {
   if (connector) connector.shutdown();
+  if (dateien) dateien.shutdown();
 });
 
 app.on('window-all-closed', () => {

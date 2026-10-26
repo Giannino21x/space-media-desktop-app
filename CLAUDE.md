@@ -19,10 +19,12 @@ main.js            → Electron Main: BrowserWindow (frameless), Auto-Updater, T
                      GPU-Flags, adaptive Windows-Titlebar (capturePage-Sampling event-getrieben: Theme-/Routenwechsel,
                      Fokus, Load + 10-s-Sicherheitstick bei Fokus; wechselt erst nach 2 gleichen Samples)
 preload.js         → Drag-Region (body::after, 40 px), Badge-Observer (rAF-gedrosselt), Titlebar-Resync-IPC,
-                     window.__electronRestart, window.spaceConnector («Eigenes Claude-Abo»)
+                     window.__electronRestart, window.spaceConnector («Eigenes Claude-Abo»), window.spaceDateien (PC-Ordner)
 connector.js       → SPACE Connector im Hintergrund: Bundle von <App>/connector/space-connector.mjs laden, mit
                      Electrons Node (ELECTRON_RUN_AS_NODE) `pair`/`run` starten, beim Beenden stoppen;
                      reine Teile in connector.test.js (`npm test`)
+dateien.js         → PC-Ordner für «Dateien» (nur Lesen): Freigaben in <userData>/dateien.json (Dev: dateien-dev.json),
+                     Pfadprüfung, liste/alle/lesen, fs.watch; dateien.test.js (`npm test`)
 assets/            → icon.ico, icon.png, entitlements.mac.plist (buildResources)
 .github/workflows/ → build.yml — Desktop-Build + GitHub Release
 codemagic.yaml     → 3 Mobile-Workflows (iOS TestFlight, Android Debug-APK, Android Release-AAB)
@@ -97,9 +99,25 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
   `connector:*` nimmt die Adresse aus dem anfragenden Frame (nur `APP_URL`/`LEGACY_APP_URL`, localhost nur mit
   `--dev`). Kopplung + Gerätetoken liegen in `<userData>/connector/` (Dev: `connector-dev/`), Protokoll dort in
   `connector.log`. Der Connector selbst (CLI, Bundle) lebt im Web-Repo unter `src/lib/connector/client/`.
+- **PC-Ordner (dateien.js, `window.spaceDateien`):** Vertrag «D» im Web-Repo (`docs/plans/2026-10-26-dateien.md`) ist die
+  einzige Schnittstelle — neue Felder oder Methoden nur mit Versionssprung und Eintrag dort. Nur Lesen; nur Ordner, die
+  die Person im System-Dialog gewählt hat (`ordnerWaehlen` nur direkt nach einem Klick, `navigator.userActivation`);
+  jeder Pfad gegen die echte Wurzel aufgelöst (`realpath`, Links nach draussen unsichtbar, Wurzel ersetzt → «weg»).
+  Nie freigebbar: Laufwerkswurzeln (auch `\\server\share`), Benutzerordner und darüber, versteckte Ordner,
+  AppData/Library, der eigene Datenordner (Gerätetoken des Connectors!), Systemordner, Netzwerkpfade zurück auf diesen
+  PC (`\\localhost\c$\…` — sonst AppData über die Hintertür) und `$`-Freigaben; zusätzlich Vergleich über die
+  Datei-Identität (dev/ino). Versteckte Einträge, node_modules, Thumbs.db, desktop.ini, `~$…` erscheinen nirgends.
+  Windows-Junctions auf `\??\Volume{…}` sieht `lstat` nicht als Link — Ordner darum immer per `realpath` prüfen. IPC `dateien:*` wie beim Connector nur für die App-Seiten; Antworten `{ ok, wert }` /
+  `{ ok: false, meldung }`, damit die Seite die deutsche Meldung bekommt. Watcher gehören der Seite: Neuladen,
+  Navigation, Absturz und Fenster-Ende räumen sie weg.
 
 ## Current State
 
+- **PC-Ordner, Brücke `window.spaceDateien` v1 (26.10.2026, Branch `huelle-1.0.6`, noch nicht gebaut/released → kommt
+  mit Desktop `1.0.11`):** `ordnerWaehlen`, `freigaben`, `freigabeAendern`, `freigabeEntfernen`, `liste`, `alle`, `lesen`,
+  `beobachten` nach Vertrag D. Gegenstück im Web-Repo: Teil E (Sync in «Meine Dateien», Live-Zugriff der Bots). Geprüft
+  mit `node --test` und `electron . --dev` gegen eine Testseite (Playwright, Dialog im Main-Prozess ersetzt): Wählen nur
+  nach Klick, Liste/Lesen/Ausbruch, Änderungen entprellt, Neuladen räumt Watcher weg.
 - **Desktop:** letztes veröffentlichtes GitHub Release ist `v1.0.10` (23.10.2026: läuft im Hintergrund — X versteckt das
   Fenster (Windows), Symbol im Infobereich mit «SPACE öffnen» / «Mit Windows starten» / «Beenden»; Koppeln schaltet den
   Start mit Windows ein (`--im-hintergrund`, startet versteckt); `before-quit` lässt «Beenden» und Updates wirklich schliessen;
