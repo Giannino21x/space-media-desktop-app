@@ -25,6 +25,8 @@ connector.js       → SPACE Connector im Hintergrund: Bundle von <App>/connecto
                      reine Teile in connector.test.js (`npm test`)
 dateien.js         → PC-Ordner für «Dateien» (nur Lesen): Freigaben in <userData>/dateien.json (Dev: dateien-dev.json),
                      Pfadprüfung, liste/alle/lesen, fs.watch; dateien.test.js (`npm test`)
+fenster.js         → Was im App-Fenster laden darf (window.open + will-navigate), exakte Herkunft wie bei den
+                     Brücken; fenster.test.js (`npm test`)
 assets/            → icon.ico, icon.png, entitlements.mac.plist (buildResources)
 .github/workflows/ → build.yml — Desktop-Build + GitHub Release
 codemagic.yaml     → 3 Mobile-Workflows (iOS TestFlight, Android Debug-APK, Android Release-AAB)
@@ -88,9 +90,13 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
   (`app_store_credentials`, `play_store_credentials`).
 - `preload.js` liest den Badge-Count aus dem DOM der Web-App (`.notification-bell-badge`). Wird diese
   Klasse in der Web-App umbenannt, verschwindet der Taskbar-/Dock-Badge lautlos — beides zusammen ändern.
-- Externe Links werden abgefangen und im Systembrowser geöffnet; nur `APP_URL` und `localhost` dürfen
-  im Fenster navigieren. Beim Wechsel der Produktions-URL `APP_URL` in `main.js` **und** `server.url`
-  in `mobile/capacitor.config.ts` anpassen.
+- Externe Links werden abgefangen und im Systembrowser geöffnet (`fenster.js`, für `setWindowOpenHandler` und
+  `will-navigate`): im Fenster bleibt nur die **exakte Herkunft** aus `APP_ORIGINS` (`APP_URL`, `LEGACY_APP_URL`),
+  `localhost`/`127.0.0.1` nur mit `--dev` — dieselbe Regel wie die Brücken (`connectorOrigin`). Nie mit `startsWith`
+  prüfen: das liess `https://app.space-media.ch.evil.com` und im gepackten Build `http://localhost` ins Fenster
+  (behoben 26.10.2026). Anmeldung bei Stripe, Composio/OAuth-Anbietern und GitHub läuft deshalb im Systembrowser,
+  die Rückkehr landet dort auf `app.space-media.ch`. Beim Wechsel der Produktions-URL `APP_URL` in `main.js` **und**
+  `server.url` in `mobile/capacitor.config.ts` anpassen.
 - `datenschutz.html` und die Google-Verifizierungsdatei müssen auf `space-media.ch` erreichbar sein
   (Pflicht für beide Stores). Details in `DEPLOY_TO_SPACE_MEDIA.md`.
 - `dist/`, `downloads/` und `node_modules/` gehören nicht in Commits.

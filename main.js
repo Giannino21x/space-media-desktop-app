@@ -5,6 +5,7 @@ const os = require('os');
 const path = require('path');
 const { anmeldeAdresse, connectorOrigin, createConnectorHost } = require('./connector');
 const { DateienFehler, createDateienHost, fehlerMeldung, grundVon } = require('./dateien');
+const { fensterWache } = require('./fenster');
 
 // Tests can run a second copy next to the installed app with their own data.
 if (process.env.SPACE_USER_DATA) app.setPath('userData', process.env.SPACE_USER_DATA);
@@ -19,11 +20,12 @@ const APP_URL = 'https://app.space-media.ch';
 // Former production host. Still served by Vercel; keep it navigable so
 // links/redirects that carry the old origin stay inside the window.
 const LEGACY_APP_URL = 'https://space-media-app.vercel.app';
-
-function isAppUrl(url) {
-  return url.startsWith(APP_URL) || url.startsWith(LEGACY_APP_URL) || url.startsWith('http://localhost');
-}
+const APP_ORIGINS = [APP_URL, LEGACY_APP_URL];
 const isDev = process.argv.includes('--dev');
+
+// Only the app's own pages stay in the window (exact origin, localhost only with --dev) — the same rule as the
+// bridges; everything else opens in the system browser (fenster.js).
+const appFenster = fensterWache({ allowed: APP_ORIGINS, isDev, openExternal: (url) => shell.openExternal(url) });
 
 // Background (Windows): the X hides the window, the app keeps running in the notification area so the
 // SPACE Connector («Eigenes Claude-Abo») keeps serving the person's chat — also from the phone. «Beenden» in
@@ -95,20 +97,8 @@ function createWindow() {
   mainWindow.loadURL(url);
 
   // External links → system browser
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (!isAppUrl(url)) {
-      shell.openExternal(url);
-      return { action: 'deny' };
-    }
-    return { action: 'allow' };
-  });
-
-  mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (!isAppUrl(url)) {
-      event.preventDefault();
-      shell.openExternal(url);
-    }
-  });
+  mainWindow.webContents.setWindowOpenHandler(appFenster.oeffnen);
+  mainWindow.webContents.on('will-navigate', appFenster.navigieren);
 
   // The window (taskbar, Alt+Tab) is always «SPACE Media Engine» — without
   // this Electron takes the page title («SPACE Bot», «Chat · SPACE Bot»).
@@ -279,7 +269,7 @@ ipcMain.on('set-badge-count', (event, count) => {
 // never from the page's arguments. localhost only with --dev. No frame (already navigated away) → refused.
 function appSenderOrigin(event) {
   if (!event.senderFrame) return null;
-  return connectorOrigin(event.senderFrame.url, { allowed: [APP_URL, LEGACY_APP_URL], isDev });
+  return connectorOrigin(event.senderFrame.url, { allowed: APP_ORIGINS, isDev });
 }
 
 // «Eigenes Claude-Abo»: the SPACE Connector runs in the background while the app is open (connector.js).
@@ -448,7 +438,7 @@ app.on('ready', () => {
   connector = createConnectorHost({
     userDataDir: app.getPath('userData'),
     isDev,
-    allowedOrigins: [APP_URL, LEGACY_APP_URL],
+    allowedOrigins: APP_ORIGINS,
     fetchText: async (url) => {
       const res = await net.fetch(url, { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
