@@ -250,7 +250,8 @@
       let zy = 0;
       if (z.zeiger) {
         zx = Math.tanh((z.zeiger.x - m.cx) / 260);
-        zy = Math.tanh((z.zeiger.y - m.cy) / 200);
+        // up/down only a little: the pointer is nearly always below the island, the eyes must not sink to the rim
+        zy = Math.tanh((z.zeiger.y - m.cy) / 200) * 0.55;
       }
       if (z.denkt) { zx = zx * 0.3 + 0.55; zy = zy * 0.3 - 0.55; }
       if (z.staunt) { zx *= 0.4; zy = -0.85; }
@@ -482,8 +483,9 @@
       ctx.roundRect(-vw / 2, -vh / 2, vw, vh, vr);
       ctx.clip();
       // at least a visible step on tiny faces (the eyes may touch the rim there)
-      const maxX = Math.max(vw / 2 - A.abstand - A.w / 2 - W * 0.035, details ? 0 : W * 0.1);
-      const maxY = Math.max(vh / 2 - A.h / 2 - W * 0.03, details ? 0 : W * 0.06);
+      // the eyes always stay well inside the glass (curved visor: less room near the rim)
+      const maxX = Math.max((vw / 2 - A.abstand - A.w / 2) * 0.75, details ? 0 : W * 0.08);
+      const maxY = Math.max((vh / 2 - A.h / 2) * 0.42, details ? 0 : W * 0.04);
       // done / dizzy: the eyes scroll across the visor like a LED marquee
       const re = t - z.rollStart;
       let roll = 0;
