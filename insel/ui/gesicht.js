@@ -18,6 +18,13 @@
     schlaeft: '148,162,184',
   };
 
+  // Two characters, one engine: the SPACE Bot (white helmet, blue LEDs, antenna) and Steno — the protocol astronaut
+  // of the Steno product: gunmetal helmet, gold visor rim, round amber LEDs, a headset with a boom microphone.
+  const FIGUREN = {
+    space: { schale: ['#fbfcfe', '#e2e7ee', '#b9c2cf'], rand: null, led: LED, hoert: null, ohr: '#c3ccd8', ohrRing: 'rgba(90,105,125,0.35)', glas: ['#16233a', '#03060c'], augen: [0.145, 0.2], headset: false },
+    steno: { schale: ['#dfe3e8', '#a6aeb8', '#6a7380'], rand: '242,184,75', led: '251,191,36', hoert: '255,214,102', ohr: '#8d96a2', ohrRing: 'rgba(242,184,75,0.95)', glas: ['#12161c', '#030406'], augen: [0.16, 0.16], headset: true },
+  };
+
   const klemmen = (x, a, b) => Math.min(b, Math.max(a, x));
   const glatt = (t) => t * t * (3 - 2 * t);
   const raus = (t) => 1 - (1 - t) * (1 - t);
@@ -145,7 +152,13 @@
     const o = opts || {};
     const ctx = canvas.getContext('2d');
     let groesse = o.groesse || 64;
-    let m = mass(groesse, o.rahmen);
+    let figur = FIGUREN[o.figur] || FIGUREN.space;
+    const massFuer = () => {
+      const mm = mass(groesse, o.rahmen);
+      mm.auge = { ...mm.auge, w: mm.W * figur.augen[0], h: mm.W * figur.augen[1] };
+      return mm;
+    };
+    let m = massFuer();
     let details = o.details != null ? o.details : groesse >= 40;
     let dpr = 1;
 
@@ -166,7 +179,7 @@
       grund: 'oval', ausdruck: null, ausdruckBis: 0,
       schwindligBis: 0, stupse: [],
       // state
-      zustand: 'bereit', farbe: rgb(o.farbe || LED), farbZiel: rgb(o.farbe || LED), eigeneFarbe: o.farbe || null,
+      zustand: 'bereit', farbe: rgb(o.farbe || figur.led), farbZiel: rgb(o.farbe || figur.led), eigeneFarbe: o.farbe || null,
       abzeichen: null, abzeichenSkala: 0, abzeichenWechsel: -1e9, abzeichenNeu: null,
       denkt: false, hoert: false, pegel: 0, pegelGlatt: 0, schlaeft: false, staunt: false,
       visier: 0, visierZiel: 0,
@@ -178,7 +191,7 @@
 
     function groesseSetzen(neu) {
       groesse = neu;
-      m = mass(groesse, o.rahmen);
+      m = massFuer();
       if (o.details == null) details = groesse >= 40;
       dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
       canvas.width = Math.round(groesse * dpr);
@@ -343,9 +356,9 @@
       // shell
       helmPfad(ctx, x0, y0, W, H);
       const schale = ctx.createLinearGradient(W * 0.3, y0, -W * 0.3, y0 + H);
-      schale.addColorStop(0, '#fbfcfe');
-      schale.addColorStop(0.55, '#e2e7ee');
-      schale.addColorStop(1, '#b9c2cf');
+      schale.addColorStop(0, figur.schale[0]);
+      schale.addColorStop(0.55, figur.schale[1]);
+      schale.addColorStop(1, figur.schale[2]);
       ctx.fillStyle = schale;
       ctx.fill();
       if (o.kontur) { // icons on a light taskbar: a fine edge keeps the white helmet visible
@@ -373,16 +386,23 @@
       }
       ctx.restore();
 
-      // ear piece
+      // ear piece (Steno: a headset cup with a gold ring)
       if (details) {
-        ctx.fillStyle = '#c3ccd8';
+        const gross = figur.headset ? 1.35 : 1;
+        ctx.fillStyle = figur.ohr;
         ctx.beginPath();
-        ctx.ellipse(W * 0.5, H * 0.04, W * 0.05, H * 0.17, 0, 0, TAU);
+        ctx.ellipse(W * 0.5, H * 0.04, W * 0.05 * gross, H * 0.17 * gross, 0, 0, TAU);
         ctx.fill();
-        ctx.fillStyle = 'rgba(90,105,125,0.35)';
-        ctx.beginPath();
-        ctx.ellipse(W * 0.515, H * 0.04, W * 0.022, H * 0.11, 0, 0, TAU);
-        ctx.fill();
+        if (figur.headset) {
+          ctx.lineWidth = Math.max(1, W * 0.02);
+          ctx.strokeStyle = figur.ohrRing;
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = figur.ohrRing;
+          ctx.beginPath();
+          ctx.ellipse(W * 0.515, H * 0.04, W * 0.022, H * 0.11, 0, 0, TAU);
+          ctx.fill();
+        }
       }
 
       // the visor; lifts for a file (z.visier 0..1) and opens the helmet
@@ -414,12 +434,12 @@
       ctx.strokeStyle = `rgba(${farbe},${0.16 + (z.hoert ? z.pegelGlatt * 0.35 : 0)})`;
       ctx.stroke();
       const glas = ctx.createLinearGradient(0, -vh / 2, 0, vh / 2);
-      glas.addColorStop(0, '#16233a');
-      glas.addColorStop(1, '#03060c');
+      glas.addColorStop(0, figur.glas[0]);
+      glas.addColorStop(1, figur.glas[1]);
       ctx.fillStyle = glas;
       ctx.fill();
-      ctx.lineWidth = Math.max(1, W * 0.032);
-      ctx.strokeStyle = `rgba(${farbe},0.92)`;
+      ctx.lineWidth = Math.max(1, W * (figur.rand ? 0.04 : 0.032));
+      ctx.strokeStyle = figur.rand ? `rgb(${figur.rand})` : `rgba(${farbe},0.92)`;
       ctx.stroke();
 
       // eyes, clipped to the glass
@@ -482,6 +502,25 @@
       ctx.fillRect(-vw / 2, -vh / 2, vw, vh);
       ctx.restore(); // eye clip
       ctx.restore(); // visor
+
+      // Steno's boom microphone: from the headset cup down and forward to the chin of the visor
+      if (details && figur.headset) {
+        ctx.strokeStyle = '#3c434d';
+        ctx.lineWidth = Math.max(1, W * 0.026);
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(W * 0.5, H * 0.16);
+        ctx.quadraticCurveTo(W * 0.5, H * 0.44, W * 0.2, H * 0.42);
+        ctx.stroke();
+        ctx.fillStyle = '#2a2f36';
+        ctx.beginPath();
+        ctx.ellipse(W * 0.17, H * 0.42, W * 0.05, W * 0.035, -0.2, 0, TAU);
+        ctx.fill();
+        ctx.fillStyle = `rgba(${z.hoert ? farbe : figur.rand},${z.hoert ? 0.6 + z.pegelGlatt * 0.4 : 0.9})`;
+        ctx.beginPath();
+        ctx.arc(W * 0.15, H * 0.42, Math.max(0.8, W * 0.016), 0, TAU);
+        ctx.fill();
+      }
 
       // wave: a small glove next to the helmet
       if (z.winkenBis > t) {
@@ -729,7 +768,7 @@
       if (name === z.zustand) return;
       const vorher = z.zustand;
       z.zustand = name;
-      z.farbZiel = rgb(name === 'bereit' && z.eigeneFarbe ? z.eigeneFarbe : (FARBEN[name] || LED));
+      z.farbZiel = rgb(name === 'bereit' ? (z.eigeneFarbe || figur.led) : name === 'hoert' && figur.hoert ? figur.hoert : (FARBEN[name] || figur.led));
       const neu = name === 'arbeitet' ? 'punkte' : name === 'wartet' ? '!' : name === 'fertig' ? '✓' : name === 'fehler' ? '×' : null;
       if (neu !== z.abzeichen) { z.abzeichenWechsel = jetzt(); z.abzeichenNeu = neu; }
       z.denkt = name === 'arbeitet';
@@ -759,10 +798,19 @@
       hoert(an) { z.hoert = !!an; if (!an) z.pegel = 0; aufwecken(); },
       pegel(p) { z.pegel = klemmen(p, 0, 1); },
       schlaf(an) { if (z.schlaeft !== !!an) { z.schlaeft = !!an; if (!an) z.zs = []; aufwecken(); } },
-      farbe(rgbText) { z.eigeneFarbe = rgbText || null; if (z.zustand === 'bereit') { z.farbZiel = rgb(rgbText || LED); z.farbe = z.farbZiel.slice(); } },
+      /** 'space' | 'steno' — the character; the LEDs fade to its colour when it is ready. */
+      figur(name) {
+        const neu = FIGUREN[name] || FIGUREN.space;
+        if (neu === figur) return;
+        figur = neu;
+        m = massFuer();
+        if (z.zustand === 'bereit' && !z.eigeneFarbe) z.farbZiel = rgb(figur.led);
+        aufwecken();
+      },
+      farbe(rgbText) { z.eigeneFarbe = rgbText || null; if (z.zustand === 'bereit') { z.farbZiel = rgb(rgbText || figur.led); z.farbe = z.farbZiel.slice(); } },
       get laeuft() { return z.laeuft; },
     };
   }
 
-  window.SpaceGesicht = { erstellen, LED, FARBEN };
+  window.SpaceGesicht = { erstellen, LED, FARBEN, FIGUREN };
 })();

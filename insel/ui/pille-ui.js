@@ -259,6 +259,13 @@
   // ---- settings ----
 
   api.onEinstellungen((e) => { K.an = e.toene !== false; });
+  if (api.onLage) api.onLage((lage) => {
+    const steno = !!(lage && lage.steno);
+    gesicht.figur(steno ? 'steno' : 'space');
+    const name = steno ? 'Steno' : 'SPACE';
+    $('p-oeffnen').dataset.tipp = `${name} öffnen`;
+    $('p-oeffnen').setAttribute('aria-label', `${name} öffnen`);
+  });
   look('ruhe');
 
   function demoBruecke() {

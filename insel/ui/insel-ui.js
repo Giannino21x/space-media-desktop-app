@@ -548,7 +548,7 @@
       titel.innerHTML = st.einstellungen.diktat
         ? 'Halte <span class="taste">Strg</span> rechts, sprich, lass los.'
         : 'Frag mich etwas oder leg eine Datei ab.';
-      knoepfe.append(knopf('SPACE öffnen', '', () => api.oeffnen(l.steno ? '/sitzungen' : '/chat'), 'oeffnen'));
+      knoepfe.append(knopf(l.steno ? 'Steno öffnen' : 'SPACE öffnen', '', () => api.oeffnen(l.steno ? '/sitzungen' : '/chat'), 'oeffnen'));
       karte.dataset.wash = '';
     }
 
@@ -584,7 +584,7 @@
       const aktionen = !l || !l.angemeldet
         ? [['SPACE öffnen', '/', 'oeffnen']]
         : l.steno
-          ? [['Sitzung aufnehmen', '/sitzungen/new', 'aufnahme'], ['Diktat', '/sitzungen/diktat', 'mikrofon'], ['Chat', '/chat', 'chat'], ['Dokumente', '/sitzungen/dokumente', 'datei']]
+          ? [['Aufnehmen', '/sitzungen/new', 'aufnahme'], ['Diktat', '/sitzungen/diktat', 'mikrofon'], ['Chat', '/chat', 'chat'], ['Dokumente', '/sitzungen/dokumente', 'datei']]
           : [['Chat', '/chat', 'chat'], ['Sitzung aufnehmen', '/sitzungen/new', 'aufnahme'], ['Mail', '/mail', 'mail'], ['Aktivität', '/aktivitaet', 'glocke']];
       for (const [label, pfad, symbol] of aktionen) {
         const k = document.createElement('button');
@@ -795,6 +795,11 @@
       ansichtZeigen('uebersicht');
     }
 
+    // Steno has its own robot (the protocol astronaut), the Bot-Team the SPACE helmet
+    const figur = lage.steno ? 'steno' : 'space';
+    insel.dataset.produkt = lage.steno ? 'steno' : 'team';
+    gesichtKlein.figur(figur);
+    gesichtGross.figur(figur);
     gesichtZustand();
     // work reveals the compact island
     if (st.modus === 'versteckt' && (lage.laufend.length || lage.freigaben.length)) modusSetzen('kompakt');

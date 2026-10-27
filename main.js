@@ -518,9 +518,11 @@ app.on('ready', () => {
       beiEinstellungen: () => trayMenue(),
       beiLage: (lage) => {
         if (!tray) return;
+        // Steno has its own robot; the Bot-Team the SPACE helmet, amber while approvals wait
         const zahl = lage.freigaben.length;
-        tray.setImage(path.join(__dirname, 'assets', zahl ? 'tray-wartet.ico' : 'tray.ico'));
-        tray.setToolTip(zahl ? `SPACE · ${zahl === 1 ? 'eine Freigabe wartet' : `${zahl} Freigaben warten`}` : 'SPACE Media Engine');
+        const bild = lage.steno ? 'tray-steno.ico' : zahl ? 'tray-wartet.ico' : 'tray.ico';
+        if (tray.__bild !== bild) { tray.setImage(path.join(__dirname, 'assets', bild)); tray.__bild = bild; }
+        tray.setToolTip(lage.steno ? 'Steno' : zahl ? `SPACE · ${zahl === 1 ? 'eine Freigabe wartet' : `${zahl} Freigaben warten`}` : 'SPACE Media Engine');
       },
       testText: app.isPackaged ? null : process.env.SPACE_INSEL_TEST_TEXT || null,
       demo: !app.isPackaged && process.env.SPACE_INSEL_DEMO === '1',

@@ -333,6 +333,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .kachel canvas, .kachel .k-symbol { flex: none; width: 22px; height: 22px; }
 .kachel .k-symbol { display: inline-flex; align-items: center; justify-content: center; color: var(--akzent); }
 .kachel .k-symbol svg { width: 14px; height: 14px; }
+#insel[data-produkt="steno"] .kachel .k-symbol { color: #fbbf24; } /* Steno = Bernstein */
 .kachel span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kachel[data-status="arbeitet"] span { color: var(--ink); }
 .kachel .k-punkt { margin-left: auto; width: 6px; height: 6px; border-radius: 3px; flex: none; background: transparent; }
