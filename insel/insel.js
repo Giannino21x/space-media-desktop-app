@@ -65,7 +65,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
   let fokussiert = false;
   let imStreifen = false;       // hidden: the pointer is in the wake zone at the top edge
   let pollTimer = null;
-  let letzterZeiger = { x: NaN, y: NaN };
+  let letzterZeiger = { x: -1e9, y: -1e9 }; // never NaN: NaN compares false and nothing would ever be sent
   let linksGedrueckt = false;   // left mouse button (global hook)
 
   // pill state
@@ -181,6 +181,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
 
   function inselZustandZurueck() {
     pollStoppen();
+    letzterZeiger = { x: -1e9, y: -1e9 };
     flaechen = [];
     ansicht = 'versteckt';
     eingeklappt = true;
@@ -232,6 +233,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
       // re-assert: moving across displays can rescale the window
       insel.setBounds(panelRahmen());
       durchklick = null;
+      letzterZeiger = { x: -1e9, y: -1e9 };
       pollStarten(POLL_MS);
     }
   }
