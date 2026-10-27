@@ -39,6 +39,7 @@
     gesehenLaeufe: new Set(),
     gemeldet: new Set(),
     ersteLage: true,
+    geladen: false,          // the first real answer from the app arrived (approvals then are not «new»)
     meldung: null,           // { text, art, bis }
     diktat: 'aus',
     datei: null,             // { name, type, daten, base64 }
@@ -47,7 +48,11 @@
     begruessungBis: 0,
   };
   const uhren = {};
-  const uhr = (name, ms, fn) => { clearTimeout(uhren[name]); uhren[name] = ms == null ? undefined : setTimeout(fn, ms); };
+  const uhr = (name, ms, fn) => {
+    clearTimeout(uhren[name]);
+    uhren[name] = ms == null ? undefined : setTimeout(() => { uhren[name] = undefined; fn(); }, ms);
+  };
+  const laeuft = (name) => uhren[name] !== undefined;
 
   // ---------------------------------------------------------------- icons
   for (const b of document.querySelectorAll('[data-tab]')) b.innerHTML = S[b.dataset.tab];
@@ -272,9 +277,18 @@
     if (document.activeElement) document.activeElement.blur();
     pinnenPruefen();
   }
+  // The person clicked into another app while typing here: give the keyboard back, fold as usual.
+  window.addEventListener('blur', () => {
+    if (!fokus) return;
+    fokusAus();
+    zuPlanen();
+  });
 
+  /** Waiting cards, typing, a file on its way and a half-written mail keep the island open; pinning stops every fold. */
   function pinnenPruefen() {
-    st.gepinnt = fokus || (st.ansicht === 'freigabe' && st.modus === 'offen') || st.ansicht === 'datei' || (st.ansicht === 'ablage' && ziehenTiefe > 0);
+    st.gepinnt = fokus || !!st.datei || (st.ansicht === 'freigabe' && st.modus === 'offen') || st.ansicht === 'datei'
+      || st.ansicht === 'mail' || (st.ansicht === 'ablage' && ziehenTiefe > 0);
+    if (st.gepinnt) { uhr('offenZu', null); uhr('hoverZu', null); countdownAus(); }
   }
 
   /** Open the island on a view, from any mode (alerts: approval, drop, greeting). */
@@ -324,19 +338,29 @@
     return !!(l && (l.laufend.length || freigabeOffen())) || !!(st.meldung && st.meldung.bis > Date.now()) || st.begruessungBis > Date.now();
   }
 
+  /** Arm the fold timer for the current mode — once: new data every few seconds must not restart a running countdown. */
   function zuPlanen() {
     if (st.drin) return;
     if (st.modus === 'offen') {
       pinnenPruefen();
-      if (st.gepinnt) return;
-      if (st.durchHover && !st.interagiert) { uhr('hoverZu', HOVER_ZU_MS, () => modusSetzen('kompakt')); return; }
+      if (st.gepinnt || laeuft('offenZu') || laeuft('hoverZu')) return;
+      if (st.durchHover && !st.interagiert) {
+        uhr('hoverZu', HOVER_ZU_MS, () => { if (!st.drin && !st.gepinnt && st.modus === 'offen') { modusSetzen('kompakt'); zuPlanen(); } });
+        return;
+      }
       countdownStarten(OFFEN_ZU_MS);
-      uhr('offenZu', OFFEN_ZU_MS, () => { countdownAus(); modusSetzen('kompakt'); zuPlanen(); });
+      uhr('offenZu', OFFEN_ZU_MS, () => {
+        countdownAus();
+        pinnenPruefen();
+        if (st.drin || st.gepinnt || st.modus !== 'offen') return;
+        modusSetzen('kompakt');
+        zuPlanen();
+      });
       return;
     }
     if (st.modus === 'kompakt') {
-      if (etwasZuZeigen()) return;
-      uhr('kompaktZu', KOMPAKT_ZU_MS, () => { if (!st.drin && !etwasZuZeigen()) modusSetzen('versteckt'); });
+      if (etwasZuZeigen() || laeuft('kompaktZu')) return;
+      uhr('kompaktZu', KOMPAKT_ZU_MS, () => { if (!st.drin && !etwasZuZeigen() && st.modus === 'kompakt') modusSetzen('versteckt'); });
     }
   }
 
@@ -743,6 +767,8 @@
     st.lage = lage;
     const erste = st.ersteLage;
     st.ersteLage = false;
+    const ersteGeladen = lage.angemeldet && !st.geladen;
+    if (lage.angemeldet) st.geladen = true;
 
     // finished runs → «Erledigt: …»
     if (vorher) {
@@ -758,7 +784,7 @@
     // a new approval → the card opens and stays until answered (or folded)
     const neue = lage.freigaben.filter((a) => !st.gesehenFreigaben.has(a.id));
     for (const a of lage.freigaben) st.gesehenFreigaben.add(a.id);
-    if (neue.length && !erste && st.ansicht !== 'datei' && st.ansicht !== 'mail') {
+    if (neue.length && !ersteGeladen && st.ansicht !== 'datei' && st.ansicht !== 'mail') {
       K.spielen('freigabe');
       st.freigabeSeit = performance.now();
       freigabeZeichnen();
@@ -883,6 +909,7 @@
   }
 
   async function dateiNehmen(datei, punkt) {
+    if (st.datei && !st.datei.daten) return; // one file at a time — the first is still being read
     if (datei.size > MAX_DATEI) {
       gesichtGross.visierOeffnen(0);
       K.spielen('fehler');
@@ -890,8 +917,10 @@
       return;
     }
     const lesen = datei.arrayBuffer();
-    st.datei = { name: datei.name, type: datei.type || 'application/octet-stream', daten: null, base64: null };
-    st.gepinnt = true;
+    const eintrag = { name: datei.name, type: datei.type || 'application/octet-stream', daten: null, base64: null };
+    st.datei = eintrag;
+    pinnenPruefen();
+    const weg = () => st.datei !== eintrag; // cancelled meanwhile (Abbrechen, a new file)
     // the sheet flies from the cursor into the open visor
     const blatt = $('blatt');
     blatt.textContent = dateiArt(datei);
@@ -908,9 +937,11 @@
       ], { duration: 380, easing: 'cubic-bezier(0.5, 0, 0.75, 0)', fill: 'forwards' });
     }
     await warten(reduziert ? 60 : 380);
+    if (weg()) return;
     gesichtGross.schlucken();
     K.spielen('schluck');
     await warten(270);
+    if (weg()) return;
     // reading: the face shrinks and rides the bar
     $('d-name').textContent = `Lese ${datei.name}`;
     $('d-prozent').textContent = '0 %';
@@ -920,6 +951,7 @@
     ansichtZeigen('datei');
     gesichtZiel(46, 121, 22);
     await warten(250);
+    if (weg()) return;
     $('d-balken').classList.add('an');
     $('d-btext').classList.add('an');
     const dauerMs = reduziert ? 400 : 2400;
@@ -928,6 +960,7 @@
     lesen.then((d) => { daten = d; }, () => { daten = false; });
     let zehntel = 0;
     await new Promise((fertig) => {
+      // ends early when the file was dropped meanwhile
       const bild = (t) => {
         const p = Math.min(1, (t - start) / dauerMs);
         // 60 % by 40 % of the time, 92 % by 85 %, then the last push — and never ahead of the real read
@@ -938,27 +971,31 @@
         gesichtZiel(46 + w * 474, 121, 22);
         const z = Math.floor(w * 10);
         if (z > zehntel) { zehntel = z; K.spielen('diktatStart'); }
-        if ((p >= 1 && daten !== null) || daten === false) { fertig(); return; }
+        if ((p >= 1 && daten !== null) || daten === false || weg()) { fertig(); return; }
         requestAnimationFrame(bild);
       };
       requestAnimationFrame(bild);
     });
+    if (weg()) return;
     if (!daten) {
       K.spielen('fehler');
       hinweis('Nicht lesbar', `${datei.name} liess sich nicht öffnen.`, 'rot', [['Zurück', () => ansichtZeigen('ablage')]]);
       st.datei = null;
+      pinnenPruefen();
       return;
     }
-    st.datei.daten = daten;
+    eintrag.daten = daten;
     $('d-prozent').textContent = '';
     $('d-ok').classList.add('an');
     K.spielen('fertig');
     gesichtGross.hupf(0.14);
     await warten(250);
+    if (weg()) return;
     $('d-balken').classList.remove('an');
     $('d-btext').classList.remove('an');
     gesichtZiel(60, karteMitte(176), 56);
     await warten(150);
+    if (weg()) return;
     $('d-titel').textContent = `${datei.name} ist bereit.`;
     $('d-wahl').classList.add('an');
     $('ansage').textContent = `${datei.name} ist bereit. Was soll ich damit tun?`;
@@ -968,8 +1005,8 @@
 
   function dateiWeg() {
     st.datei = null;
-    st.gepinnt = false;
     $('d-wahl').classList.remove('an');
+    pinnenPruefen();
   }
 
   $('d-chat').addEventListener('click', async () => {
@@ -1147,7 +1184,13 @@
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     e.preventDefault();
-    if (st.ansicht === 'freigabe' || st.modus === 'offen') { st.gepinnt = false; fokusAus(); modusSetzen('kompakt'); zuPlanen(); }
+    if (st.ansicht === 'freigabe' || st.modus === 'offen') {
+      if (st.datei) dateiWeg(); // Esc during the file or the mail = cancel it
+      st.gepinnt = false;
+      fokusAus();
+      modusSetzen('kompakt');
+      zuPlanen();
+    }
   });
   document.addEventListener('contextmenu', (e) => e.preventDefault());
   document.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
@@ -1182,6 +1225,7 @@
     modusSetzen('kompakt');
     zuPlanen();
   });
+  if (api.onWecken) api.onWecken(wecken);
   api.onDiktat(diktatNeu);
   api.onPegel((p) => { gesichtKlein.pegel(p); gesichtGross.pegel(p); });
 

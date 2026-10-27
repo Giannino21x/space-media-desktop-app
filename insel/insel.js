@@ -25,6 +25,8 @@ const PANEL = { breite: 720, hoehe: 320 };
 const STREIFEN = { breite: 240, hoehe: 6 };
 const PILLE = { breite: 520, hoehe: 170, abstand: 4 };
 const TREFFER_RAND = 14;          // a click near the island must never be swallowed
+const ZIEH_RAND = 40;             // a file dragged this close to the island is meant for it
+const STREIFEN_POLL_MS = 90;      // only with a display above (the strip cannot hang over the edge)
 const POLL_MS = 16;
 const PILLE_POLL_MS = 33;
 const LAGE_MS = 20_000;
@@ -60,6 +62,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
   let eingeklappt = true;       // window is the wake strip
   let durchklick = null;        // cached setIgnoreMouseEvents state
   let fokussiert = false;
+  let streifenPoll = false;     // a display sits above: the strip is click-through and polled instead
   let pollTimer = null;
   let letzterZeiger = { x: NaN, y: NaN };
   let linksGedrueckt = false;   // left mouse button (global hook)
@@ -142,10 +145,28 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
       senden(insel, 'insel:lage', lage);
     });
     insel.on('closed', () => { insel = null; });
+    // Typing in the island, then a click into another app: the island lets go of the keyboard.
+    insel.on('blur', () => {
+      if (!fokussiert || !insel || insel.isDestroyed()) return;
+      fokussiert = false;
+      insel.setFocusable(false);
+    });
     insel.webContents.on('render-process-gone', () => {
+      const alt = insel;
       insel = null;
+      inselZustandZurueck();
+      try { if (alt && !alt.isDestroyed()) alt.destroy(); } catch { /* gone */ }
       if (!beendet) setTimeout(inselAnlegen, 1500);
     });
+  }
+
+  function inselZustandZurueck() {
+    pollStoppen();
+    flaechen = [];
+    ansicht = 'versteckt';
+    eingeklappt = true;
+    durchklick = null;
+    fokussiert = false;
   }
 
   function pilleAnlegen() {
@@ -164,7 +185,13 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     });
     pille.on('closed', () => { pille = null; });
     pille.webContents.on('render-process-gone', () => {
+      const alt = pille;
       pille = null;
+      pillenFlaechen = [];
+      pillenDurchklick = null;
+      pillenZeigerDrin = null;
+      if (aufnahme) { aufnahme = null; taste.zuruecksetzen(); }
+      try { if (alt && !alt.isDestroyed()) alt.destroy(); } catch { /* gone */ }
       if (!beendet) setTimeout(pilleAnlegen, 1500);
     });
     pillenPollStarten();
@@ -177,23 +204,29 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     if (an) {
       pollStoppen();
       streifenSetzen();
-      insel.setIgnoreMouseEvents(false);
-      durchklick = false;
+      durchklick = null;
+      durchklickSetzen(streifenPoll); // hanging strip takes the mouse; polled strip is click-through
+      if (streifenPoll) pollStarten(STREIFEN_POLL_MS);
     } else {
       insel.setBounds(panelRahmen());
       // re-assert: moving across displays can rescale the window
       insel.setBounds(panelRahmen());
       durchklick = null;
-      pollStarten();
+      pollStarten(POLL_MS);
     }
   }
 
   /** Windows keeps a window at least ~38 px high: the strip then hangs above the screen edge, only 6 px show. */
+  //  With a display above, hanging over the edge would block a strip at the bottom of that display: then the strip stays
+  //  on this display, click-through, and a slow poll watches its top 6 px instead.
   function streifenSetzen() {
     const soll = streifenRahmen();
     insel.setBounds(soll);
     const ist = insel.getBounds();
-    if (ist.height > soll.height) insel.setBounds({ ...soll, height: ist.height, y: soll.y - (ist.height - soll.height) });
+    const d = anzeige();
+    const darueber = { x: soll.x + soll.width / 2, y: d.bounds.y - 1 };
+    streifenPoll = screen.getAllDisplays().some((x) => x.id !== d.id && imRechteck(darueber, x.bounds));
+    if (ist.height > soll.height && !streifenPoll) insel.setBounds({ ...soll, height: ist.height, y: soll.y - (ist.height - soll.height) });
   }
 
   function neuAusrichten() {
@@ -211,25 +244,33 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
   }
 
   function pollTakt() {
-    if (!insel || insel.isDestroyed() || eingeklappt) return;
+    if (!insel || insel.isDestroyed()) return;
     const p = screen.getCursorScreenPoint();
     const b = insel.getBounds();
+    if (eingeklappt) { // only with a display above (streifenPoll)
+      const drin = imRechteck(p, { x: b.x, y: b.y, width: b.width, height: STREIFEN.hoehe });
+      durchklickSetzen(!drin);
+      if (drin && !linksGedrueckt) senden(insel, 'insel:wecken', null); // a drag wakes it through dragenter
+      return;
+    }
     const lx = p.x - b.x;
     const ly = p.y - b.y;
     const ueberInsel = flaechen.some((f) => imRechteck({ x: lx, y: ly }, f, TREFFER_RAND));
-    const ziehen = linksGedrueckt && imRechteck(p, b);
-    durchklickSetzen(!(ueberInsel || ziehen || fokussiert));
+    // left button held near the island: a file dragged from Explorer must find a drop target here
+    const ziehen = linksGedrueckt && flaechen.some((f) => imRechteck({ x: lx, y: ly }, f, ZIEH_RAND));
+    durchklickSetzen(!(ueberInsel || ziehen));
     if (Math.abs(p.x - letzterZeiger.x) >= 1 || Math.abs(p.y - letzterZeiger.y) >= 1) {
       letzterZeiger = p;
       senden(insel, 'insel:zeiger', { x: lx, y: ly, drin: ueberInsel });
     }
   }
 
-  function pollStarten() {
-    if (pollTimer || beendet) return;
+  function pollStarten(ms) {
+    pollStoppen();
+    if (beendet) return;
     pollTimer = setInterval(() => {
       try { pollTakt(); } catch (err) { log(`insel poll: ${err.message}`); }
-    }, POLL_MS);
+    }, ms);
   }
   function pollStoppen() {
     if (pollTimer) clearInterval(pollTimer);
@@ -330,6 +371,9 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
   let aufnahme = null;          // { id } while the pill records
   let rechtsGedrueckt = false;
   let letztesDiktat = '';
+  let transkription = null;     // { id, abgebrochen } while the app turns the take into text
+  let eigeneTastenBis = 0;      // our own Ctrl+V is not «another key»
+  let zurueckAusstehend = null; // { timer, vorher } — the clipboard to restore after a paste
 
   function diktatAktion(aktion) {
     const id = aufnahme ? aufnahme.id : null;
@@ -376,7 +420,13 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
       const { uIOhook, UiohookKey } = require('uiohook-napi');
       const runter = (e) => {
         if (e.keycode === UiohookKey.CtrlRight) { rechtsGedrueckt = true; tasteEreignis('diktatRunter'); return; }
-        if (e.keycode === UiohookKey.Escape) { tasteEreignis('esc'); return; }
+        if (Date.now() < eigeneTastenBis) return; // the Ctrl+V we just sent
+        if (e.keycode === UiohookKey.Escape) {
+          // Esc while the text is being written: nothing gets pasted
+          if (taste.zustand === 'ruhe' && transkription) { transkription.abgebrochen = true; return; }
+          tasteEreignis('esc');
+          return;
+        }
         // Modifiers alone never cancel (AltGr sends a fake left Ctrl).
         const modifikator = [UiohookKey.Ctrl, UiohookKey.Alt, UiohookKey.AltRight, UiohookKey.Shift, UiohookKey.ShiftRight, UiohookKey.Meta, UiohookKey.MetaRight].includes(e.keycode);
         if (!modifikator) tasteEreignis('andere');
@@ -396,6 +446,9 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
         }
       };
       const mausHoch = (e) => { if (e.button === 1) linksGedrueckt = false; };
+      // Right Ctrl + wheel is zoom, not a dictation
+      const rad = () => tasteEreignis('andere');
+      uIOhook.on('wheel', rad);
       uIOhook.on('keydown', runter);
       uIOhook.on('keyup', hoch);
       uIOhook.on('mousedown', mausRunter);
@@ -409,6 +462,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
           uIOhook.off('keyup', hoch);
           uIOhook.off('mousedown', mausRunter);
           uIOhook.off('mouseup', mausHoch);
+          uIOhook.off('wheel', rad);
           uIOhook.stop();
         },
       };
@@ -427,30 +481,48 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
 
   const warten = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  /** Paste where the person types: clipboard in, Ctrl+V, the old clipboard back if nobody copied meanwhile. */
+  function ablageLesen() {
+    return { text: clipboard.readText(), html: clipboard.readHTML(), rtf: clipboard.readRTF(), image: clipboard.readImage() };
+  }
+
+  function ablageZurueck(vorher, unser) {
+    if (clipboard.readText() !== unser) return; // somebody copied something meanwhile — keep it
+    const zurueck = {};
+    if (vorher.text) zurueck.text = vorher.text;
+    if (vorher.html) zurueck.html = vorher.html;
+    if (vorher.rtf) zurueck.rtf = vorher.rtf;
+    if (vorher.image && !vorher.image.isEmpty()) zurueck.image = vorher.image;
+    if (Object.keys(zurueck).length) clipboard.write(zurueck);
+    else clipboard.clear();
+  }
+
+  /**
+   * Paste where the person types: clipboard in, Ctrl+V, the old clipboard back after 700 ms if nobody copied meanwhile.
+   * Text, HTML, RTF and images come back; files copied in Explorer cannot be restored by Electron.
+   * Two pastes in a row restore the clipboard from before the first one.
+   */
   async function einfuegen(text) {
     // In hands-free mode the last tap ends it on key down: wait for the release, else the paste is Ctrl+Alt+V.
     for (let i = 0; rechtsGedrueckt && i < 66; i++) await warten(15);
-    const vorher = {
-      text: clipboard.readText(),
-      html: clipboard.readHTML(),
-      rtf: clipboard.readRTF(),
-      image: clipboard.readImage(),
-    };
+    let vorher;
+    if (zurueckAusstehend) {
+      clearTimeout(zurueckAusstehend.timer);
+      vorher = zurueckAusstehend.vorher;
+      zurueckAusstehend = null;
+    } else {
+      vorher = ablageLesen();
+    }
     clipboard.writeText(text);
     await warten(EINFUEGEN_WARTE_MS);
-    if (!hook) return false;
+    if (!hook) return false; // no key injection: the text stays on the clipboard («Kopiert · Strg+V»)
+    eigeneTastenBis = Date.now() + 250;
     hook.uIOhook.keyTap(hook.UiohookKey.V, [hook.UiohookKey.Ctrl]);
-    setTimeout(() => {
-      if (clipboard.readText() !== text) return;
-      const zurueck = {};
-      if (vorher.text) zurueck.text = vorher.text;
-      if (vorher.html) zurueck.html = vorher.html;
-      if (vorher.rtf) zurueck.rtf = vorher.rtf;
-      if (vorher.image && !vorher.image.isEmpty()) zurueck.image = vorher.image;
-      if (Object.keys(zurueck).length) clipboard.write(zurueck);
-      else clipboard.clear();
+    const eintrag = { vorher, timer: null };
+    eintrag.timer = setTimeout(() => {
+      if (zurueckAusstehend === eintrag) zurueckAusstehend = null;
+      ablageZurueck(vorher, text);
     }, ZURUECK_MS);
+    zurueckAusstehend = eintrag;
     return true;
   }
 
@@ -570,16 +642,22 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     let aktionen = [];
     if (was === 'freihand') aktionen = taste.freihand(Date.now());
     else if (was === 'fertig') aktionen = taste.fertig();
-    else if (was === 'abbrechen') aktionen = taste.ereignis({ art: 'esc', zeit: Date.now() });
+    else if (was === 'abbrechen') {
+      if (taste.zustand === 'ruhe' && transkription) { transkription.abgebrochen = true; return; }
+      aktionen = taste.ereignis({ art: 'esc', zeit: Date.now() });
+    }
     for (const a of aktionen) diktatAktion(a);
   });
   kanal('pille:audio', 'pille', async (_e, input) => {
     if (!aufnahme || !input || input.id !== aufnahme.id) return { ok: false };
     aufnahme = null;
+    const lauf = { id: input.id, abgebrochen: false };
+    transkription = lauf;
     senden(insel, 'insel:diktat', { zustand: 'denkt' });
     try {
       const text = await transkribieren(Buffer.from(input.daten), String(input.mime || 'audio/webm'));
-      if (!text) {
+      if (transkription === lauf) transkription = null;
+      if (!text || lauf.abgebrochen) {
         senden(insel, 'insel:diktat', { zustand: 'aus' });
         return { ok: false, still: true };
       }
@@ -588,6 +666,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
       senden(insel, 'insel:diktat', { zustand: 'fertig', woerter: text.split(/\s+/).filter(Boolean).length });
       return { ok: true, text, kopiert: !eingefuegt };
     } catch (err) {
+      if (transkription === lauf) transkription = null;
       senden(insel, 'insel:diktat', { zustand: 'aus' });
       return { ok: false, meldung: err.message };
     }
@@ -605,6 +684,8 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     einstellungen = { ...einstellungen, [schluessel]: wert };
     speichern();
     if (schluessel === 'diktat') {
+      if (!wert && aufnahme) diktatAktion('abbrechen');
+      if (!wert && transkription) transkription.abgebrochen = true;
       taste.zuruecksetzen();
       if (pille && !pille.isDestroyed()) { if (wert) pille.showInactive(); else pille.hide(); }
     }
@@ -633,11 +714,14 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     if (lageTimer) clearTimeout(lageTimer);
     lageTimer = null;
     hookStoppen();
+    if (aufnahme) diktatAktion('abbrechen');
     for (const f of [insel, pille]) if (f && !f.isDestroyed()) f.destroy();
     insel = null;
     pille = null;
-    ansicht = 'versteckt';
-    eingeklappt = true;
+    inselZustandZurueck();
+    pillenFlaechen = [];
+    pillenDurchklick = null;
+    pillenZeigerDrin = null;
   }
 
   screen.on('display-metrics-changed', neuAusrichten);

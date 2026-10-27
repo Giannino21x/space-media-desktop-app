@@ -150,7 +150,7 @@
     let dpr = 1;
 
     const z = {
-      t: 0, zuletzt: 0, laeuft: false, timer: null, stillSeit: 0,
+      t: 0, zuletzt: 0, laeuft: false, timer: null, raf: null, stillSeit: 0,
       // gaze (−1..1), smoothed
       bx: 0, by: 0, zielX: 0, zielY: 0,
       zeiger: null,
@@ -609,7 +609,15 @@
         || Math.abs(z.visier - z.visierZiel) > 0.01 || t - z.stillSeit < 1500 || z.blinzeln.length;
     }
 
+    // Exactly one frame is ever pending: either a rAF (moving) or a timer (still), never both, never two.
+    function planen(ms) {
+      if (z.raf || z.timer) return;
+      if (ms) z.timer = setTimeout(() => { z.timer = null; planen(0); }, ms);
+      else z.raf = requestAnimationFrame(bild);
+    }
+
     function bild() {
+      z.raf = null;
       if (!z.laeuft) return;
       const t = jetzt();
       const dt = z.zuletzt ? Math.min(0.05, (t - z.zuletzt) / 1000) : 1 / 60;
@@ -617,25 +625,29 @@
       schritt(dt, t);
       zeichnen(t);
       // still: 12 fps (blinks and breathing stay alive); asleep: 4 fps
-      const langsam = z.schlaeft ? 250 : bewegt(t) ? 0 : 83;
-      if (langsam) z.timer = setTimeout(() => requestAnimationFrame(bild), langsam);
-      else requestAnimationFrame(bild);
+      planen(z.schlaeft ? 250 : bewegt(t) ? 0 : 83);
     }
 
     function starten() {
       if (z.laeuft) return;
       z.laeuft = true;
       z.zuletzt = 0;
-      requestAnimationFrame(bild);
+      planen(0);
     }
     function stoppen() {
       z.laeuft = false;
       if (z.timer) clearTimeout(z.timer);
+      if (z.raf) cancelAnimationFrame(z.raf);
       z.timer = null;
+      z.raf = null;
     }
+    /** Something moved: switch from the slow timer to frames now. */
     function aufwecken() {
       z.stillSeit = jetzt();
-      if (z.laeuft && z.timer) { clearTimeout(z.timer); z.timer = null; requestAnimationFrame(bild); }
+      if (!z.laeuft || !z.timer) return;
+      clearTimeout(z.timer);
+      z.timer = null;
+      planen(0);
     }
 
     // ---- reactions ----
