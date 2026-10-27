@@ -115,7 +115,7 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
   freihändig / Esc / andere Taste = Kürzel → verworfen (Regeln in `regeln.js`), Aufnahme im Pillen-Fenster (Session `insel`,
   nur Mikrofon, nur file://), Transkription über `POST /api/voice/transcribe` der App mit der App-Session (KI-Option gilt),
   Einfügen = Zwischenablage → Strg+V (uiohook `keyTap`) → alte Zwischenablage (Text/HTML/RTF/Bild) nach 700 ms zurück, nur
-  wenn unverändert. Der Hook beobachtet nur, speichert und sendet keine Tasten. Daten: `/api/profile` + `/api/team` alle
+  wenn unverändert. Der Hook beobachtet nur, speichert und sendet keine Tasten (deshalb kann er nichts schlucken: rechte Strg + Esc öffnet zusätzlich das Startmenü, wie bei Coucou; aus Explorer kopierte Dateien in der Zwischenablage gehen beim Einfügen verloren — Electron kann sie nicht zurückschreiben). Daten: `/api/profile` + `/api/team` alle
   5 Min., `/api/runs/laufend` alle 20 s (offen 6 s), `/api/approvals` nur bei offenen Freigaben. Abgelegte Datei → «Im Chat
   fragen» legt sie in main.js bereit, das App-Fenster holt sie einmal über `window.spaceInselDatei.nehmen()` (Web:
   `desktopDateiNehmen` in `lib/insel/ablage.ts`, Ereignis `insel:datei`). Infobereich: Gesicht (`assets/tray.ico`, bernstein
