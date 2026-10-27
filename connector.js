@@ -22,7 +22,7 @@ const CLAUDE_CHECK_TTL_MS = 30_000;
 const LOGIN_TIMEOUT_MS = 10 * 60_000;
 
 const MELDUNG = {
-  claudeFehlt: 'Auf diesem Rechner fehlt Claude Code. Installiere es — danach verbindet sich der Rechner von selbst.',
+  claudeFehlt: 'Auf diesem Rechner fehlt ein KI-Abo (Claude Code oder Codex). Installiere eines — danach verbindet sich der Rechner von selbst.',
   nichtAngemeldet: 'Claude Code ist hier nicht angemeldet. «Anmelden» öffnet die Anmeldung von Claude im Browser.',
   abgelehnt: 'Die App kennt diesen Rechner nicht mehr. Koppel ihn neu, wenn der Chat wieder über dein Abo laufen soll.',
   laden: 'Der SPACE Connector liess sich nicht laden. Prüfe die Internetverbindung und versuche es nochmals.',
@@ -65,6 +65,19 @@ function claudeSearchDirs(env, platform, home) {
     ? [join(home, '.local', 'bin'), env.APPDATA && join(env.APPDATA, 'npm')]
     : [join(home, '.local', 'bin'), join(home, '.claude', 'local'), '/opt/homebrew/bin', '/usr/local/bin'];
   return [...new Set([...fromPath, ...extra.filter(Boolean)])];
+}
+
+/**
+ * Is Codex (OpenAI, ChatGPT subscription) installed? Since connector 0.3.0 a computer with only Codex can serve the chat
+ * too — the connector finds the binary itself (web repo, src/lib/connector/client/agenten.ts); here only: is it there.
+ */
+function codexInstalled(env, platform, home, exists = fs.existsSync) {
+  if (env.CODEX_BIN) return exists(env.CODEX_BIN);
+  const win = platform === 'win32';
+  const { join } = win ? path.win32 : path.posix;
+  return claudeSearchDirs(env, platform, home).some((dir) => (win
+    ? exists(join(dir, 'codex.exe')) || exists(join(dir, 'codex.cmd'))
+    : exists(join(dir, 'codex'))));
 }
 
 /** Same rules as resolveClaudeBin in the connector (web repo, src/lib/connector/client/claude.ts) + extra dirs. */
@@ -167,7 +180,7 @@ function connectorEvent(line) {
   const text = String(line).trim();
   if (/ läuft\. Verbunden mit /.test(text)) return { type: 'laeuft' };
   if (/kennt diesen Rechner nicht mehr/.test(text)) return { type: 'abgelehnt' };
-  if (/«claude» wurde nicht gefunden/.test(text)) return { type: 'claude-fehlt' };
+  if (/«claude» wurde nicht gefunden|Weder «claude»/.test(text)) return { type: 'claude-fehlt' };
   if (text === 'Gekoppelt.') return { type: 'gekoppelt' };
   const fail = /^Koppeln fehlgeschlagen: (.+)$/.exec(text);
   if (fail) return { type: 'koppeln-fehler', meldung: fail[1] };
@@ -368,7 +381,7 @@ function createConnectorHost(o) {
       const origin = connectorOrigin(cfg.url, { allowed: o.allowedOrigins, isDev: o.isDev });
       if (!origin) return set('fehler', MELDUNG.fremdeAdresse);
       const c = await checkClaude(!claude.at);
-      if (!c.gefunden) return set('fehler', MELDUNG.claudeFehlt);
+      if (!c.gefunden && !codexInstalled(baseEnv, platform, o.home)) return set('fehler', MELDUNG.claudeFehlt);
       set('startet');
       try { await prepare(origin); } catch { return scheduleRestart(); }
       if (shuttingDown || readPrefs().pausiert) return;
@@ -451,8 +464,9 @@ function createConnectorHost(o) {
     pairing = true;
     try {
       const c = await checkClaude(true);
-      if (!c.gefunden) return { ok: false, grund: 'claude-fehlt', meldung: MELDUNG.claudeFehlt, status: snapshot() };
-      if (c.angemeldet === false) return { ok: false, grund: 'nicht-angemeldet', meldung: MELDUNG.nichtAngemeldet, status: snapshot() };
+      const codex = codexInstalled(baseEnv, platform, o.home);
+      if (!c.gefunden && !codex) return { ok: false, grund: 'claude-fehlt', meldung: MELDUNG.claudeFehlt, status: snapshot() };
+      if (c.gefunden && c.angemeldet === false && !codex) return { ok: false, grund: 'nicht-angemeldet', meldung: MELDUNG.nichtAngemeldet, status: snapshot() };
 
       set('koppelt');
       await starting;
@@ -559,6 +573,7 @@ module.exports = {
   anmeldungGeklappt,
   claudeEnv,
   claudeLoginArgs,
+  codexInstalled,
   claudeSearchDirs,
   connectorEnv,
   connectorEvent,

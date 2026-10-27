@@ -151,3 +151,13 @@ test('host script keeps the bundle self-starting and drops node mode for claude'
   assert.match(HOST_SCRIPT, /delete process\.env\.ELECTRON_RUN_AS_NODE/);
   assert.match(HOST_SCRIPT, /process\.stdin\.on\('end'/);
 });
+
+test('codexInstalled: Codex alone is enough to run the connector (since 0.3.0)', () => {
+  const { codexInstalled } = require('./connector');
+  const home = 'C:\\Users\\p';
+  const env = { PATH: 'C:\\Windows', APPDATA: 'C:\\Users\\p\\AppData\\Roaming' };
+  const shim = path.win32.join(env.APPDATA, 'npm', 'codex.cmd');
+  assert.equal(codexInstalled(env, 'win32', home, (p) => p === shim), true);
+  assert.equal(codexInstalled(env, 'win32', home, () => false), false);
+  assert.equal(codexInstalled({ PATH: '/usr/bin' }, 'linux', '/home/p', (p) => p === '/usr/bin/codex'), true);
+});
