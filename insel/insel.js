@@ -37,7 +37,7 @@ const ZURUECK_MS = 700;
 
 const STANDARD = { an: true, diktat: true, toene: true, hoverOeffnen: false, begruesst: false };
 
-function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, navigieren, dateiZumChat, log, testText, demo, beiLage, beiEinstellungen }) {
+function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, navigieren, dateiZumChat, log, testText, demo, beiLage, beiEinstellungen, appFokussiert }) {
   const datei = path.join(userDataDir, 'insel.json');
   let einstellungen = { ...STANDARD };
   try { einstellungen = { ...STANDARD, ...JSON.parse(fs.readFileSync(datei, 'utf8')) }; } catch { /* first start */ }
@@ -76,6 +76,24 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
 
   let lageTimer = null;
   let lage = inselLage();
+  // From the app window: the bot the person talks to, and the answer it is writing right now
+  let aktiverBot = null;  // { id, name, farbe, schreibt, seit, laufId }
+  let chatFertig = null;  // { id, titel, bot, ok, zeit } — the answer arrived while the app was not in front
+
+  /** What the island shows: the app's answers plus the chat (active bot, an answer being written, one just done). */
+  function lageMitApp() {
+    if (!aktiverBot) return lage;
+    const l = { ...lage, aktiverBot: { id: aktiverBot.id, name: aktiverBot.name, farbe: aktiverBot.farbe } };
+    if (aktiverBot.schreibt) l.laufend = [{ id: aktiverBot.laufId, titel: 'Antwort im Chat', bot: aktiverBot.name, start: aktiverBot.seit, chat: true }, ...lage.laufend];
+    if (chatFertig && Date.now() - chatFertig.zeit < 3 * 60 * 1000) l.fertig = [chatFertig, ...lage.fertig];
+    return l;
+  }
+  function lageSenden() {
+    const l = lageMitApp();
+    senden(insel, 'insel:lage', l);
+    senden(pille, 'insel:lage', l);
+    if (beiLage) beiLage(l);
+  }
 
   const senden = (fenster, kanal, daten) => {
     if (fenster && !fenster.isDestroyed()) fenster.webContents.send(kanal, daten);
@@ -143,7 +161,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
       if (!insel || insel.isDestroyed()) return;
       insel.showInactive();
       senden(insel, 'insel:einstellungen', einstellungen);
-      senden(insel, 'insel:lage', lage);
+      senden(insel, 'insel:lage', lageMitApp());
     });
     insel.on('closed', () => { insel = null; });
     // Typing in the island, then a click into another app: the island lets go of the keyboard.
@@ -182,7 +200,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
       if (!pille || pille.isDestroyed()) return;
       if (einstellungen.diktat) pille.showInactive();
       senden(pille, 'insel:einstellungen', einstellungen);
-      senden(pille, 'insel:lage', lage);
+      senden(pille, 'insel:lage', lageMitApp());
     });
     pille.on('closed', () => { pille = null; });
     pille.webContents.on('render-process-gone', () => {
@@ -351,9 +369,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     } finally {
       lageLaeuft = false;
     }
-    senden(insel, 'insel:lage', lage);
-    senden(pille, 'insel:lage', lage);
-    if (beiLage) beiLage(lage);
+    lageSenden();
   }
 
   function lagePlanen(sofort) {
@@ -742,6 +758,26 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     /** Tray: island on/off, dictation on/off. */
     schalten(an) { einstellungsAenderung('an', !!an); },
     diktatSchalten(an) { einstellungsAenderung('diktat', !!an); },
+    /** The chat in the app: which bot, and whether it is writing an answer. */
+    aktiverBot(b) {
+      if (!b || typeof b.id !== 'string') return;
+      const vorher = aktiverBot;
+      const schreibt = !!b.schreibt;
+      const weiter = vorher && vorher.schreibt && schreibt;
+      aktiverBot = {
+        id: b.id,
+        name: String(b.name || 'SPACE Bot'),
+        farbe: String(b.farbe || 'sky'),
+        schreibt,
+        seit: weiter ? vorher.seit : schreibt ? new Date().toISOString() : null,
+        laufId: weiter ? vorher.laufId : schreibt ? `chat-${Date.now().toString(36)}` : null,
+      };
+      // the answer arrived while the person was elsewhere: the island says so
+      if (vorher && vorher.schreibt && !schreibt && !(appFokussiert && appFokussiert())) {
+        chatFertig = { id: vorher.laufId, titel: 'Antwort im Chat', bot: vorher.name, ok: true, chat: true, zeit: Date.now() };
+      }
+      lageSenden();
+    },
     /** Something changed in the app (sign-in, a run started): ask the API now, who-is-who included. */
     neuLaden() { stamm = null; lagePlanen(true); },
     shutdown() {

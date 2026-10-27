@@ -331,6 +331,7 @@ html[data-streifen] .griff { opacity: 1; }
   grid-auto-rows: 28px;
   gap: 4px;
   align-content: center;
+  overflow: hidden;
 }
 .kachel {
   display: flex;
@@ -353,6 +354,7 @@ html[data-streifen] .griff { opacity: 1; }
 #insel[data-produkt="steno"] .kachel .k-symbol { color: #fbbf24; } /* Steno = Bernstein */
 .kachel span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kachel[data-status="arbeitet"] span { color: var(--ink); }
+.kachel[data-aktiv] { background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.16); color: var(--ink); }
 .kachel .k-punkt { margin-left: auto; width: 6px; height: 6px; border-radius: 3px; flex: none; background: transparent; }
 .kachel[data-status="arbeitet"] .k-punkt { background: #40a6ff; box-shadow: 0 0 6px #40a6ff; }
 .kachel[data-status="wartet"] .k-punkt { background: var(--bernstein); }

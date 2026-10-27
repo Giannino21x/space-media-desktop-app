@@ -309,6 +309,11 @@ function appNavigieren(pfad, opts) {
   });
 }
 
+ipcMain.on('insel:aktiver-bot', (event, bot) => {
+  if (!insel || !appSenderOrigin(event)) return;
+  insel.aktiverBot(bot);
+});
+
 ipcMain.handle('insel:datei-nehmen', (event) => {
   if (!appSenderOrigin(event) || !inselDatei || Date.now() - inselDatei.zeit > 2 * 60 * 1000) return null;
   const d = inselDatei;
@@ -521,6 +526,7 @@ app.on('ready', () => {
         if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('insel:datei-bereit');
       },
       log: (zeile) => console.log(`[insel] ${zeile}`),
+      appFokussiert: () => !!(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() && mainWindow.isFocused()),
       beiEinstellungen: () => trayMenue(),
       beiLage: (lage) => {
         if (!tray) return;

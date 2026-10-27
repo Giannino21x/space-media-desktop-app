@@ -186,7 +186,7 @@
   gesichtSetzen();
 
   const FACE = {
-    uebersicht: () => [68, karteMitte(160), 58],
+    uebersicht: () => [68, karteMitte(hoeheFuer('uebersicht')), 58],
     freigabe: () => [62, karteMitte(160), 56],
     fragen: () => [46, karteMitte(160) - 2, 46],
     ablage: () => [140, 104, 62],
@@ -197,6 +197,24 @@
     einstellungen: null,
   };
   function karteMitte(h) { return 42 + (h - 52) / 2 + 2; }
+
+  /** Height of a view; the overview grows with the team (two tiles per row, up to four rows of 28 px). */
+  function hoeheFuer(name) {
+    if (name !== 'uebersicht') return HOEHE[name] || 160;
+    const l = st.lage;
+    const kacheln = l && l.angemeldet && l.team.length > 1 ? Math.min(8, l.team.length) : 4;
+    const reihen = Math.ceil(kacheln / 2);
+    return Math.max(160, reihen * 28 + (reihen - 1) * 4 + 20 + 52);
+  }
+
+  /** The bot the person talks to in the app (reported by the app window), else the team's default bot. */
+  function aktiverBotInfo() {
+    const l = st.lage;
+    if (!l) return null;
+    const a = l.aktiverBot;
+    if (a) return l.team.find((b) => b.id === a.id) || { id: a.id, name: a.name, farbe: a.farbe, standard: false };
+    return l.team.find((b) => b.standard) || null;
+  }
 
   // ---------------------------------------------------------------- modes and views
   function modusSetzen(neu) {
@@ -226,7 +244,7 @@
       kompaktZeichnen();
       if (vorher === 'offen') K.spielen('stups');
     } else {
-      const h = HOEHE[st.ansicht] || 160;
+      const h = hoeheFuer(st.ansicht);
       geoZiel(OFFEN_B, h, 22);
       // the face grows out of its compact spot (window x 256 → island x 216, y 16, Ø 20)
       Object.assign(fg, { x: 216, y: 16, d: 20, vx: 0, vy: 0, vd: 0 });
@@ -245,7 +263,7 @@
     for (const b of document.querySelectorAll('[data-tab]')) b.setAttribute('aria-pressed', String(b.dataset.tab === name || (name === 'datei' && b.dataset.tab === 'ablage') || (name === 'mail' && b.dataset.tab === 'ablage')));
     $('kopf-titel').textContent = TITEL[name] || '';
     $('kopf').style.visibility = name === 'begruessung' ? 'hidden' : '';
-    if (st.modus === 'offen') geoZiel(OFFEN_B, HOEHE[name] || 160, 22);
+    if (st.modus === 'offen') geoZiel(OFFEN_B, hoeheFuer(name), 22);
     const f = FACE[name] && FACE[name]();
     if (f) {
       grossCanvas.style.opacity = '1';
@@ -521,7 +539,7 @@
     const knoepfe = $('u-knoepfe');
     const karte = $('u-karte');
     knoepfe.innerHTML = '';
-    const standard = l && l.team.find((b) => b.standard);
+    const standard = aktiverBotInfo();
     $('u-punkt').style.setProperty('--wer-farbe', `rgb(${(standard && BOT_FARBEN[standard.farbe]) || BOT_FARBEN.sky})`);
     if (!l || !l.angemeldet) {
       name.textContent = 'SPACE';
@@ -534,11 +552,12 @@
     } else if (l.laufend.length) {
       const h = l.laufend[0];
       name.textContent = h.bot || (standard && standard.name) || 'SPACE Bot';
-      rolle.textContent = 'arbeitet';
+      rolle.textContent = h.chat ? 'schreibt' : 'arbeitet';
       zeit.textContent = h.start ? dauer(Date.now() - Date.parse(h.start)) : '';
       titel.className = 'titel schimmer';
       titel.textContent = h.titel;
-      knoepfe.append(knopf('Ansehen', '', () => api.oeffnen('/aktivitaet'), 'oeffnen'));
+      if (h.chat) knoepfe.append(knopf('Zum Chat', '', () => api.oeffnen('/chat'), 'chat'));
+      else knoepfe.append(knopf('Ansehen', '', () => api.oeffnen('/aktivitaet'), 'oeffnen'));
       if (l.laufend.length > 1) knoepfe.append(knopf(`+${l.laufend.length - 1} weitere`, 'leise', () => api.oeffnen('/aktivitaet')));
       karte.dataset.wash = 'blau';
     } else {
@@ -556,7 +575,8 @@
     // right card: the team (several bots) or quick actions — rebuilt only when something changed
     const raster = $('u-raster');
     const bots = l && l.angemeldet ? l.team : [];
-    const schluessel = `${!!(l && l.angemeldet)}|${l && l.steno}|${bots.map((b) => `${b.id}:${b.farbe}:${botStatus(b)}`).join(',')}`;
+    const aktivId = standard ? standard.id : '';
+    const schluessel = `${!!(l && l.angemeldet)}|${l && l.steno}|${aktivId}|${bots.map((b) => `${b.id}:${b.farbe}:${botStatus(b)}`).join(',')}`;
     if (raster.dataset.schluessel === schluessel) { minisStarten(); return; }
     raster.dataset.schluessel = schluessel;
     minisWeg('raster');
@@ -568,6 +588,7 @@
         k.className = 'kachel';
         const status = botStatus(b);
         k.dataset.status = status;
+        if (b.id === aktivId) k.dataset.aktiv = '';
         const c = document.createElement('canvas');
         k.append(c);
         const s = document.createElement('span');
@@ -646,7 +667,8 @@
   function fragenZeichnen() {
     const l = st.lage;
     const bots = l ? l.team : [];
-    const gewaehlt = bots.find((b) => b.id === st.botWahl) || bots.find((b) => b.standard) || null;
+    const ak = aktiverBotInfo();
+    const gewaehlt = bots.find((b) => b.id === st.botWahl) || (ak && bots.find((b) => b.id === ak.id)) || bots.find((b) => b.standard) || null;
     const hinweisEl = $('q-hinweis');
     hinweisEl.innerHTML = `Frag <b>${escape(gewaehlt ? gewaehlt.name : 'SPACE')}</b> — die Antwort kommt im Chat.`;
     hinweisEl.classList.toggle('allein', bots.length <= 1);
@@ -776,7 +798,7 @@
       for (const f of lage.fertig) {
         if (!st.gesehenLaeufe.has(f.id) || st.gemeldet.has(f.id)) continue;
         st.gemeldet.add(f.id);
-        meldung(`${f.ok ? 'Erledigt' : 'Fehlgeschlagen'}: ${f.titel}`, f.ok ? 'erfolg' : 'fehler');
+        meldung(f.chat ? `${f.bot || 'SPACE Bot'} hat geantwortet` : `${f.ok ? 'Erledigt' : 'Fehlgeschlagen'}: ${f.titel}`, f.ok ? 'erfolg' : 'fehler');
         if (f.ok) { gesichtKlein.fertig(); gesichtGross.fertig(); K.spielen('fertig'); } else K.spielen('fehler');
       }
     }
@@ -798,6 +820,10 @@
 
     // Steno has its own robot (the protocol astronaut), the Bot-Team the SPACE helmet
     const figur = lage.steno ? 'steno' : 'space';
+    const ak = aktiverBotInfo();
+    const rgbAktiv = !lage.steno && ak && !ak.standard ? BOT_FARBEN[ak.farbe] || null : null;
+    gesichtKlein.farbe(rgbAktiv);
+    gesichtGross.farbe(rgbAktiv);
     insel.dataset.produkt = lage.steno ? 'steno' : 'team';
     gesichtKlein.figur(figur);
     gesichtGross.figur(figur);
@@ -805,7 +831,12 @@
     // work reveals the compact island
     if (st.modus === 'versteckt' && (lage.laufend.length || lage.freigaben.length)) modusSetzen('kompakt');
     if (st.modus === 'kompakt') kompaktZeichnen();
-    if (st.modus === 'offen' && st.ansicht === 'uebersicht') uebersichtZeichnen();
+    if (st.modus === 'offen' && st.ansicht === 'uebersicht') {
+      uebersichtZeichnen();
+      geoZiel(OFFEN_B, hoeheFuer('uebersicht'), 22);
+      const f = FACE.uebersicht();
+      gesichtZiel(f[0], f[1], f[2]);
+    }
     if (!st.einstellungen.begruesst && erste) begruessen(true);
     zuPlanen();
   }

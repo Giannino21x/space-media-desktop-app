@@ -96,6 +96,20 @@ contextBridge.exposeInMainWorld('spaceInselDatei', {
 });
 ipcRenderer.on('insel:datei-bereit', () => window.dispatchEvent(new Event('insel:datei')));
 
+// The island shows the bot the person is talking to in the chat, and whether it is writing (web: lib/insel/desktop.ts).
+contextBridge.exposeInMainWorld('spaceInselApp', {
+  version: 1,
+  aktiverBot: (bot) => {
+    if (!bot || typeof bot.id !== 'string') return;
+    ipcRenderer.send('insel:aktiver-bot', {
+      id: bot.id.slice(0, 64),
+      name: String(bot.name || '').slice(0, 40),
+      farbe: String(bot.farbe || 'sky').slice(0, 16),
+      schreibt: !!bot.schreibt,
+    });
+  },
+});
+
 window.addEventListener('DOMContentLoaded', () => {
   const style = document.createElement('style');
   style.textContent = `
