@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="de-CH">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob: mediastream:">
+  <title>SPACE Diktat</title>
+  <link rel="stylesheet" href="pille.css">
+</head>
+<body>
+  <div class="blase" id="blase" role="tooltip"></div>
+  <div class="kapsel" id="kapsel" data-look="ruhe">
+    <canvas class="p-gesicht" id="p-gesicht" aria-hidden="true"></canvas>
+    <div class="p-inhalt" data-look="werkzeug">
+      <button type="button" class="p-knopf" id="p-diktat" data-tipp="Diktieren · oder Strg rechts halten" aria-label="Diktieren"></button>
+      <button type="button" class="p-knopf" id="p-sitzung" data-tipp="Sitzung aufnehmen" aria-label="Sitzung aufnehmen"></button>
+      <button type="button" class="p-knopf" id="p-oeffnen" data-tipp="SPACE öffnen" aria-label="SPACE öffnen"></button>
+    </div>
+    <div class="p-inhalt" data-look="live freihand denkt">
+      <button type="button" class="p-klein p-weg" id="p-weg" aria-label="Abbrechen" data-tipp="Abbrechen · Esc"></button>
+      <div class="punkte" id="punkte"></div>
+      <button type="button" class="p-klein p-fertig" id="p-fertig" aria-label="Fertig" data-tipp="Fertig · Strg rechts"></button>
+    </div>
+    <div class="p-inhalt" data-look="meldung"><span class="p-text" id="p-text"></span></div>
+  </div>
+  <div class="sr-only" role="status" aria-live="polite" id="ansage"></div>
+  <script src="symbole.js"></script>
+  <script src="klang.js"></script>
+  <script src="gesicht.js"></script>
+  <script src="pille-ui.js"></script>
+</body>
+</html>

@@ -20,6 +20,11 @@ main.js            → Electron Main: BrowserWindow (frameless), Auto-Updater, T
                      Fokus, Load + 10-s-Sicherheitstick bei Fokus; wechselt erst nach 2 gleichen Samples)
 preload.js         → Drag-Region (body::after, 40 px), Badge-Observer (rAF-gedrosselt), Titlebar-Resync-IPC,
                      window.__electronRestart, window.spaceConnector («Eigenes Claude-Abo»), window.spaceDateien (PC-Ordner)
+insel/             → Die Insel (Desktop, Windows): SPACE oben am Bildschirmrand, auch wenn das App-Fenster zu ist —
+                     Verhalten nach Coucou für Windows (MIT-Code, Louis Raillé; Figur, Icons, Töne sind UNSERE: SPACE-Helm
+                     mit LED-Augen). insel.js = Main (zwei Fenster, Cursor-Poll, globaler Hook, Einfügen, App-API über die
+                     App-Session), regeln.js = rein + Tests (Diktat-Taste, Lagen, Multipart), preload.js = window.spaceInsel,
+                     ui/ = lokale Seiten (insel.html/-ui.js/.css, pille.html/-ui.js/.css, gesicht.js, symbole.js, klang.js)
 connector.js       → SPACE Connector im Hintergrund: Bundle von <App>/connector/space-connector.mjs laden, mit
                      Electrons Node (ELECTRON_RUN_AS_NODE) `pair`/`run` starten, beim Beenden stoppen;
                      reine Teile in connector.test.js (`npm test`)
@@ -100,6 +105,25 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
 - `datenschutz.html` und die Google-Verifizierungsdatei müssen auf `space-media.ch` erreichbar sein
   (Pflicht für beide Stores). Details in `DEPLOY_TO_SPACE_MEDIA.md`.
 - `dist/`, `downloads/` und `node_modules/` gehören nicht in Commits.
+- **Insel (insel/, seit 27.10.2026, nur Windows):** zwei transparente, nie fokussierte Fenster (`focusable: false`,
+  `type: 'toolbar'`, `alwaysOnTop 'screen-saver'`). Insel oben Mitte: versteckt ein 240×6-Streifen, der die Maus nimmt
+  (Windows hält Fenster ≥ ~38 px hoch → der Streifen hängt über den Rand, nur 6 px sichtbar; `streifenSetzen`), sichtbar ein
+  720×320-Panel; Durchklicken entscheidet der 16-ms-Cursor-Poll im Main im selben Takt (nie im Renderer per IPC — verliert
+  Klicks), Rand 14 px; solange die linke Taste im Panel gedrückt ist, nimmt es die Maus (sonst findet ein Explorer-Drag kein
+  Ziel). Pille unten Mitte über der Taskleiste (520×170, Ruhe 44×8). Diktat: `uiohook-napi` (N-API-Prebuilds, deshalb
+  `npmRebuild: false` — electron-builder kennt die ABI von Electron 44 nicht), rechte Strg halten ≥ 0,28 s / zweimal tippen
+  freihändig / Esc / andere Taste = Kürzel → verworfen (Regeln in `regeln.js`), Aufnahme im Pillen-Fenster (Session `insel`,
+  nur Mikrofon, nur file://), Transkription über `POST /api/voice/transcribe` der App mit der App-Session (KI-Option gilt),
+  Einfügen = Zwischenablage → Strg+V (uiohook `keyTap`) → alte Zwischenablage (Text/HTML/RTF/Bild) nach 700 ms zurück, nur
+  wenn unverändert. Der Hook beobachtet nur, speichert und sendet keine Tasten. Daten: `/api/profile` + `/api/team` alle
+  5 Min., `/api/runs/laufend` alle 20 s (offen 6 s), `/api/approvals` nur bei offenen Freigaben. Abgelegte Datei → «Im Chat
+  fragen» legt sie in main.js bereit, das App-Fenster holt sie einmal über `window.spaceInselDatei.nehmen()` (Web:
+  `desktopDateiNehmen` in `lib/insel/ablage.ts`, Ereignis `insel:datei`). Infobereich: Gesicht (`assets/tray.ico`, bernstein
+  `tray-wartet.ico` bei Freigaben), Menü «Insel oben anzeigen» / «Diktieren mit Strg rechts». Einstellungen in
+  `<userData>/insel.json`. Das App-Fenster darf jetzt das Mikrofon (nur Ton, nur App-Origin) — vorher war jede `media`-Anfrage
+  abgelehnt. Tests: `npm test` (regeln), Demo-Daten nur ungepackt mit `SPACE_INSEL_DEMO=1` (`window.inselDemo`), fester
+  Diktat-Text ungepackt mit `SPACE_INSEL_TEST_TEXT`. Nie einen Einfüge-Test laufen lassen, ohne vorher zu prüfen, welches Fenster
+  vorne ist (Strg+V landet sonst in der App der Person).
 - **«Eigenes Claude-Abo» (connector.js):** nur die unveränderte `claude`-Binary, die Person meldet sich selbst in
   Claude Code an, die Hülle liest von `claude auth status` nur `loggedIn` und sieht nie ein Claude-Token. Die IPC
   `connector:*` nimmt die Adresse aus dem anfragenden Frame (nur `APP_URL`/`LEGACY_APP_URL`, localhost nur mit

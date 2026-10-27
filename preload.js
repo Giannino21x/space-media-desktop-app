@@ -83,6 +83,19 @@ contextBridge.exposeInMainWorld('spaceDateien', {
   },
 });
 
+// The island (insel/insel.js) hands a dropped file to the chat: main says it is ready, the chat takes it once
+// (lib/insel/ablage.ts desktopDateiNehmen in the web app, on the event 'insel:datei').
+contextBridge.exposeInMainWorld('spaceInselDatei', {
+  version: 1,
+  nehmen: async () => {
+    const d = await ipcRenderer.invoke('insel:datei-nehmen');
+    if (!d) return null;
+    const bytes = d.daten;
+    return { name: d.name, type: d.type, daten: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) };
+  },
+});
+ipcRenderer.on('insel:datei-bereit', () => window.dispatchEvent(new Event('insel:datei')));
+
 window.addEventListener('DOMContentLoaded', () => {
   const style = document.createElement('style');
   style.textContent = `

@@ -6,6 +6,7 @@ const path = require('path');
 const { anmeldeAdresse, connectorOrigin, createConnectorHost } = require('./connector');
 const { DateienFehler, createDateienHost, fehlerMeldung, grundVon } = require('./dateien');
 const { fensterWache } = require('./fenster');
+const { createInselHost } = require('./insel/insel');
 
 // Tests can run a second copy next to the installed app with their own data.
 if (process.env.SPACE_USER_DATA) app.setPath('userData', process.env.SPACE_USER_DATA);
@@ -70,13 +71,15 @@ function createWindow() {
     },
   });
 
-  // Auto-grant notification permission (no browser popup needed)
-  mainWindow.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
-    if (permission === 'notifications') {
-      callback(true);
-    } else {
-      callback(false);
+  // Notifications without a browser popup; the microphone (audio only) for the app's own pages — dictation and
+  // meeting recording in the app. Everything else is refused.
+  mainWindow.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    if (permission === 'notifications') return callback(true);
+    if (permission === 'media') {
+      const nurTon = !details.mediaTypes || details.mediaTypes.every((t) => t === 'audio');
+      return callback(nurTon && appFenster.imFenster((details && details.requestingUrl) || webContents.getURL()));
     }
+    callback(false);
   });
 
   // Show after first paint is composited (prevents flash). Started with Windows: stay in the tray.
@@ -99,6 +102,8 @@ function createWindow() {
   // External links → system browser
   mainWindow.webContents.setWindowOpenHandler(appFenster.oeffnen);
   mainWindow.webContents.on('will-navigate', appFenster.navigieren);
+  // Signed in or out (a full navigation): the island asks the app again.
+  mainWindow.webContents.on('did-navigate', () => { if (insel) insel.neuLaden(); });
 
   // The window (taskbar, Alt+Tab) is always «SPACE Media Engine» — without
   // this Electron takes the page title («SPACE Bot», «Chat · SPACE Bot»).
@@ -229,6 +234,11 @@ function trayMenue() {
     { label: 'SPACE öffnen', click: zeigen },
     { type: 'separator' },
     { label: 'Mit Windows starten', type: 'checkbox', checked: autostart, enabled: app.isPackaged, click: (item) => mitWindowsStarten(item.checked) },
+    ...(insel ? [
+      { type: 'separator' },
+      { label: 'Insel oben anzeigen', type: 'checkbox', checked: insel.an, click: (item) => insel.schalten(item.checked) },
+      { label: 'Diktieren mit Strg rechts', type: 'checkbox', checked: insel.diktat, enabled: insel.an, click: (item) => insel.diktatSchalten(item.checked) },
+    ] : []),
     { type: 'separator' },
     { label: 'Beenden', click: () => { beenden = true; app.quit(); } },
   ]));
@@ -236,7 +246,8 @@ function trayMenue() {
 
 function trayAnlegen() {
   if (!hintergrund || tray) return;
-  tray = new Tray(path.join(__dirname, 'assets', 'icon.ico'));
+  // The SPACE face, drawn crisp for 16–64 px (insel/ui/gesicht.js); amber eyes while an approval waits.
+  tray = new Tray(path.join(__dirname, 'assets', 'tray.ico'));
   tray.setToolTip('SPACE Media Engine');
   tray.on('click', zeigen);
   trayMenue();
@@ -274,6 +285,36 @@ function appSenderOrigin(event) {
 
 // «Eigenes Claude-Abo»: the SPACE Connector runs in the background while the app is open (connector.js).
 let connector = null;
+
+// The island (insel/insel.js): SPACE at the top edge of the screen, also while this window is closed — Flow
+// dictation (right Ctrl), approvals, a dropped file for the chat. Windows for now.
+let insel = null;
+// A file dropped on the island, waiting for the chat to take it (once, two minutes).
+let inselDatei = null;
+
+/** Navigate the app window client-side (Next router), without a reload when the page is the app. */
+function appNavigieren(pfad, opts) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const wc = mainWindow.webContents;
+  const sagen = opts && opts.sagen ? JSON.stringify({ ...opts.sagen, at: Date.now() }) : null;
+  const js = `(function (p, sagen) {
+    try { if (sagen) sessionStorage.setItem('space-sagen-start', sagen); } catch (e) {}
+    if (location.pathname + location.search === p) { window.dispatchEvent(new Event('insel:datei')); return; }
+    if (window.next && window.next.router && typeof window.next.router.push === 'function') window.next.router.push(p);
+    else location.assign(p);
+  })(${JSON.stringify(pfad)}, ${JSON.stringify(sagen)})`;
+  wc.executeJavaScript(js).catch(() => {
+    const basis = isDev ? (process.env.SPACE_DEV_URL || 'http://localhost:3000') : APP_URL;
+    mainWindow.loadURL(basis + pfad);
+  });
+}
+
+ipcMain.handle('insel:datei-nehmen', (event) => {
+  if (!appSenderOrigin(event) || !inselDatei || Date.now() - inselDatei.zeit > 2 * 60 * 1000) return null;
+  const d = inselDatei;
+  inselDatei = null;
+  return { name: d.name, type: d.type, daten: d.daten };
+});
 
 function connectorSenderOrigin(event) {
   const origin = appSenderOrigin(event);
@@ -396,6 +437,8 @@ dateienKanal('dateien:beobachten-ende', (event, input) => {
 
 // GPU flags — before app.ready
 if (app && app.commandLine) {
+  // the island's sounds play without a click first
+  app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
   app.commandLine.appendSwitch('enable-gpu-rasterization');
   app.commandLine.appendSwitch('enable-zero-copy');
   app.commandLine.appendSwitch('ignore-gpu-blocklist');
@@ -458,6 +501,33 @@ app.on('ready', () => {
     onGekoppelt: () => mitWindowsStarten(true),
   });
   dateien = createDateienHost({ userDataDir: app.getPath('userData'), isDev, home: os.homedir() });
+  if (process.platform === 'win32') {
+    insel = createInselHost({
+      appUrl: isDev ? (process.env.SPACE_DEV_URL || 'http://localhost:3000') : APP_URL,
+      appPartition: 'persist:spaceapp',
+      userDataDir: app.getPath('userData'),
+      isDev,
+      zeigen,
+      navigieren: appNavigieren,
+      dateiZumChat: (datei) => {
+        inselDatei = { ...datei, zeit: Date.now() };
+        appNavigieren('/chat');
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('insel:datei-bereit');
+      },
+      log: (zeile) => console.log(`[insel] ${zeile}`),
+      beiEinstellungen: () => trayMenue(),
+      beiLage: (lage) => {
+        if (!tray) return;
+        const zahl = lage.freigaben.length;
+        tray.setImage(path.join(__dirname, 'assets', zahl ? 'tray-wartet.ico' : 'tray.ico'));
+        tray.setToolTip(zahl ? `SPACE · ${zahl === 1 ? 'eine Freigabe wartet' : `${zahl} Freigaben warten`}` : 'SPACE Media Engine');
+      },
+      testText: app.isPackaged ? null : process.env.SPACE_INSEL_TEST_TEXT || null,
+      demo: !app.isPackaged && process.env.SPACE_INSEL_DEMO === '1',
+    });
+    // After the first paint of the app window, so the island never competes with it.
+    setTimeout(() => insel.starten(), versteckterStart ? 1500 : 2500);
+  }
   trayAnlegen();
   // A few seconds after start, so the connector never competes with the first paint.
   setTimeout(() => connector.autostart(), 4000);
@@ -479,6 +549,7 @@ app.on('before-quit', () => { beenden = true; });
 
 // Stop the connector with the app (also before an update installs — it runs from the app's own exe).
 app.on('will-quit', () => {
+  if (insel) insel.shutdown();
   if (connector) connector.shutdown();
   if (dateien) dateien.shutdown();
 });

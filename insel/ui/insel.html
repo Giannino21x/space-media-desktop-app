@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="de-CH">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self'">
+  <title>SPACE Insel</title>
+  <link rel="stylesheet" href="insel.css">
+</head>
+<body>
+  <div id="insel" data-modus="versteckt">
+    <div id="clip">
+      <div class="kompakt" role="button" tabindex="-1" aria-label="SPACE öffnen">
+        <canvas class="kompakt-gesicht" id="gesicht-klein" aria-hidden="true"></canvas>
+        <div class="kompakt-mitte" id="k-mitte"><span class="k-zeichen" id="k-zeichen" hidden></span><span class="k-text" id="k-text"></span><span class="k-zeit" id="k-zeit"></span></div>
+        <div class="kompakt-team" id="k-team"></div>
+      </div>
+
+      <div class="offen">
+        <canvas class="sterne" id="sterne" hidden aria-hidden="true"></canvas>
+        <header class="kopf" id="kopf">
+          <div class="kopf-gruppe">
+            <button type="button" data-tab="uebersicht" aria-label="Übersicht" title="Übersicht"></button>
+            <button type="button" data-tab="fragen" aria-label="SPACE fragen" title="SPACE fragen"></button>
+            <button type="button" data-tab="ablage" aria-label="Datei ablegen" title="Datei ablegen"></button>
+          </div>
+          <span class="kopf-titel" id="kopf-titel"></span>
+          <div class="kopf-gruppe">
+            <button type="button" data-tab="einstellungen" aria-label="Einstellungen" title="Einstellungen"></button>
+            <button type="button" id="ton" aria-label="Töne" title="Töne"></button>
+          </div>
+        </header>
+
+        <div class="koerper" id="koerper">
+          <!-- overview -->
+          <section class="ansicht" data-name="uebersicht">
+            <div class="karte uebersicht-links" id="u-karte">
+              <div class="stapel">
+                <div class="wer"><span class="punkt" id="u-punkt"></span><span class="name" id="u-name">SPACE Bot</span><span class="rolle" id="u-rolle">bereit</span><span class="rechts" id="u-zeit"></span></div>
+                <div class="titel" id="u-titel"></div>
+                <div class="knoepfe" id="u-knoepfe"></div>
+              </div>
+            </div>
+            <div class="karte uebersicht-rechts"><div class="raster" id="u-raster"></div></div>
+          </section>
+
+          <!-- approval -->
+          <section class="ansicht" data-name="freigabe">
+            <div class="karte" data-wash="bernstein">
+              <button type="button" class="zuklappen" id="f-zu" aria-label="Später — warten lassen" title="Später — warten lassen"></button>
+              <div class="stapel">
+                <div class="wer"><span class="punkt" id="f-punkt"></span><span class="name" id="f-name"></span><span class="rolle">braucht deine Freigabe</span><span class="rechts" id="f-zahl"></span></div>
+                <div class="zeile" id="f-zeile"></div>
+                <div class="knoepfe">
+                  <button type="button" class="knopf" id="f-nein">Ablehnen</button>
+                  <button type="button" class="knopf haupt" id="f-ja">Freigeben</button>
+                  <button type="button" class="knopf leise" id="f-ansehen">In SPACE ansehen</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ask -->
+          <section class="ansicht" data-name="fragen">
+            <div class="karte" id="q-karte">
+              <div class="frage-hinweis" id="q-hinweis"></div>
+              <form class="frage-feld" id="q-form" autocomplete="off">
+                <input id="q-eingabe" maxlength="2000" placeholder="Frag SPACE …" aria-label="Frage an SPACE">
+                <button type="submit" class="rund senden" id="q-senden" aria-label="Senden" disabled></button>
+              </form>
+            </div>
+          </section>
+
+          <!-- drop zone -->
+          <section class="ansicht" data-name="ablage">
+            <div class="zone" id="zone">
+              <svg class="rahmen" aria-hidden="true"><rect x="0.75" y="0.75" rx="19.5" ry="19.5"></rect></svg>
+              <div class="zone-text">
+                <span class="titel">Datei hier ablegen</span>
+                <div class="chips"><span>PDF</span><span>Bilder</span><span>Word</span><span>Excel</span></div>
+                <div><button type="button" class="knopf leise waehlen" id="z-waehlen">oder Datei wählen …</button></div>
+              </div>
+              <input type="file" id="z-input" hidden>
+            </div>
+          </section>
+
+          <!-- the file: reading, then «what now?» -->
+          <section class="ansicht" data-name="datei">
+            <div class="karte" id="d-karte">
+              <div class="balken-text" id="d-btext"><span id="d-name"></span><span class="rechts"><span class="prozent" id="d-prozent">0 %</span><span class="ok" id="d-ok"></span></span></div>
+              <div class="balken" id="d-balken"><i id="d-fuellung"></i></div>
+              <div class="wahl" id="d-wahl">
+                <span class="titel" id="d-titel"></span>
+                <span class="text">Was soll ich damit tun?</span>
+                <div class="knoepfe">
+                  <button type="button" class="knopf haupt" id="d-chat">Im Chat fragen</button>
+                  <button type="button" class="knopf" id="d-mail">Per Mail senden</button>
+                  <button type="button" class="knopf leise" id="d-weg">Abbrechen</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- mail with the file -->
+          <section class="ansicht" data-name="mail">
+            <div class="karte">
+              <form class="formular" id="m-form" autocomplete="off">
+                <label><span>An</span><input id="m-an" type="email" placeholder="name@firma.ch" required></label>
+                <label><span>Betreff</span><input id="m-betreff"></label>
+                <label class="gross"><span>Text</span><textarea id="m-text" placeholder="Hallo …"></textarea></label>
+                <div class="fuss">
+                  <span class="datei" id="m-datei"></span>
+                  <span class="fehler" id="m-fehler"></span>
+                  <button type="button" class="knopf" id="m-zurueck">Zurück</button>
+                  <button type="submit" class="knopf haupt" id="m-senden">Senden</button>
+                </div>
+              </form>
+            </div>
+          </section>
+
+          <!-- settings -->
+          <section class="ansicht" data-name="einstellungen">
+            <div class="karte">
+              <div class="einstellungen" id="e-liste"></div>
+            </div>
+          </section>
+
+          <!-- a short note (signed out, sent, too many pokes …) -->
+          <section class="ansicht" data-name="hinweis">
+            <div class="karte" id="h-karte">
+              <div class="stapel">
+                <span class="titel" id="h-titel"></span>
+                <span class="text" id="h-text"></span>
+                <div class="knoepfe" id="h-knoepfe"></div>
+              </div>
+            </div>
+          </section>
+
+          <!-- launch greeting -->
+          <section class="ansicht" data-name="begruessung">
+            <div class="begruessung-text" id="b-text">
+              <span class="titel" id="b-titel"></span>
+              <span class="text" id="b-unter"></span>
+            </div>
+          </section>
+        </div>
+
+        <div class="gesicht-schein" id="schein"></div>
+        <canvas class="gesicht-gross" id="gesicht-gross" aria-hidden="true"></canvas>
+        <div class="blatt" id="blatt"></div>
+        <div class="countdown" id="countdown"></div>
+      </div>
+    </div>
+  </div>
+  <div class="sr-only" role="status" aria-live="polite" id="ansage"></div>
+
+  <script src="symbole.js"></script>
+  <script src="klang.js"></script>
+  <script src="gesicht.js"></script>
+  <script src="insel-ui.js"></script>
+</body>
+</html>

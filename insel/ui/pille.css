@@ -1,0 +1,122 @@
+/* The dictation pill — bottom centre above the taskbar. Sizes after Coucou for Windows: resting 44×8, toolbar 150×34,
+   live 118×34, hands-free 158×34; the capsule grows with a little overshoot (0.36 s). */
+
+:root {
+  color-scheme: dark;
+  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --ink: #f5f6f8;
+  --dim: #9398a1;
+  --akzent: #a6daff;
+  --rot: #ff8d97;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; font-family: var(--font); color: var(--ink); -webkit-font-smoothing: antialiased; user-select: none; cursor: default; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: default; }
+button:focus-visible { outline: 2px solid var(--akzent); outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+.kapsel {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 44px;
+  height: 8px;
+  translate: -50% 0;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.28);
+  box-shadow: inset 0 0 0 1.2px rgba(255, 255, 255, 0.42);
+  transition: width 0.36s cubic-bezier(0.34, 1.36, 0.64, 1), height 0.36s cubic-bezier(0.34, 1.36, 0.64, 1), background 0.2s, box-shadow 0.2s;
+}
+.kapsel:not([data-look="ruhe"]) {
+  background: rgba(0, 0, 0, 0.94);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16), 0 4px 10px rgba(0, 0, 0, 0.35);
+}
+.kapsel[data-look="werkzeug"] { width: 150px; height: 34px; }
+.kapsel[data-look="live"], .kapsel[data-look="denkt"] { width: 118px; height: 34px; }
+.kapsel[data-look="freihand"] { width: 166px; height: 34px; box-shadow: inset 0 0 0 1.5px rgba(43, 142, 240, 0.9), 0 4px 10px rgba(0, 0, 0, 0.35); }
+.kapsel[data-look="meldung"] { height: 34px; }
+.kapsel[data-look="meldung"][data-art="fehler"] { box-shadow: inset 0 0 0 1px rgba(244, 80, 94, 0.55), 0 4px 10px rgba(0, 0, 0, 0.35); }
+
+.p-gesicht {
+  position: absolute;
+  left: 7px;
+  top: 6px;
+  width: 22px;
+  height: 22px;
+  opacity: 0;
+  scale: 0.5;
+  transition: opacity 0.1s ease-in, scale 0.1s ease-in;
+}
+.kapsel:not([data-look="ruhe"]) .p-gesicht { opacity: 1; scale: 1; transition: opacity 0.2s ease-out 0.07s, scale 0.2s ease-out 0.07s; }
+.kapsel[data-look="freihand"] .p-gesicht { left: 32px; }
+
+.p-inhalt {
+  position: absolute;
+  inset: 0 6px 0 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  opacity: 0;
+  scale: 0.5;
+  pointer-events: none;
+  transition: opacity 0.1s ease-in, scale 0.1s ease-in;
+}
+.p-inhalt.an { opacity: 1; scale: 1; pointer-events: auto; transition: opacity 0.2s ease-out 0.07s, scale 0.2s ease-out 0.07s; }
+.p-inhalt[data-look~="live"] { inset: 0 8px 0 34px; justify-content: center; }
+.kapsel[data-look="freihand"] .p-inhalt[data-look~="live"] { inset: 0 5px 0 5px; justify-content: space-between; }
+
+.p-knopf {
+  width: 34px;
+  height: 28px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dim);
+  transition: background 0.15s, color 0.15s;
+}
+.p-knopf:hover { background: rgba(255, 255, 255, 0.08); color: var(--ink); }
+.p-knopf svg { width: 15px; height: 15px; }
+#p-sitzung:hover { color: #ff6b6b; }
+
+.punkte { display: flex; align-items: center; gap: 3.2px; height: 26px; }
+.punkte i { display: block; width: 3.4px; height: 3.4px; border-radius: 2px; background: rgba(255, 255, 255, 0.94); }
+.kapsel[data-look="freihand"] .punkte { margin-left: 26px; }
+
+.p-klein { display: none; width: 24px; height: 24px; border-radius: 12px; align-items: center; justify-content: center; }
+.kapsel[data-look="freihand"] .p-klein { display: inline-flex; }
+.p-weg { color: var(--dim); background: rgba(255, 255, 255, 0.08); }
+.p-weg:hover { color: var(--ink); background: rgba(255, 255, 255, 0.14); }
+.p-fertig { background: #f5f6f8; color: #0b0c0e; }
+.p-klein svg { width: 12px; height: 12px; }
+
+.p-text { font-size: 12.5px; font-weight: 600; white-space: nowrap; padding-right: 8px; }
+.kapsel[data-art="fehler"] .p-text { color: var(--rot); }
+.p-inhalt[data-look="meldung"] { justify-content: flex-start; }
+
+.blase {
+  position: absolute;
+  left: 50%;
+  bottom: 44px;
+  height: 30px;
+  padding: 0 14px;
+  translate: -50% 0;
+  border-radius: 15px;
+  background: rgba(0, 0, 0, 0.94);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 4px 12px rgba(0, 0, 0, 0.35);
+  font-size: 12.5px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  opacity: 0;
+  scale: 0.85;
+  transition: opacity 0.12s, scale 0.12s;
+  pointer-events: none;
+}
+.blase.an { opacity: 1; scale: 1; transition: opacity 0.2s, scale 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .kapsel { transition: width 0.12s, height 0.12s; }
+}
