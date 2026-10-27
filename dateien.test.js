@@ -531,3 +531,31 @@ test('beobachten: the shared folder itself deleted → pfad «» geloescht, watc
   assert.deepEqual(meldung, [{ pfad: '', art: 'geloescht' }]);
   assert.equal(await naechsteMeldung(postfach, 2000), null);
 });
+
+test('standardFreigeben: usual folders shared once, live only; removed ones never come back', async (t) => {
+  const { tmp, home, userDataDir, host } = aufbauen();
+  t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+  const dokumente = path.join(home, 'Documents');
+  const schreibtisch = path.join(home, 'Desktop');
+  fs.mkdirSync(dokumente, { recursive: true });
+  fs.mkdirSync(schreibtisch, { recursive: true });
+  const fehlt = path.join(home, 'Downloads');
+
+  assert.equal(await host.standardFreigeben([{ ort: dokumente, name: 'Dokumente' }, { ort: schreibtisch, name: 'Schreibtisch' }, fehlt, home]), 2);
+  const freigaben = host.freigaben();
+  assert.deepEqual(freigaben.map((f) => [f.name, f.sync, f.live]), [['Dokumente', false, true], ['Schreibtisch', false, true]]);
+
+  // Removed by the person → not added again, also not after a restart; a folder that appears later is not added either
+  host.freigabeEntfernen(freigaben[0].id);
+  fs.mkdirSync(fehlt, { recursive: true });
+  const neu = createDateienHost({ userDataDir, isDev: false, home, env: {} });
+  assert.equal(await neu.standardFreigeben([dokumente, schreibtisch, fehlt]), 0);
+  assert.deepEqual(neu.freigaben().map((f) => f.name), ['Schreibtisch']);
+
+  // A folder the person shared before keeps its own settings
+  const zweiter = createDateienHost({ userDataDir: path.join(tmp, 'zweite-app'), isDev: false, home, env: {} });
+  const eigene = await zweiter.freigabeAnlegen(dokumente);
+  zweiter.freigabeAendern(eigene.id, { sync: true });
+  assert.equal(await zweiter.standardFreigeben([dokumente]), 0);
+  assert.deepEqual(zweiter.freigaben().map((f) => [f.sync, f.live]), [[true, false]]);
+});

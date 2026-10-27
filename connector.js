@@ -22,8 +22,8 @@ const CLAUDE_CHECK_TTL_MS = 30_000;
 const LOGIN_TIMEOUT_MS = 10 * 60_000;
 
 const MELDUNG = {
-  claudeFehlt: 'Claude Code ist auf diesem Rechner nicht installiert. Installiere es und klicke dann nochmals auf «Claude-Abo verbinden».',
-  nichtAngemeldet: 'Claude Code ist installiert, aber nicht angemeldet. «Claude-Abo verbinden» öffnet die Anmeldung von Claude im Browser.',
+  claudeFehlt: 'Auf diesem Rechner fehlt Claude Code. Installiere es — danach verbindet sich der Rechner von selbst.',
+  nichtAngemeldet: 'Claude Code ist hier nicht angemeldet. «Anmelden» öffnet die Anmeldung von Claude im Browser.',
   abgelehnt: 'Die App kennt diesen Rechner nicht mehr. Koppel ihn neu, wenn der Chat wieder über dein Abo laufen soll.',
   laden: 'Der SPACE Connector liess sich nicht laden. Prüfe die Internetverbindung und versuche es nochmals.',
   fremdeAdresse: 'Die gespeicherte Kopplung gehört zu einer anderen Adresse. Bitte neu koppeln.',

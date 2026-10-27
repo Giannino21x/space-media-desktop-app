@@ -351,7 +351,8 @@ ipcMain.handle('connector:starten', (event) => { connectorSenderOrigin(event); r
 ipcMain.handle('connector:stoppen', (event) => { connectorSenderOrigin(event); return connector.stoppen(); });
 ipcMain.handle('connector:entkoppeln', (event) => { connectorSenderOrigin(event); return connector.entkoppeln(); });
 
-// «Dateien» (window.spaceDateien, dateien.js): PC folders the person picked in the system dialog. The web app lists,
+// «Dateien» (window.spaceDateien, dateien.js): PC folders the person picked in the system dialog (plus Documents,
+// Desktop and Downloads, shared once at the first start — live only). The web app lists,
 // reads and watches them — sync into «Meine Dateien», the bots' live access while the app is open. Read only.
 // Answers are { ok, wert } / { ok: false, grund, meldung }, so the page gets the German message, not Electron's
 // «Error invoking remote method …».
@@ -501,6 +502,11 @@ app.on('ready', () => {
     onGekoppelt: () => mitWindowsStarten(true),
   });
   dateien = createDateienHost({ userDataDir: app.getPath('userData'), isDev, home: os.homedir() });
+  // «Done for you» (27.10.2026): Documents, Desktop and Downloads are shared once, live only — the bots look in
+  // while the app is open, nothing is copied; a folder the person removes stays removed (dateien.js standardFreigeben).
+  const ueblicheOrdner = [['documents', 'Dokumente'], ['desktop', 'Schreibtisch'], ['downloads', 'Downloads']]
+    .map(([art, name]) => { try { return { ort: app.getPath(art), name }; } catch { return null; } }).filter(Boolean);
+  dateien.standardFreigeben(ueblicheOrdner).catch((err) => console.warn('[dateien] Standardordner:', err.message));
   if (process.platform === 'win32') {
     insel = createInselHost({
       appUrl: isDev ? (process.env.SPACE_DEV_URL || 'http://localhost:3000') : APP_URL,

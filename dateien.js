@@ -349,18 +349,26 @@ function createDateienHost(o) {
   const beobachter = new Map();
   let anzahlBeobachter = 0;
 
+  const rohLaden = () => {
+    try { return JSON.parse(fs.readFileSync(datei, 'utf8')) || {}; } catch { return {}; }
+  };
+  /** Usual folders already offered once (standardFreigeben) — a removed one is never added again. */
+  const angebotenLaden = () => {
+    const a = rohLaden().angeboten;
+    return Array.isArray(a) ? a.filter((x) => typeof x === 'string') : [];
+  };
   const laden = () => {
     try {
-      const daten = JSON.parse(fs.readFileSync(datei, 'utf8'));
+      const daten = rohLaden();
       return (Array.isArray(daten.freigaben) ? daten.freigaben : []).filter((f) => f
         && typeof f.id === 'string' && typeof f.name === 'string' && typeof f.ort === 'string')
         .map((f) => ({ id: f.id, name: f.name, ort: f.ort, sync: f.sync === true, live: f.live === true }));
     } catch { return []; }
   };
-  const speichern = (freigaben) => {
+  const speichern = (freigaben, angeboten = angebotenLaden()) => {
     fs.mkdirSync(path.dirname(datei), { recursive: true });
     const tmp = `${datei}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify({ version: 1, freigaben }, null, 2));
+    fs.writeFileSync(tmp, JSON.stringify({ version: 1, freigaben, ...(angeboten.length ? { angeboten } : {}) }, null, 2));
     fs.renameSync(tmp, datei);
   };
   const finden = (id) => {
@@ -539,6 +547,40 @@ function createDateienHost(o) {
 
     freigaben() {
       return laden().map(oeffentlich);
+    },
+
+    /**
+     * «Done for you» (27.10.2026, Giannino: «jemand kommt, die lokalen Dateien sind verbunden»): the person's usual
+     * folders (Documents, Desktop, Downloads) are shared once — live only: the bots look in while the app is open,
+     * nothing is copied. Each folder is offered once; one the person removes never comes back. Missing or not
+     * allowed folders are skipped silently. Returns how many shares were added.
+     */
+    async standardFreigeben(orte) {
+      const angeboten = angebotenLaden();
+      const schon = new Set(angeboten.map((a) => vergleichbar(a, platform)));
+      let neu = 0;
+      for (const eintrag of Array.isArray(orte) ? orte : []) {
+        // { ort, name } — name is how the bots address it («PC/Dokumente/…»), in the person's language
+        const ort = typeof eintrag === 'string' ? eintrag : eintrag && eintrag.ort;
+        const name = eintrag && typeof eintrag.name === 'string' ? eintrag.name : null;
+        if (typeof ort !== 'string' || !ort || schon.has(vergleichbar(ort, platform))) continue;
+        schon.add(vergleichbar(ort, platform));
+        angeboten.push(ort);
+        try {
+          const vorher = laden().length;
+          const f = await host.freigabeAnlegen(ort);
+          if (laden().length > vorher) {
+            const freigaben = laden();
+            const g = freigaben.find((x) => x.id === f.id);
+            g.live = true;
+            if (name) g.name = eindeutigerName(name, freigaben.filter((x) => x.id !== f.id).map((x) => x.name));
+            speichern(freigaben, angeboten);
+            neu++;
+          }
+        } catch { /* missing, not a folder or not allowed — skip */ }
+      }
+      speichern(laden(), angeboten);
+      return neu;
     },
 
     freigabeAendern(id, felder) {
