@@ -24,7 +24,9 @@ insel/             → Die Insel (Desktop, Windows): SPACE oben am Bildschirmran
                      Verhalten nach Coucou für Windows (MIT-Code, Louis Raillé; Figur, Icons, Töne sind UNSERE: SPACE-Helm
                      mit LED-Augen). insel.js = Main (zwei Fenster, Cursor-Poll, globaler Hook, Einfügen, App-API über die
                      App-Session), regeln.js = rein + Tests (Diktat-Taste, Lagen, Multipart), preload.js = window.spaceInsel,
-                     ui/ = lokale Seiten (insel.html/-ui.js/.css, pille.html/-ui.js/.css, gesicht.js, symbole.js, klang.js)
+                     ui/ = lokale Seiten (insel.html/-ui.js/.css, pille.html/-ui.js/.css, gesicht.js, symbole.js, klang.js);
+                     ui/koepfe/kopf-<px>.png = der echte Helm der App-Bots mit leerem Visier (Higgsfield, 27.10.2026),
+                     gesicht.js zeichnet darauf Augen und Visierrand in der Farbe des Bots (Geometrie KOPF)
 connector.js       → SPACE Connector im Hintergrund: Bundle von <App>/connector/space-connector.mjs laden, mit
                      Electrons Node (ELECTRON_RUN_AS_NODE) `pair`/`run` starten, beim Beenden stoppen;
                      reine Teile in connector.test.js (`npm test`)

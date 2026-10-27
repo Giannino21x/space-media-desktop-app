@@ -25,6 +25,25 @@
     steno: { schale: ['#dfe3e8', '#a6aeb8', '#6a7380'], rand: '242,184,75', led: '251,191,36', hoert: '255,214,102', ohr: '#8d96a2', ohrRing: 'rgba(242,184,75,0.95)', glas: ['#12161c', '#030406'], augen: [0.16, 0.16], headset: true },
   };
 
+  // The real helmet of the app's bots (koepfe/kopf-<px>.png: silver shell, S logo, ear pieces, antenna, empty glass
+  // visor — made with Higgsfield from the SPACE Bot figure). The engine draws it and puts the living LED eyes and the
+  // bot-coloured visor rim on the glass. Geometry as fractions of the square image (measured on the 2k original).
+  const KOPF = { breite: 0.961, visier: { x: 0.155, y: 0.293, w: 0.687, h: 0.483, r: 0.3 } };
+  const KOPF_GROESSEN = [32, 64, 128, 256];
+  const kopfBilder = {};
+  function kopfBild(px) {
+    if (typeof Image === 'undefined') return null;
+    const g = KOPF_GROESSEN.find((x) => x >= px) || 256;
+    let b = kopfBilder[g];
+    if (!b) {
+      b = new Image();
+      b.decoding = 'async';
+      b.src = `koepfe/kopf-${g}.png`;
+      kopfBilder[g] = b;
+    }
+    return b.complete && b.naturalWidth ? b : null;
+  }
+
   const klemmen = (x, a, b) => Math.min(b, Math.max(a, x));
   const glatt = (t) => t * t * (3 - 2 * t);
   const raus = (t) => 1 - (1 - t) * (1 - t);
@@ -241,7 +260,8 @@
       z.by = naeher(z.by, zy, 0.0025, dt);
 
       // body: tilt toward the gaze, wobble when dizzy
-      const zielNeigung = z.bx * 0.06 + (z.schwindligBis > t ? Math.sin(z.t * 9) * 0.1 : 0);
+      // small faces turn their whole head a little more, so the look reads at 13–24 px
+      const zielNeigung = z.bx * (details ? 0.06 : 0.12) + (z.schwindligBis > t ? Math.sin(z.t * 9) * 0.1 : 0);
       z.neigung = naeher(z.neigung, zielNeigung, 0.0008, dt);
 
       // squash keyframes
@@ -336,9 +356,13 @@
       ctx.translate(0, -H / 2);
       const x0 = -W / 2;
       const y0 = -H / 2;
+      // the real helmet when its image is loaded (o.bild false = always drawn, e.g. tray icons)
+      const bild = o.bild === false ? null : kopfBild((W / KOPF.breite) * dpr);
+      const S = W / KOPF.breite;
+      if (bild) ctx.drawImage(bild, -S / 2, -S / 2, S, S);
 
       // antenna (behind the shell); its tip lags behind the head a little
-      if (details) {
+      if (details && !bild) {
         const wipp = Math.sin(z.t * 2.1) * W * 0.012 - z.neigung * W * 0.25;
         ctx.strokeStyle = 'rgba(205,214,226,0.95)';
         ctx.lineWidth = Math.max(1, W * 0.028);
@@ -354,6 +378,7 @@
       }
 
       // shell
+      if (!bild) {
       helmPfad(ctx, x0, y0, W, H);
       const schale = ctx.createLinearGradient(W * 0.3, y0, -W * 0.3, y0 + H);
       schale.addColorStop(0, figur.schale[0]);
@@ -386,8 +411,10 @@
       }
       ctx.restore();
 
+      }
+
       // ear piece (Steno: a headset cup with a gold ring)
-      if (details) {
+      if (details && !bild) {
         const gross = figur.headset ? 1.35 : 1;
         ctx.fillStyle = figur.ohr;
         ctx.beginPath();
@@ -405,11 +432,13 @@
         }
       }
 
-      // the visor; lifts for a file (z.visier 0..1) and opens the helmet
-      const vw = visier.w;
-      const vh = visier.h;
-      const auf = z.visier;
-      const vr = [vh * 0.46, vh * 0.46, vh * 0.5, vh * 0.5];
+      // the visor; lifts for a file (z.visier 0..1) and opens the helmet — the drawn helmet only
+      const KV = KOPF.visier;
+      const vw = bild ? KV.w * S : visier.w;
+      const vh = bild ? KV.h * S : visier.h;
+      const auf = bild ? 0 : z.visier;
+      const vr = bild ? vh * KV.r : [vh * 0.46, vh * 0.46, vh * 0.5, vh * 0.5];
+      const A = bild ? { w: S * 0.13, h: S * 0.13, abstand: S * 0.165 } : auge;
       if (auf > 0.01) {
         ctx.save();
         ctx.beginPath();
@@ -423,22 +452,27 @@
         ctx.fill();
         ctx.restore();
       }
-      const vx = z.bx * W * 0.035;
-      const vy = visier.dy + z.by * H * 0.02 - auf * H * 0.46;
+      const vx = bild ? -S / 2 + (KV.x + KV.w / 2) * S : z.bx * W * (details ? 0.035 : 0.06);
+      const vy = bild ? -S / 2 + (KV.y + KV.h / 2) * S : visier.dy + z.by * H * 0.02 - auf * H * 0.46;
       ctx.save();
       ctx.translate(vx, vy);
       ctx.scale(1, 1 - auf * 0.5);
       ctx.beginPath();
       ctx.roundRect(-vw / 2, -vh / 2, vw, vh, vr);
-      ctx.lineWidth = Math.max(1.5, W * 0.085);
-      ctx.strokeStyle = `rgba(${farbe},${0.16 + (z.hoert ? z.pegelGlatt * 0.35 : 0)})`;
-      ctx.stroke();
-      const glas = ctx.createLinearGradient(0, -vh / 2, 0, vh / 2);
-      glas.addColorStop(0, figur.glas[0]);
-      glas.addColorStop(1, figur.glas[1]);
-      ctx.fillStyle = glas;
-      ctx.fill();
-      ctx.lineWidth = Math.max(1, W * (figur.rand ? 0.04 : 0.032));
+      if (details || !bild) { // the soft glow around the rim — not on tiny faces, it would swallow the helmet
+        ctx.lineWidth = Math.max(1.5, W * (bild ? 0.06 : 0.085));
+        ctx.strokeStyle = `rgba(${figur.rand || farbe},${0.16 + (z.hoert ? z.pegelGlatt * 0.35 : 0)})`;
+        ctx.stroke();
+      }
+      if (!bild) {
+        const glas = ctx.createLinearGradient(0, -vh / 2, 0, vh / 2);
+        glas.addColorStop(0, figur.glas[0]);
+        glas.addColorStop(1, figur.glas[1]);
+        ctx.fillStyle = glas;
+        ctx.fill();
+      }
+      // the glowing rim in the bot's colour (Steno: gold), like the figures in the app
+      ctx.lineWidth = bild ? Math.max(0.7, W * 0.026) : Math.max(1, W * (figur.rand ? 0.04 : 0.032));
       ctx.strokeStyle = figur.rand ? `rgb(${figur.rand})` : `rgba(${farbe},0.92)`;
       ctx.stroke();
 
@@ -447,17 +481,18 @@
       ctx.beginPath();
       ctx.roundRect(-vw / 2, -vh / 2, vw, vh, vr);
       ctx.clip();
-      const maxX = vw / 2 - auge.abstand - auge.w / 2 - W * 0.035;
-      const maxY = vh / 2 - auge.h / 2 - W * 0.03;
+      // at least a visible step on tiny faces (the eyes may touch the rim there)
+      const maxX = Math.max(vw / 2 - A.abstand - A.w / 2 - W * 0.035, details ? 0 : W * 0.1);
+      const maxY = Math.max(vh / 2 - A.h / 2 - W * 0.03, details ? 0 : W * 0.06);
       // done / dizzy: the eyes scroll across the visor like a LED marquee
       const re = t - z.rollStart;
       let roll = 0;
       if (re >= 0 && re < z.rollDauer) roll = glatt(re / z.rollDauer) * z.rollRunden;
-      const span = vw + auge.abstand * 2 + auge.w;
+      const span = vw + A.abstand * 2 + A.w;
       const ex = z.bx * maxX + (roll % 1) * span - (roll % 1 > 0.5 ? span : 0);
       const ey = z.by * maxY;
-      const aw = auge.w * z.augenSkala;
-      const ah = auge.h * z.augenSkala;
+      const aw = A.w * z.augenSkala;
+      const ah = A.h * z.augenSkala;
       const zeichneAugen = (form, alpha) => {
         if (alpha <= 0.01) return;
         ctx.globalAlpha = alpha;
@@ -465,7 +500,7 @@
           ctx.save();
           // curved glass: the eye nearer the edge gets narrower
           const s = 1 - Math.max(0, seite * z.bx) * 0.16;
-          ctx.translate(seite * auge.abstand + ex, ey);
+          ctx.translate(seite * A.abstand + ex, ey);
           const lid = form === 'oval' || form === 'gross' ? z.offen : Math.max(z.offen, 0.7);
           ctx.scale(s, lid);
           augeZeichnen(ctx, form, aw, ah, seite, z.t, `rgb(${farbe})`);
@@ -495,7 +530,7 @@
         ctx.fillRect(-vw / 2, -vh / 2, vw, vh);
       }
       const glanz = ctx.createLinearGradient(-vw / 2, -vh / 2, vw * 0.1, vh * 0.1);
-      glanz.addColorStop(0, 'rgba(255,255,255,0.16)');
+      glanz.addColorStop(0, `rgba(255,255,255,${bild ? 0.07 : 0.16})`);
       glanz.addColorStop(0.45, 'rgba(255,255,255,0.03)');
       glanz.addColorStop(0.46, 'rgba(255,255,255,0)');
       ctx.fillStyle = glanz;
