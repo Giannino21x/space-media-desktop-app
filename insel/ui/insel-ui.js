@@ -215,6 +215,7 @@
       return;
     }
     uhr('einklappen', null);
+    delete document.documentElement.dataset.streifen;
     api.ansicht(neu);
     gemeldetRect = null;
     if (neu === 'kompakt') {
@@ -1149,13 +1150,25 @@
   }
 
   // ---------------------------------------------------------------- input
-  document.querySelector('.kompakt').addEventListener('click', () => {
+  /** Open on the press, not on the click: from the hidden strip the window grows to the panel between press and
+   *  release, so a «click» never completes there. In compact the window only takes the mouse over the island. */
+  function aufklappen() {
     st.durchHover = false;
     st.interagiert = true;
     st.ansicht = standardAnsicht();
     if (st.ansicht === 'freigabe') { st.freigabeSeit = performance.now() - 600; freigabeZeichnen(); }
     modusSetzen('offen');
     K.spielen('hallo');
+  }
+  document.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return;
+    if (st.modus === 'versteckt' || (st.modus === 'kompakt' && !e.target.closest('.offen'))) {
+      e.preventDefault();
+      aufklappen();
+    }
+  });
+  document.querySelector('.kompakt').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); aufklappen(); }
   });
   for (const b of document.querySelectorAll('[data-tab]')) {
     b.addEventListener('click', () => {
@@ -1210,6 +1223,14 @@
     gesichtKlein.ausdruck('bogen', 900);
     if (st.einstellungen.hoverOeffnen) { st.ansicht = standardAnsicht(); modusSetzen('offen'); st.durchHover = true; }
   }
+  // The handle shows only while the window is the strip (after the 420 ms retract)
+  function griffPruefen() {
+    const streifen = st.modus === 'versteckt' && window.innerHeight < 80;
+    if (streifen) document.documentElement.dataset.streifen = 'oben';
+    else delete document.documentElement.dataset.streifen;
+  }
+  window.addEventListener('resize', griffPruefen);
+  setTimeout(griffPruefen, 400);
   window.addEventListener('mouseover', () => { if (st.modus === 'versteckt') wecken(); });
   window.addEventListener('mousemove', () => { if (st.modus === 'versteckt') wecken(); });
 
@@ -1231,6 +1252,7 @@
     zuPlanen();
   });
   if (api.onWecken) api.onWecken(wecken);
+  if (api.onAufklappen) api.onAufklappen(aufklappen);
   api.onDiktat(diktatNeu);
   api.onPegel((p) => { gesichtKlein.pegel(p); gesichtGross.pegel(p); });
 

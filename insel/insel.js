@@ -6,8 +6,9 @@
 //
 // Behaviour after Coucou for Windows (MIT code, Louis Raillé) — our own face, icons and sounds. Two windows, both
 // transparent, always on top, never focused unless the person types into them:
-//   insel  top centre. Hidden it is a 240×6 strip that takes the mouse (zero cost, no polling); visible it is a
-//          720×320 panel, click-through outside the island's shape. The cursor poll decides click-through in the
+//   insel  top centre. Hidden it is a small click-through strip; a slow poll here sees the pointer reach the top 10 px
+//          (wakes the island) and the hook sees a press there (opens it) — the page itself gets no reliable mouse
+//          events in such a small window. Visible it is a 720×320 panel, click-through outside the island's shape. The cursor poll decides click-through in the
 //          same tick it reads the cursor (an IPC round trip loses clicks); while the left button is held inside the
 //          panel it takes the mouse, so a file dragged from Explorer finds a drop target.
 //   pille  bottom centre above the taskbar: the resting capsule, the toolbar on hover, the listening face.
@@ -22,11 +23,11 @@ const {
 } = require('./regeln');
 
 const PANEL = { breite: 720, hoehe: 320 };
-const STREIFEN = { breite: 240, hoehe: 6 };
+const STREIFEN = { breite: 300, hoehe: 10 }; // the hidden island: easy to hit at the top centre, a small handle shows where
 const PILLE = { breite: 520, hoehe: 170, abstand: 4 };
 const TREFFER_RAND = 14;          // a click near the island must never be swallowed
 const ZIEH_RAND = 40;             // a file dragged this close to the island is meant for it
-const STREIFEN_POLL_MS = 90;      // only with a display above (the strip cannot hang over the edge)
+const STREIFEN_POLL_MS = 50;      // hidden: watch the top edge
 const POLL_MS = 16;
 const PILLE_POLL_MS = 33;
 const LAGE_MS = 20_000;
@@ -62,7 +63,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
   let eingeklappt = true;       // window is the wake strip
   let durchklick = null;        // cached setIgnoreMouseEvents state
   let fokussiert = false;
-  let streifenPoll = false;     // a display sits above: the strip is click-through and polled instead
+  let imStreifen = false;       // hidden: the pointer is in the wake zone at the top edge
   let pollTimer = null;
   let letzterZeiger = { x: NaN, y: NaN };
   let linksGedrueckt = false;   // left mouse button (global hook)
@@ -197,7 +198,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     pillenPollStarten();
   }
 
-  /** Hidden → the wake strip (takes the mouse, no polling); visible → the panel with the cursor poll. */
+  /** Hidden → the wake strip (click-through, slow poll of the top edge); visible → the panel with the cursor poll. */
   function einklappen(an) {
     if (!insel || insel.isDestroyed() || eingeklappt === an) return;
     eingeklappt = an;
@@ -205,8 +206,9 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
       pollStoppen();
       streifenSetzen();
       durchklick = null;
-      durchklickSetzen(streifenPoll); // hanging strip takes the mouse; polled strip is click-through
-      if (streifenPoll) pollStarten(STREIFEN_POLL_MS);
+      imStreifen = false;
+      durchklickSetzen(true);
+      pollStarten(STREIFEN_POLL_MS);
     } else {
       insel.setBounds(panelRahmen());
       // re-assert: moving across displays can rescale the window
@@ -216,17 +218,15 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     }
   }
 
-  /** Windows keeps a window at least ~38 px high: the strip then hangs above the screen edge, only 6 px show. */
-  //  With a display above, hanging over the edge would block a strip at the bottom of that display: then the strip stays
-  //  on this display, click-through, and a slow poll watches its top 6 px instead.
+  /** The strip stays fully on screen (Windows keeps it ≥ ~38 px high; only its top 10 px count). */
   function streifenSetzen() {
-    const soll = streifenRahmen();
-    insel.setBounds(soll);
-    const ist = insel.getBounds();
-    const d = anzeige();
-    const darueber = { x: soll.x + soll.width / 2, y: d.bounds.y - 1 };
-    streifenPoll = screen.getAllDisplays().some((x) => x.id !== d.id && imRechteck(darueber, x.bounds));
-    if (ist.height > soll.height && !streifenPoll) insel.setBounds({ ...soll, height: ist.height, y: soll.y - (ist.height - soll.height) });
+    insel.setBounds(streifenRahmen());
+  }
+
+  /** Wake zone: the top 10 px of the strip, in screen DIP. */
+  function weckZone() {
+    const b = insel.getBounds();
+    return { x: b.x, y: b.y, width: b.width, height: STREIFEN.hoehe };
   }
 
   function neuAusrichten() {
@@ -247,10 +247,12 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     if (!insel || insel.isDestroyed()) return;
     const p = screen.getCursorScreenPoint();
     const b = insel.getBounds();
-    if (eingeklappt) { // only with a display above (streifenPoll)
-      const drin = imRechteck(p, { x: b.x, y: b.y, width: b.width, height: STREIFEN.hoehe });
+    if (eingeklappt) {
+      const drin = imRechteck(p, weckZone());
+      // solid only under the pointer at the very edge: a file dragged there finds a drop target (dragenter opens it)
       durchklickSetzen(!drin);
-      if (drin && !linksGedrueckt) senden(insel, 'insel:wecken', null); // a drag wakes it through dragenter
+      if (drin && !imStreifen && !linksGedrueckt) senden(insel, 'insel:wecken', null);
+      imStreifen = drin;
       return;
     }
     const lx = p.x - b.x;
@@ -437,6 +439,11 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
       const mausRunter = (e) => {
         if (e.button === 1) linksGedrueckt = true;
         tasteEreignis('andere');
+        // Hidden: a press at the top edge opens the island right away
+        if (e.button === 1 && insel && !insel.isDestroyed() && eingeklappt && imRechteck(screen.getCursorScreenPoint(), weckZone())) {
+          senden(insel, 'insel:aufklappen', null);
+          return;
+        }
         // A click outside the open island folds it (the window has no focus to lose).
         if (insel && !insel.isDestroyed() && ansicht === 'offen') {
           const b = insel.getBounds();

@@ -35,6 +35,7 @@ contextBridge.exposeInMainWorld('spaceInsel', {
   onZeiger: abo('insel:zeiger'),
   onAussenKlick: abo('insel:aussen-klick'),
   onWecken: abo('insel:wecken'),
+  onAufklappen: abo('insel:aufklappen'),
   onAnzeige: abo('insel:anzeige'),
   onDiktat: abo('insel:diktat'),
   onPegel: abo('insel:pegel'),
