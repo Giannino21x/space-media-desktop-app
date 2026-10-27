@@ -122,10 +122,13 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
   fragen» legt sie in main.js bereit, das App-Fenster holt sie einmal über `window.spaceInselDatei.nehmen()` (Web:
   `desktopDateiNehmen` in `lib/insel/ablage.ts`, Ereignis `insel:datei`). Infobereich: Gesicht (`assets/tray.ico`, bernstein
   `tray-wartet.ico` bei Freigaben), Menü «Insel oben anzeigen» / «Diktieren mit Strg rechts». Einstellungen in
-  `<userData>/insel.json`. Das App-Fenster darf jetzt das Mikrofon (nur Ton, nur App-Origin) — vorher war jede `media`-Anfrage
+  `<userData>/insel.json` (pro Rechner); die App ändert sie unter Einstellungen → Bot → Insel über `window.spaceInselApp`
+  v2 (`einstellungen()`, `setzen()`, `beobachten()` — nur `an`, `diktat`, `toene`, `hoverOeffnen`; Web: `lib/insel/desktop.ts`),
+  Änderungen auf der Insel oder im Infobereich meldet main.js dem App-Fenster sofort. Das App-Fenster darf jetzt das Mikrofon (nur Ton, nur App-Origin) — vorher war jede `media`-Anfrage
   abgelehnt. Tests: `npm test` (regeln), Demo-Daten nur ungepackt mit `SPACE_INSEL_DEMO=1` (`window.inselDemo`), fester
   Diktat-Text ungepackt mit `SPACE_INSEL_TEST_TEXT`. Nie einen Einfüge-Test laufen lassen, ohne vorher zu prüfen, welches Fenster
-  vorne ist (Strg+V landet sonst in der App der Person).
+  vorne ist (Strg+V landet sonst in der App der Person). Eine zweite Test-Instanz hört die rechte Strg der Person mit — im
+  Test-Profil vorher `"diktat": false` in `insel.json` setzen.
 - **«Eigenes Claude-Abo» (connector.js):** nur die unveränderte `claude`-Binary, die Person meldet sich selbst in
   Claude Code an, die Hülle liest von `claude auth status` nur `loggedIn` und sieht nie ein Claude-Token. Die IPC
   `connector:*` nimmt die Adresse aus dem anfragenden Frame (nur `APP_URL`/`LEGACY_APP_URL`, localhost nur mit

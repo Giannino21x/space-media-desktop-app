@@ -743,7 +743,7 @@
     fuss.className = 'fuss';
     fuss.innerHTML = '<span>Diktate werden nach deiner KI-Option in SPACE zu Text.</span>';
     const aus = knopf('Insel ausblenden', 'leise', () => api.einstellung('an', false));
-    aus.title = 'Wieder einschalten: SPACE-Symbol unten rechts';
+    aus.title = 'Wieder einschalten: SPACE-Symbol unten rechts oder in SPACE unter Einstellungen → Bot';
     fuss.append(aus);
     liste.append(fuss);
   }

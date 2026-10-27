@@ -97,8 +97,16 @@ contextBridge.exposeInMainWorld('spaceInselDatei', {
 ipcRenderer.on('insel:datei-bereit', () => window.dispatchEvent(new Event('insel:datei')));
 
 // The island shows the bot the person is talking to in the chat, and whether it is writing (web: lib/insel/desktop.ts).
+// Version 2: the island's switches for Einstellungen → Bot → Insel (null where there is no island).
 contextBridge.exposeInMainWorld('spaceInselApp', {
-  version: 1,
+  version: 2,
+  einstellungen: () => ipcRenderer.invoke('insel:app-einstellungen'),
+  setzen: (schluessel, wert) => ipcRenderer.invoke('insel:app-einstellung', { schluessel: String(schluessel), wert: !!wert }),
+  beobachten: (melden) => {
+    const listener = (_event, e) => { if (e && typeof e === 'object') melden(e); };
+    ipcRenderer.on('insel:app-einstellungen', listener);
+    return () => ipcRenderer.removeListener('insel:app-einstellungen', listener);
+  },
   aktiverBot: (bot) => {
     if (!bot || typeof bot.id !== 'string') return;
     ipcRenderer.send('insel:aktiver-bot', {

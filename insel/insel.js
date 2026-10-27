@@ -36,6 +36,9 @@ const EINFUEGEN_WARTE_MS = 40;
 const ZURUECK_MS = 700;
 
 const STANDARD = { an: true, diktat: true, toene: true, hoverOeffnen: false, begruesst: false };
+/** What the app's settings (Einstellungen → Bot → Insel) may read and change — never the internal flags. */
+const FUER_APP = ['an', 'diktat', 'toene', 'hoverOeffnen'];
+const fuerApp = (e) => Object.fromEntries(FUER_APP.map((k) => [k, !!e[k]]));
 
 function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, navigieren, dateiZumChat, log, testText, demo, beiLage, beiEinstellungen, appFokussiert }) {
   const datei = path.join(userDataDir, 'insel.json');
@@ -717,7 +720,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     if (schluessel === 'an') { if (wert) starten(); else stoppen(); }
     senden(insel, 'insel:einstellungen', einstellungen);
     senden(pille, 'insel:einstellungen', einstellungen);
-    if (beiEinstellungen) beiEinstellungen(einstellungen);
+    if (beiEinstellungen) beiEinstellungen(fuerApp(einstellungen));
   }
 
   // ---- lifecycle ----
@@ -760,6 +763,13 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     /** Tray: island on/off, dictation on/off. */
     schalten(an) { einstellungsAenderung('an', !!an); },
     diktatSchalten(an) { einstellungsAenderung('diktat', !!an); },
+    /** The app's settings page: the switches the person may change there. */
+    einstellungenFuerApp() { return fuerApp(einstellungen); },
+    einstellungSetzen(schluessel, wert) {
+      if (!FUER_APP.includes(schluessel)) return fuerApp(einstellungen);
+      if (einstellungen[schluessel] !== !!wert) einstellungsAenderung(schluessel, !!wert);
+      return fuerApp(einstellungen);
+    },
     /** The chat in the app: which bot, and whether it is writing an answer. */
     aktiverBot(b) {
       if (!b || typeof b.id !== 'string') return;

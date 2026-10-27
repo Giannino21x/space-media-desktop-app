@@ -314,6 +314,17 @@ ipcMain.on('insel:aktiver-bot', (event, bot) => {
   insel.aktiverBot(bot);
 });
 
+// Einstellungen → Bot → Insel in the web app (lib/insel/desktop.ts): read and change the island's switches.
+// null = no island on this computer (not Windows), the app then hides the group.
+ipcMain.handle('insel:app-einstellungen', (event) => {
+  if (!insel || !appSenderOrigin(event)) return null;
+  return insel.einstellungenFuerApp();
+});
+ipcMain.handle('insel:app-einstellung', (event, input) => {
+  if (!insel || !appSenderOrigin(event) || !input || typeof input.schluessel !== 'string') return null;
+  return insel.einstellungSetzen(input.schluessel, !!input.wert);
+});
+
 ipcMain.handle('insel:datei-nehmen', (event) => {
   if (!appSenderOrigin(event) || !inselDatei || Date.now() - inselDatei.zeit > 2 * 60 * 1000) return null;
   const d = inselDatei;
@@ -527,7 +538,11 @@ app.on('ready', () => {
       },
       log: (zeile) => console.log(`[insel] ${zeile}`),
       appFokussiert: () => !!(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible() && mainWindow.isFocused()),
-      beiEinstellungen: () => trayMenue(),
+      beiEinstellungen: (e) => {
+        trayMenue();
+        // A switch flipped on the island or in the tray shows up on the open settings page at once.
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('insel:app-einstellungen', e);
+      },
       beiLage: (lage) => {
         if (!tray) return;
         // Steno has its own robot; the Bot-Team the SPACE helmet, amber while approvals wait
