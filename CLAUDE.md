@@ -85,6 +85,9 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
 
 ## Rules
 
+- **KI auf dem Gerät (seit 29.10.2026):** Die Hülle stellt NUR Plugins bereit (`llama-cpp-pro`, `@capacitor/filesystem`);
+  die Brücke `window.spaceLokal`, der Modell-Katalog und die Weiche leben im Web-Repo (`src/lib/lokal/`). Nie eine zweite
+  Modell-Logik in Swift/Kotlin bauen; neue native Fähigkeit = Plugin dazu, Vertrag im Web-Repo (`lib/lokal/bruecke.ts`).
 - **Ein `v*`-Tag startet zwei Pipelines**: GitHub Actions (Desktop-Release) und Codemagic
   (Android Release-AAB). Wer nur eines will, muss den anderen Build ignorieren bzw. abbrechen.
 - `package.json` → `version` **vor** dem Taggen auf die Tag-Version setzen. electron-updater vergleicht
@@ -148,6 +151,17 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
 
 ## Current State
 
+- **KI auf dem Gerät, vorbereitet (29.10.2026, nicht gebaut, nicht im Store):** `mobile/` hat die Plugins `llama-cpp-pro` 0.2.4
+  (llama.cpp iOS/Android, MIT) und `@capacitor/filesystem` 8 in `package.json`, das Kamera-Recht (`NSCameraUsageDescription`,
+  `android.permission.CAMERA` — fehlte bisher, der Kamera-Modus der Web-App braucht es auch ohne Modell), `android:largeHeap`
+  und `PrivacyInfo.xcprivacy` (Filesystem: FileTimestamp C617.1, im pbxproj als Resource). Die Logik liegt in der Web-App
+  (`src/lib/lokal/capacitor.ts` baut `window.spaceLokal` auf `Capacitor.Plugins.LlamaCpp`), die Hülle bringt nur die Plugins —
+  Plan `docs/plans/2026-10-29-handy-app.md` im Web-Repo. **Blocker vor dem ersten Build:** das Plugin 0.2.4 bündelt ein
+  llama.cpp mit LFM2, aber ohne LFM3 (`cpp/llama-arch.h`, prebuilt `ios/Frameworks/llama-cpp.framework`); LFM3-Omni-2B
+  braucht llama.cpp ≥ v0.8.0 (b11960). Also Fork des Plugins mit aktuellem Upstream (`scripts/bootstrap.sh` bzw.
+  `third_party/llama.cpp`), iOS-Framework auf dem Mac neu bauen (`scripts/ensure-llama-ios-xcframework.sh`), Android baut
+  per NDK/CMake selbst. Danach `npx cap sync` (Codemagic macht das), TestFlight + Debug-APK, Modell in Einstellungen → Bot
+  → «KI auf dem Gerät» laden. Lädt das Modell nicht, zeigt die Karte den Fehler des Plugins.
 - **PC-Ordner, Brücke `window.spaceDateien` v1 (26.10.2026, released mit Desktop `v1.0.11`):** `ordnerWaehlen`,
   `freigaben`, `freigabeAendern`, `freigabeEntfernen`, `liste`, `alle`, `lesen`, `beobachten` nach Vertrag D. Gegenstück im
   Web-Repo: Teil E (Sync in «Meine Dateien», Live-Zugriff der Bots, `PcBruecke`, `/api/pc/*`). Geprüft mit `node --test` und
