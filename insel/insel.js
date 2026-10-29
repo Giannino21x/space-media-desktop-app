@@ -21,6 +21,7 @@ const { BrowserWindow, screen, ipcMain, clipboard, session } = require('electron
 const {
   diktatTaste, inselRahmen, pillenRahmen, imRechteck, inselLage, multipart, diktatFehler,
 } = require('./regeln');
+const { diktatWeg } = require('../lokal-regeln');
 
 const PANEL = { breite: 720, hoehe: 320 };
 const STREIFEN = { breite: 300, hoehe: 10 }; // the hidden island: easy to hit at the top centre, a small handle shows where
@@ -35,16 +36,20 @@ const LAGE_OFFEN_MS = 6_000;
 const EINFUEGEN_WARTE_MS = 40;
 const ZURUECK_MS = 700;
 
-const STANDARD = { an: true, diktat: true, toene: true, hoverOeffnen: false, begruesst: false };
+// lokalDiktat: dictation through the model on this PC (lokal.js) as soon as it is there — tray «Diktat auf diesem PC»
+const STANDARD = { an: true, diktat: true, toene: true, hoverOeffnen: false, begruesst: false, lokalDiktat: true };
 /** What the app's settings (Einstellungen → Bot → Insel) may read and change — never the internal flags. */
 const FUER_APP = ['an', 'diktat', 'toene', 'hoverOeffnen'];
 const fuerApp = (e) => Object.fromEntries(FUER_APP.map((k) => [k, !!e[k]]));
 
-function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, navigieren, dateiZumChat, log, testText, demo, beiLage, beiEinstellungen, appFokussiert }) {
+function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, navigieren, dateiZumChat, log, testText, demo, beiLage, beiEinstellungen, appFokussiert, lokalKi }) {
   const datei = path.join(userDataDir, 'insel.json');
   let einstellungen = { ...STANDARD };
   try { einstellungen = { ...STANDARD, ...JSON.parse(fs.readFileSync(datei, 'utf8')) }; } catch { /* first start */ }
   const speichern = () => { try { fs.writeFileSync(datei, JSON.stringify(einstellungen, null, 2)); } catch { /* best effort */ } };
+  // What the island and the pill see: the settings plus whether the model on this PC can hear right now (the pill
+  // then sends WAV — the model hears nothing else; lokal-wav.js).
+  const fuerFenster = (e) => ({ ...e, lokalBereit: !!(lokalKi && lokalKi.bereit()) });
 
   const appSession = session.fromPartition(appPartition);
   // The island's own pages live in their own session: local files only, the microphone (audio) only.
@@ -163,7 +168,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     insel.once('ready-to-show', () => {
       if (!insel || insel.isDestroyed()) return;
       insel.showInactive();
-      senden(insel, 'insel:einstellungen', einstellungen);
+      senden(insel, 'insel:einstellungen', fuerFenster(einstellungen));
       senden(insel, 'insel:lage', lageMitApp());
     });
     insel.on('closed', () => { insel = null; });
@@ -203,7 +208,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     pille.once('ready-to-show', () => {
       if (!pille || pille.isDestroyed()) return;
       if (einstellungen.diktat) pille.showInactive();
-      senden(pille, 'insel:einstellungen', einstellungen);
+      senden(pille, 'insel:einstellungen', fuerFenster(einstellungen));
       senden(pille, 'insel:lage', lageMitApp());
     });
     pille.on('closed', () => { pille = null; });
@@ -557,7 +562,17 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
   async function transkribieren(bytes, mime) {
     // Tests (unpackaged only): a fixed text instead of the app, so the key, the pill and the paste can be checked.
     if (testText) return testText;
-    const endung = mime.includes('mp4') ? 'm4a' : mime.includes('ogg') ? 'ogg' : 'webm';
+    // The model on this PC (lokal.js) when the switch is on, the model is there and the pill sent WAV; if it fails,
+    // the app's /api/voice/transcribe (the person's KI-Option) takes over, nothing is lost.
+    if (lokalKi && diktatWeg({ lokalDiktat: einstellungen.lokalDiktat, bereit: lokalKi.bereit(), mime }) === 'lokal') {
+      try {
+        const { text } = await lokalKi.hoerenWav(bytes);
+        return text;
+      } catch (err) {
+        log(`diktat lokal: ${err.message} → App`);
+      }
+    }
+    const endung = mime.includes('wav') ? 'wav' : mime.includes('mp4') ? 'm4a' : mime.includes('ogg') ? 'ogg' : 'webm';
     const { typ, koerper } = multipart('audio', `diktat.${endung}`, mime || 'audio/webm', bytes);
     const r = await api('/api/voice/transcribe', { method: 'POST', headers: { 'content-type': typ }, body: koerper });
     if (!r.ok) throw new Error(diktatFehler(r.status, r.daten));
@@ -708,6 +723,11 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     return einfuegen(letztesDiktat);
   });
 
+  function einstellungenSenden() {
+    senden(insel, 'insel:einstellungen', fuerFenster(einstellungen));
+    senden(pille, 'insel:einstellungen', fuerFenster(einstellungen));
+  }
+
   function einstellungsAenderung(schluessel, wert) {
     einstellungen = { ...einstellungen, [schluessel]: wert };
     speichern();
@@ -718,8 +738,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
       if (pille && !pille.isDestroyed()) { if (wert) pille.showInactive(); else pille.hide(); }
     }
     if (schluessel === 'an') { if (wert) starten(); else stoppen(); }
-    senden(insel, 'insel:einstellungen', einstellungen);
-    senden(pille, 'insel:einstellungen', einstellungen);
+    einstellungenSenden();
     if (beiEinstellungen) beiEinstellungen(fuerApp(einstellungen));
   }
 
@@ -763,6 +782,10 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     /** Tray: island on/off, dictation on/off. */
     schalten(an) { einstellungsAenderung('an', !!an); },
     diktatSchalten(an) { einstellungsAenderung('diktat', !!an); },
+    get lokalDiktat() { return einstellungen.lokalDiktat; },
+    lokalDiktatSchalten(an) { einstellungsAenderung('lokalDiktat', !!an); },
+    /** The model on this PC arrived or went away (main.js): the pill learns whether to send WAV. */
+    lokalGeaendert() { einstellungenSenden(); },
     /** The app's settings page: the switches the person may change there. */
     einstellungenFuerApp() { return fuerApp(einstellungen); },
     einstellungSetzen(schluessel, wert) {

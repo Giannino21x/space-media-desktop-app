@@ -34,6 +34,10 @@ dateien.js         → PC-Ordner für «Dateien» (nur Lesen): Freigaben in <use
                      Pfadprüfung, liste/alle/lesen, fs.watch; dateien.test.js (`npm test`)
 fenster.js         → Was im App-Fenster laden darf (window.open + will-navigate), exakte Herkunft wie bei den
                      Brücken; fenster.test.js (`npm test`)
+lokal.js           → «KI auf dem Gerät» auf dem PC (Windows): Brücke `window.spaceLokal` v1 wie in der Handy-App — LFM3-Omni-2B
+                     nach <userData>/lokal/modelle/, llama.cpp-Release (b11960, Hash) nach <userData>/lokal/bin/, llama-server
+                     auf 127.0.0.1 mit Zufallsport + API-Key; lokal-regeln.js = rein + Tests (Katalog 1:1 aus dem Web-Repo,
+                     Zip-Leser, Anfrage, Entscheid lokal/Cloud), lokal-wav.js = WAV-Encoder (Preload-Kopie + Pille)
 assets/            → icon.ico, icon.png, entitlements.mac.plist (buildResources)
 .github/workflows/ → build.yml — Desktop-Build + GitHub Release
 codemagic.yaml     → 3 Mobile-Workflows (iOS TestFlight, Android Debug-APK, Android Release-AAB)
@@ -127,7 +131,7 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
   `tray-wartet.ico` bei Freigaben), Menü «Insel oben anzeigen» / «Diktieren mit Strg rechts». Einstellungen in
   `<userData>/insel.json` (pro Rechner); die App ändert sie unter Einstellungen → Bot → Insel über `window.spaceInselApp`
   v2 (`einstellungen()`, `setzen()`, `beobachten()` — nur `an`, `diktat`, `toene`, `hoverOeffnen`; Web: `lib/insel/desktop.ts`),
-  Änderungen auf der Insel oder im Infobereich meldet main.js dem App-Fenster sofort. Das App-Fenster darf jetzt das Mikrofon (nur Ton, nur App-Origin) — vorher war jede `media`-Anfrage
+  Änderungen auf der Insel oder im Infobereich meldet main.js dem App-Fenster sofort. Das App-Fenster darf jetzt das Mikrofon und (seit 29.10.2026, Kamera-Modus) die Kamera (nur Ton/Bild, nie den Bildschirm, nur App-Origin) — vorher war jede `media`-Anfrage
   abgelehnt. Tests: `npm test` (regeln), Demo-Daten nur ungepackt mit `SPACE_INSEL_DEMO=1` (`window.inselDemo`), fester
   Diktat-Text ungepackt mit `SPACE_INSEL_TEST_TEXT`. Nie einen Einfüge-Test laufen lassen, ohne vorher zu prüfen, welches Fenster
   vorne ist (Strg+V landet sonst in der App der Person). Eine zweite Test-Instanz hört die rechte Strg der Person mit — im
@@ -148,10 +152,38 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
   Windows-Junctions auf `\??\Volume{…}` sieht `lstat` nicht als Link — Ordner darum immer per `realpath` prüfen. IPC `dateien:*` wie beim Connector nur für die App-Seiten; Antworten `{ ok, wert }` /
   `{ ok: false, meldung }`, damit die Seite die deutsche Meldung bekommt. Watcher gehören der Seite: Neuladen,
   Navigation, Absturz und Fenster-Ende räumen sie weg.
+- **KI auf dem Gerät auf dem PC (lokal.js, `window.spaceLokal`, seit 29.10.2026, nur Windows):** dieselbe Brücke v1 wie die
+  Handy-App — Vertrag `src/lib/lokal/bruecke.ts` im Web-Repo ist die einzige Schnittstelle (`stand`, `frage`, `hoeren`,
+  `modelle`, `laden`, `abbrechen`, `entfernen`; Ereignis `lokal-stand-geaendert`; `sprechen` fehlt absichtlich → die Seite nimmt
+  wie auf dem Handy `speechSynthesis`). Katalog, Dateinamen, URLs und System-Prompts stehen in `lokal-regeln.js` **1:1** wie in
+  `lib/lokal/modelle.ts` / `capacitor.ts` — ändert das Web-Repo etwas, hier nachziehen, sonst antworten Handy und PC verschieden.
+  Kein `llama-cpp-pro/desktop`: dessen Sidecar ist ein 5-MB-Eigenbau eines älteren llama.cpp ohne LFM3 (`cpp/llama-arch.h` von
+  0.2.4 kennt nur LFM2) mit eigener Lade-API; stattdessen das offizielle Windows-Release `ggml-org/llama.cpp` **b11960 = v0.8.0**
+  (28.10.2026, das erste mit LFM3), Tag und sha256 beider Zips (vulkan, cpu) in `LLAMA` gepinnt — ein anderer Tag braucht neue
+  Hashes aus den Asset-Digests (`gh api repos/ggml-org/llama.cpp/releases/tags/<tag>`). Aus dem Zip kommen nur Server + DLLs
+  (`benoetigteDatei`). Modelldateien: Grösse immer geprüft, sha256 gegen `lfs.oid` der Hugging-Face-Tree-API (best effort),
+  `.teil` mit Range fortgesetzt. Vulkan zuerst (NVIDIA/AMD/Intel ohne Hersteller-Runtime); stirbt der Server vor `/health`
+  ohne Modell-Fehler → einmal CPU-Build, gemerkt in `<userData>/lokal/lokal.json`. Kaputte Modelldatei → «beschädigt — bitte
+  entfernen», kein Build-Wechsel. Server: ein Slot, `--api-key` zufällig, `--no-webui`, `--reasoning off`, Kontext 4096, stoppt
+  nach 15 Min. Ruhe, `stand()` wärmt vor (wie das Handy), PID in `server.json` → ein Waisenprozess nach Absturz wird beim
+  nächsten Start beendet (nur wenn die PID noch `llama-server.exe` heisst). Anfragen: OpenAI-API `POST /v1/chat/completions`,
+  Bild als Data-URL (`bildDataUrl`: nur JPEG/PNG/WebP), Ton als WAV-base64 `input_audio` — der Renderer dekodiert WebM/Opus zu
+  WAV 16 kHz mono (Preload ist sandboxed, darf keine lokalen Dateien laden → Kopie des Encoders aus `lokal-wav.js` im Preload;
+  beide zusammen ändern). IPC `lokal:*` nur für App-Seiten, Antworten `{ ok, wert }` / `{ ok: false, meldung }`. Insel-Diktat:
+  Schalter `lokalDiktat` in `insel.json` (Standard an) + Infobereich «Diktat auf diesem PC» (nur wählbar, wenn das Modell da
+  ist); die Pille sendet WAV, wenn `insel:einstellungen` `lokalBereit` meldet, `diktatWeg` entscheidet, bei Fehler fällt es auf
+  `/api/voice/transcribe` zurück. Tests: `npm test` (lokal-regeln, lokal mit lokalem HTTP-Server + Node-Attrappe für
+  llama-server); ungepackt `SPACE_LOKAL_TEST_KATALOG=<json>` mit `{ modelle, llama }` für kleine Dateien statt 1,3 GB.
+  Geprüft 29.10.2026 mit `electron . --dev` (Playwright) und dem echten Modell: Vulkan auf RTX 4090, Bildfrage «Was steht da?»
+  gibt den Rechnungstext wortgetreu, WAV-Diktat korrekt, Antworten 0,2–0,6 s warm; auf CPU-Build 5–30 s.
 
 ## Current State
 
-- **KI auf dem Gerät, vorbereitet (29.10.2026, nicht gebaut, nicht im Store):** `mobile/` hat die Plugins `llama-cpp-pro` 0.2.4
+- **KI auf dem Gerät auf dem PC (29.10.2026, Branch, noch kein Release):** `lokal.js` + Brücke `window.spaceLokal` v1 (siehe
+  Rules), Kamera-Erlaubnis fürs App-Fenster, Insel-Diktat lokal, Infobereich «Diktat auf diesem PC». Noch offen: Release
+  taggen (dann `v1.0.12`), auf einem PC ohne Vulkan-Treiber den CPU-Wechsel live sehen, Mac (kein llama.cpp-Binary gepinnt →
+  dort gibt es die Brücke nicht, die Seite zeigt den Handy-Hinweis).
+- **KI auf dem Gerät, Handy, vorbereitet (29.10.2026, nicht gebaut, nicht im Store):** `mobile/` hat die Plugins `llama-cpp-pro` 0.2.4
   (llama.cpp iOS/Android, MIT) und `@capacitor/filesystem` 8 in `package.json`, das Kamera-Recht (`NSCameraUsageDescription`,
   `android.permission.CAMERA` — fehlte bisher, der Kamera-Modus der Web-App braucht es auch ohne Modell), `android:largeHeap`
   und `PrivacyInfo.xcprivacy` (Filesystem: FileTimestamp C617.1, im pbxproj als Resource). Die Logik liegt in der Web-App

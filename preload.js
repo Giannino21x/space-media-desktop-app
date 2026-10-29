@@ -1,4 +1,4 @@
-// Preload — drag region + taskbar badge observer + titlebar theme resync + bridges (spaceConnector, spaceDateien)
+// Preload — drag region + taskbar badge observer + titlebar theme resync + bridges (spaceConnector, spaceDateien, spaceLokal)
 
 const { contextBridge, ipcRenderer } = require('electron');
 
@@ -117,6 +117,76 @@ contextBridge.exposeInMainWorld('spaceInselApp', {
     });
   },
 });
+
+// «KI auf dem Gerät» on this PC (main.js → lokal.js): the same bridge the phone app has — contract lib/lokal/bruecke.ts
+// v1 in the web repo (stand, frage, hoeren, modelle, laden, abbrechen, entfernen; `sprechen` stays with the browser's
+// voice, like on the phone). The camera mode, dictation and the settings card work with it unchanged. Windows only
+// (llama.cpp's Windows release); on a Mac the bridge is missing and the page shows the phone hint. Main answers
+// { ok, wert } / { ok: false, meldung } so the German message reaches the page. Sound arrives as WebM/Opus and is
+// decoded to WAV 16 kHz here (lokal-wav.js) — the model hears WAV only.
+if (process.platform === 'win32') {
+  // The renderer is sandboxed: this preload cannot require local files, so the encoder of lokal-wav.js lives here a
+  // second time (same bytes out — lokal-regeln.test.js checks pcmZuWav there; keep both in step).
+  const WAV_RATE = 16000;
+  const istWav = (b) => b.length >= 12 && String.fromCharCode(b[0], b[1], b[2], b[3]) === 'RIFF' && String.fromCharCode(b[8], b[9], b[10], b[11]) === 'WAVE';
+  const pcmZuWav = (samples) => {
+    const n = samples.length;
+    const v = new DataView(new ArrayBuffer(44 + n * 2));
+    const text = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+    text(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); text(8, 'WAVE'); text(12, 'fmt ');
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, WAV_RATE, true);
+    v.setUint32(28, WAV_RATE * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); text(36, 'data'); v.setUint32(40, n * 2, true);
+    for (let i = 0; i < n; i++) { const x = Math.max(-1, Math.min(1, samples[i])); v.setInt16(44 + i * 2, x < 0 ? x * 0x8000 : x * 0x7fff, true); }
+    return new Uint8Array(v.buffer);
+  };
+  const aufMonoUndRate = (kanaele, rate) => {
+    const laenge = kanaele[0].length;
+    const mono = new Float32Array(laenge);
+    for (const k of kanaele) for (let i = 0; i < laenge; i++) mono[i] += k[i] / kanaele.length;
+    if (rate === WAV_RATE) return mono;
+    const f = rate / WAV_RATE;
+    const out = new Float32Array(Math.floor(laenge / f));
+    for (let i = 0; i < out.length; i++) { const p = i * f; const a = Math.floor(p); const b = Math.min(laenge - 1, a + 1); out[i] = mono[a] + (mono[b] - mono[a]) * (p - a); }
+    return out;
+  };
+  const aufnahmeZuWav = async (audio) => {
+    const roh = new Uint8Array(audio);
+    if (istWav(roh)) return roh;
+    const ctx = new AudioContext();
+    try {
+      const d = await ctx.decodeAudioData(audio.slice(0));
+      const kanaele = [];
+      for (let c = 0; c < d.numberOfChannels; c++) kanaele.push(d.getChannelData(c));
+      if (!kanaele.length) throw new Error('leer');
+      return pcmZuWav(aufMonoUndRate(kanaele, d.sampleRate));
+    } catch {
+      throw new Error('Die Aufnahme konnte nicht gelesen werden.');
+    } finally {
+      ctx.close().catch(() => {});
+    }
+  };
+  const lokalAufruf = async (kanal, ...args) => {
+    const antwort = await ipcRenderer.invoke(kanal, ...args);
+    if (antwort && antwort.ok) return antwort.wert;
+    throw new Error((antwort && antwort.meldung) || 'Die KI auf diesem PC hat nicht geantwortet.');
+  };
+  contextBridge.exposeInMainWorld('spaceLokal', {
+    version: 1,
+    stand: () => lokalAufruf('lokal:stand'),
+    frage: (e) => lokalAufruf('lokal:frage', { bild: e && e.bild, text: e && e.text }),
+    hoeren: async (e) => {
+      if (!e || !(e.audio instanceof ArrayBuffer)) throw new Error('Die Aufnahme konnte nicht gelesen werden.');
+      const wav = await aufnahmeZuWav(e.audio);
+      return lokalAufruf('lokal:hoeren', wav);
+    },
+    modelle: () => lokalAufruf('lokal:modelle'),
+    laden: (art) => lokalAufruf('lokal:laden', String(art)),
+    abbrechen: (art) => lokalAufruf('lokal:abbrechen', String(art)),
+    entfernen: (art) => lokalAufruf('lokal:entfernen', String(art)),
+  });
+  // download progress, server up or down, an error: the page re-reads stand()/modelle()
+  ipcRenderer.on('lokal:stand', () => window.dispatchEvent(new CustomEvent('lokal-stand-geaendert')));
+}
 
 window.addEventListener('DOMContentLoaded', () => {
   const style = document.createElement('style');

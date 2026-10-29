@@ -7,6 +7,7 @@ const { anmeldeAdresse, connectorOrigin, createConnectorHost } = require('./conn
 const { DateienFehler, createDateienHost, fehlerMeldung, grundVon } = require('./dateien');
 const { fensterWache } = require('./fenster');
 const { createInselHost } = require('./insel/insel');
+const { createLokalHost } = require('./lokal');
 
 // Tests can run a second copy next to the installed app with their own data.
 if (process.env.SPACE_USER_DATA) app.setPath('userData', process.env.SPACE_USER_DATA);
@@ -71,13 +72,14 @@ function createWindow() {
     },
   });
 
-  // Notifications without a browser popup; the microphone (audio only) for the app's own pages — dictation and
-  // meeting recording in the app. Everything else is refused.
+  // Notifications without a browser popup; microphone and camera for the app's own pages — dictation and meeting
+  // recording (audio), the camera mode «Zeigen und fragen» with the model on this PC (video, since 29.10.2026). Never
+  // the screen; everything else is refused.
   mainWindow.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
     if (permission === 'notifications') return callback(true);
     if (permission === 'media') {
-      const nurTon = !details.mediaTypes || details.mediaTypes.every((t) => t === 'audio');
-      return callback(nurTon && appFenster.imFenster((details && details.requestingUrl) || webContents.getURL()));
+      const tonOderKamera = !details.mediaTypes || details.mediaTypes.every((t) => t === 'audio' || t === 'video');
+      return callback(tonOderKamera && appFenster.imFenster((details && details.requestingUrl) || webContents.getURL()));
     }
     callback(false);
   });
@@ -238,6 +240,8 @@ function trayMenue() {
       { type: 'separator' },
       { label: 'Insel oben anzeigen', type: 'checkbox', checked: insel.an, click: (item) => insel.schalten(item.checked) },
       { label: 'Diktieren mit Strg rechts', type: 'checkbox', checked: insel.diktat, enabled: insel.an, click: (item) => insel.diktatSchalten(item.checked) },
+      // the island's dictation through the model on this PC (lokal.js) instead of the app — only once the model is there
+      { label: 'Diktat auf diesem PC', type: 'checkbox', checked: insel.lokalDiktat, enabled: insel.an && insel.diktat && !!(lokal && lokal.bereit()), click: (item) => insel.lokalDiktatSchalten(item.checked) },
     ] : []),
     { type: 'separator' },
     { label: 'Beenden', click: () => { beenden = true; app.quit(); } },
@@ -285,6 +289,27 @@ function appSenderOrigin(event) {
 
 // «Eigenes Claude-Abo»: the SPACE Connector runs in the background while the app is open (connector.js).
 let connector = null;
+
+// «KI auf dem Gerät» (window.spaceLokal, lokal.js): the LFM3 model on this PC for the camera mode, dictation and the
+// island — the same bridge as the phone app. Windows only. Answers { ok, wert } / { ok: false, meldung } like «Dateien».
+let lokal = null;
+function lokalKanal(kanal, handler) {
+  ipcMain.handle(kanal, async (event, ...args) => {
+    try {
+      if (!lokal || !appSenderOrigin(event)) throw new Error('Die KI auf diesem PC ist hier nicht verfügbar.');
+      return { ok: true, wert: await handler(...args) };
+    } catch (err) {
+      return { ok: false, meldung: (err && err.message) || 'Die KI auf diesem PC hat nicht geantwortet.' };
+    }
+  });
+}
+lokalKanal('lokal:stand', () => lokal.stand());
+lokalKanal('lokal:frage', (e) => lokal.frage(e));
+lokalKanal('lokal:hoeren', (wav) => lokal.hoerenWav(wav));
+lokalKanal('lokal:modelle', () => lokal.modelle());
+lokalKanal('lokal:laden', (art) => lokal.laden(art));
+lokalKanal('lokal:abbrechen', (art) => lokal.abbrechen(art));
+lokalKanal('lokal:entfernen', (art) => lokal.entfernen(art));
 
 // The island (insel/insel.js): SPACE at the top edge of the screen, also while this window is closed — Flow
 // dictation (right Ctrl), approvals, a dropped file for the chat. Windows for now.
@@ -524,7 +549,33 @@ app.on('ready', () => {
     .map(([art, name]) => { try { return { ort: app.getPath(art), name }; } catch { return null; } }).filter(Boolean);
   dateien.standardFreigeben(ueblicheOrdner).catch((err) => console.warn('[dateien] Standardordner:', err.message));
   if (process.platform === 'win32') {
+    // The model on this PC. The page learns of every change over 'lokal:stand'; the island and the tray only when the
+    // model becomes usable or stops being so (not for every download tick).
+    let lokalBereitZuletzt = false;
+    // Tests (unpackaged only): a JSON file with { modelle, llama } — small files from a local server instead of 1,3 GB
+    let testKatalog = null;
+    if (!app.isPackaged && process.env.SPACE_LOKAL_TEST_KATALOG) {
+      try { testKatalog = JSON.parse(fs.readFileSync(process.env.SPACE_LOKAL_TEST_KATALOG, 'utf8')); } catch (err) { console.warn('[lokal] Test-Katalog:', err.message); }
+    }
+    lokal = createLokalHost({
+      userDataDir: app.getPath('userData'),
+      isDev,
+      modelle: testKatalog && testKatalog.modelle,
+      llama: testKatalog && testKatalog.llama,
+      herunterladen: (url, init) => net.fetch(url, init),
+      log: (zeile) => console.log(`[lokal] ${zeile}`),
+      onStand: () => {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('lokal:stand');
+        const bereit = lokal.bereit();
+        if (bereit === lokalBereitZuletzt) return;
+        lokalBereitZuletzt = bereit;
+        if (insel) insel.lokalGeaendert();
+        trayMenue();
+      },
+    });
+    lokalBereitZuletzt = lokal.bereit();
     insel = createInselHost({
+      lokalKi: lokal,
       appUrl: isDev ? (process.env.SPACE_DEV_URL || 'http://localhost:3000') : APP_URL,
       appPartition: 'persist:spaceapp',
       userDataDir: app.getPath('userData'),
@@ -579,6 +630,7 @@ app.on('before-quit', () => { beenden = true; });
 // Stop the connector with the app (also before an update installs — it runs from the app's own exe).
 app.on('will-quit', () => {
   if (insel) insel.shutdown();
+  if (lokal) lokal.shutdown();
   if (connector) connector.shutdown();
   if (dateien) dateien.shutdown();
 });

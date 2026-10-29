@@ -182,7 +182,13 @@
       const blob = new Blob(a.chunks, { type: recorder.mimeType || 'audio/webm' });
       look('denkt');
       K.spielen('diktatEnde');
-      const r = await api.audio(a.id, blob.type, await blob.arrayBuffer());
+      // the model on this PC hears WAV only (lokal-wav.js); if decoding fails the take goes to the app as recorded
+      let mime = blob.type;
+      let daten = await blob.arrayBuffer();
+      if (lokalWav && window.spaceWav) {
+        try { daten = (await window.spaceWav.aufnahmeZuWav(daten)).buffer; mime = 'audio/wav'; } catch { /* as recorded */ }
+      }
+      const r = await api.audio(a.id, mime, daten);
       if (r && r.ok) {
         if (r.kopiert) meldung('Kopiert · Strg+V zum Einfügen', 'info', 1800);
         else { gesicht.fertig(); look(st.hover ? 'werkzeug' : 'ruhe'); }
@@ -258,7 +264,9 @@
 
   // ---- settings ----
 
-  api.onEinstellungen((e) => { K.an = e.toene !== false; });
+  // lokalBereit + lokalDiktat (insel.js): dictation goes to the model on this PC → send WAV
+  let lokalWav = false;
+  api.onEinstellungen((e) => { K.an = e.toene !== false; lokalWav = e.lokalDiktat !== false && !!e.lokalBereit; });
   if (api.onLage) api.onLage((lage) => {
     const steno = !!(lage && lage.steno);
     gesicht.figur(steno ? 'steno' : 'space');
