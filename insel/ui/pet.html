@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="de-CH">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:">
+  <title>SPACE Pet</title>
+  <link rel="stylesheet" href="pet.css">
+</head>
+<body>
+  <canvas id="buehne" aria-hidden="true"></canvas>
+  <div class="tipp" id="tipp" role="tooltip"></div>
+  <div class="pille" id="pille" data-look="aus" data-art="">
+    <button type="button" class="p-klein p-weg" id="p-weg" aria-label="Abbrechen · Esc"></button>
+    <span class="p-text" id="p-text">Diktiert mit SPACE</span>
+    <div class="punkte" id="punkte" aria-hidden="true"></div>
+    <button type="button" class="p-klein p-fertig" id="p-fertig" aria-label="Fertig · Strg rechts"></button>
+  </div>
+  <div class="menue" id="menue" role="menu" hidden>
+    <div class="m-titel" id="m-titel" hidden>Pet verstecken</div>
+    <button type="button" class="m-eintrag" data-aktion="diktieren" role="menuitem">Diktieren</button>
+    <button type="button" class="m-eintrag" data-aktion="oeffnen" role="menuitem">SPACE öffnen</button>
+    <div class="m-strich"></div>
+    <div class="m-gruppe">Verstecken</div>
+    <button type="button" class="m-eintrag" data-aktion="1min" role="menuitem">1 Minute</button>
+    <button type="button" class="m-eintrag" data-aktion="1std" role="menuitem">1 Stunde</button>
+    <button type="button" class="m-eintrag" data-aktion="immer" role="menuitem">Bis ich es zurückhole</button>
+    <div class="m-strich"></div>
+    <button type="button" class="m-eintrag" data-aktion="name" role="menuitem">Name ändern…</button>
+    <div class="m-name" id="m-name" hidden>
+      <input type="text" id="m-eingabe" maxlength="24" placeholder="Name" aria-label="Name des Pets" spellcheck="false" autocomplete="off">
+    </div>
+    <div class="m-fuss" id="m-fuss"></div>
+  </div>
+  <div class="sr-only" role="status" aria-live="polite" id="ansage"></div>
+  <script src="symbole.js"></script>
+  <script src="sprite.js"></script>
+  <script src="pet-ui.js"></script>
+</body>
+</html>

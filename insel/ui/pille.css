@@ -117,6 +117,9 @@ button:focus-visible { outline: 2px solid var(--akzent); outline-offset: 2px; }
 }
 .blase.an { opacity: 1; scale: 1; transition: opacity 0.2s, scale 0.2s cubic-bezier(0.34, 1.56, 0.64, 1); }
 
+/* The SPACE Pet shows the pill next to the figure: this window records unseen. */
+body.pet .kapsel, body.pet .blase { visibility: hidden; }
+
 @media (prefers-reduced-motion: reduce) {
   .kapsel { transition: width 0.12s, height 0.12s; }
 }

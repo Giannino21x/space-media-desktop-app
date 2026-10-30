@@ -238,6 +238,7 @@ function trayMenue() {
       { type: 'separator' },
       { label: 'Insel oben anzeigen', type: 'checkbox', checked: insel.an, click: (item) => insel.schalten(item.checked) },
       { label: 'Diktieren mit Strg rechts', type: 'checkbox', checked: insel.diktat, enabled: insel.an, click: (item) => insel.diktatSchalten(item.checked) },
+      { label: 'SPACE Pet anzeigen', type: 'checkbox', checked: insel.pet, enabled: insel.an, click: (item) => insel.petSchalten(item.checked) },
     ] : []),
     { type: 'separator' },
     { label: 'Beenden', click: () => { beenden = true; app.quit(); } },
@@ -322,7 +323,7 @@ ipcMain.handle('insel:app-einstellungen', (event) => {
 });
 ipcMain.handle('insel:app-einstellung', (event, input) => {
   if (!insel || !appSenderOrigin(event) || !input || typeof input.schluessel !== 'string') return null;
-  return insel.einstellungSetzen(input.schluessel, !!input.wert);
+  return insel.einstellungSetzen(input.schluessel, input.schluessel === 'petName' ? String(input.wert == null ? '' : input.wert) : !!input.wert);
 });
 
 ipcMain.handle('insel:datei-nehmen', (event) => {
