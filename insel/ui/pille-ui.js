@@ -3,6 +3,8 @@
 // pasting. Resting it is a 44×8 capsule; hovered it opens a toolbar (dictate, record a meeting, open SPACE).
 // Behaviour after Coucou for Windows (MIT code): log-spaced bands 90–7000 Hz, rise 0.6 / fall 0.25, takes shorter
 // than 0.25 s or quieter than 0.004 are dropped silently.
+// While the SPACE Pet is on (settings.petAktiv), this window keeps recording but shows nothing: the pet shows the
+// listening pill next to the figure, fed with the nine bands from here (pille:pegel), and its messages (pille:meldung).
 
 (function () {
   const api = window.spaceInsel || demoBruecke();
@@ -28,6 +30,8 @@
 
   const st = {
     look: 'ruhe',
+    pet: false,     // the pet shows the pill: this window is invisible and click-through
+    test: false,    // a fixed test text replaces the transcription (unpackaged): silent takes are kept
     hover: false,
     meldungBreite: 0,
     aufnahme: null,
@@ -60,6 +64,7 @@
   }
 
   function flaechenMelden() {
+    if (st.pet) { api.pillenFlaechen([]); return; }
     const [w, h] = st.look === 'meldung' ? [st.meldungBreite, 34] : GROESSE[st.look] || GROESSE.ruhe;
     const rects = [];
     if (st.look === 'ruhe') rects.push({ x: (FENSTER.b - 96) / 2, y: FENSTER.h - 26, width: 96, height: 26 });
@@ -72,6 +77,7 @@
   }
 
   function meldung(text, art, ms) {
+    if (st.pet) { api.meldung(text, art); look(st.hover ? 'werkzeug' : 'ruhe'); return; }
     $('p-text').textContent = text;
     $('ansage').textContent = text;
     // text width + face + padding
@@ -96,7 +102,7 @@
   // ---- hover: within the hot rects (main polls the cursor) ----
 
   api.onPilleZeiger(({ drin }) => {
-    st.hover = drin;
+    st.hover = drin && !st.pet;
     if (drin) {
       uhr('weg', null);
       if (st.look === 'ruhe') { look('werkzeug'); K.spielen('diktatStart'); }
@@ -178,7 +184,7 @@
       aufraeumen(a);
       if (st.aufnahme === a) st.aufnahme = null;
       // too short, or silent (only when the level could be measured at all)
-      if (dauer < 250 || (a.messungen > 3 && a.peak < 0.004)) { api.leer(a.id); look(st.hover ? 'werkzeug' : 'ruhe'); return; }
+      if (!st.test && (dauer < 250 || (a.messungen > 3 && a.peak < 0.004))) { api.leer(a.id); look(st.hover ? 'werkzeug' : 'ruhe'); return; }
       const blob = new Blob(a.chunks, { type: recorder.mimeType || 'audio/webm' });
       look('denkt');
       K.spielen('diktatEnde');
@@ -246,7 +252,7 @@
         }
         const mittel = st.ziel.reduce((s, v) => s + v, 0) / BAENDER;
         gesicht.pegel(mittel);
-        if (t - letzterPegel > 66) { letzterPegel = t; api.pegel(mittel); }
+        if (t - letzterPegel > 66) { letzterPegel = t; api.pegel(mittel, st.pet ? st.ziel.slice() : undefined); }
       } else if (!a) {
         for (let i = 0; i < BAENDER; i++) st.ziel[i] *= 0.8;
       }
@@ -266,7 +272,18 @@
 
   // lokalBereit + lokalDiktat (insel.js): dictation goes to the model on this PC → send WAV
   let lokalWav = false;
-  api.onEinstellungen((e) => { K.an = e.toene !== false; lokalWav = e.lokalDiktat !== false && !!e.lokalBereit; });
+  api.onEinstellungen((e) => {
+    K.an = e.toene !== false;
+    lokalWav = e.lokalDiktat !== false && !!e.lokalBereit;
+    st.test = !!e.testDiktat;
+    const pet = !!e.petAktiv;
+    if (pet !== st.pet) {
+      st.pet = pet;
+      document.body.classList.toggle('pet', pet);
+      if (pet && st.look === 'werkzeug') look('ruhe');
+      flaechenMelden();
+    }
+  });
   if (api.onLage) api.onLage((lage) => {
     const steno = !!(lage && lage.steno);
     gesicht.figur(steno ? 'steno' : 'space');
@@ -280,7 +297,7 @@
     const leer = () => () => {};
     const log = (n) => (...a) => { console.log('[pille demo]', n, JSON.stringify(a).slice(0, 160)); return Promise.resolve({ ok: true }); };
     return {
-      pillenFlaechen: log('flaechen'), pegel: () => Promise.resolve(), taste: log('taste'), audio: log('audio'), leer: log('leer'), oeffnen: log('oeffnen'),
+      pillenFlaechen: log('flaechen'), pegel: () => Promise.resolve(), taste: log('taste'), audio: log('audio'), leer: log('leer'), oeffnen: log('oeffnen'), meldung: log('meldung'),
       onPilleZeiger: leer, onPilleStart: leer, onPilleFreihand: leer, onPilleStopp: leer, onEinstellungen: leer, onLage: leer,
     };
   }

@@ -26,7 +26,10 @@ insel/             → Die Insel (Desktop, Windows): SPACE oben am Bildschirmran
                      App-Session), regeln.js = rein + Tests (Diktat-Taste, Lagen, Multipart), preload.js = window.spaceInsel,
                      ui/ = lokale Seiten (insel.html/-ui.js/.css, pille.html/-ui.js/.css, gesicht.js, symbole.js, klang.js);
                      ui/koepfe/kopf-<px>.png = der echte Helm der App-Bots mit leerem Visier (Higgsfield, 27.10.2026),
-                     gesicht.js zeichnet darauf Augen und Visierrand in der Farbe des Bots (Geometrie KOPF)
+                     gesicht.js zeichnet darauf Augen und Visierrand in der Farbe des Bots (Geometrie KOPF);
+                     pet.js = SPACE Pet (Main: Fenster unten rechts, Ziehen, Verstecken, Zähler, Wurf), ui/pet.html/-ui.js/.css
+                     + ui/wurf.html/-ui.js/.css (Wurf-Overlay), ui/sprite.js = rein + Tests (Zellen, Umfärben, Glyphen),
+                     ui/astronaut-36.png = Kopie des Pixel-Büro-Sheets aus dem Web-Repo (public/images/team/)
 connector.js       → SPACE Connector im Hintergrund: Bundle von <App>/connector/space-connector.mjs laden, mit
                      Electrons Node (ELECTRON_RUN_AS_NODE) `pair`/`run` starten, beim Beenden stoppen;
                      reine Teile in connector.test.js (`npm test`)
@@ -130,8 +133,43 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
   `desktopDateiNehmen` in `lib/insel/ablage.ts`, Ereignis `insel:datei`). Infobereich: Gesicht (`assets/tray.ico`, bernstein
   `tray-wartet.ico` bei Freigaben), Menü «Insel oben anzeigen» / «Diktieren mit Strg rechts». Einstellungen in
   `<userData>/insel.json` (pro Rechner); die App ändert sie unter Einstellungen → Bot → Insel über `window.spaceInselApp`
-  v2 (`einstellungen()`, `setzen()`, `beobachten()` — nur `an`, `diktat`, `toene`, `hoverOeffnen`; Web: `lib/insel/desktop.ts`),
-  Änderungen auf der Insel oder im Infobereich meldet main.js dem App-Fenster sofort. Das App-Fenster darf jetzt das Mikrofon und (seit 29.10.2026, Kamera-Modus) die Kamera (nur Ton/Bild, nie den Bildschirm, nur App-Origin) — vorher war jede `media`-Anfrage
+  v3 (`einstellungen()`, `setzen()`, `beobachten()` — `an`, `diktat`, `toene`, `hoverOeffnen`, seit v3 `pet` (bool, `setzen('pet', true)`
+  holt ein verstecktes Pet zurück) und `petName` (String, `setzen('petName', 'Pixel')`); Web: `lib/insel/desktop.ts`),
+  Änderungen auf der Insel oder im Infobereich meldet main.js dem App-Fenster sofort.
+- **SPACE Pet (insel/pet.js, seit 30.10.2026, nur Windows, Standard an):** unser Bot als Pixel-Astronaut unten rechts über der
+  Taskleiste — Verhalten nach dem Pet von Aqua Voice (aquavoice.com/pet, Recherche 30.10.2026), Figur = das Sprite-Sheet des
+  Pixel-Büros der Web-App (`ui/astronaut-36.png`, Zellen 36×54 wie `src/lib/team/pixel/sprites.ts`, Cyan-Akzente 170–207° → Bot-Farbe
+  wie `recolor.ts`; Farbe aus `aktiverBot` bzw. Standard-Bot des Teams, `petFarbe` in regeln.js). Keine neuen Bilder, kein Ton.
+  Zwei Fenster wie die Pille (`focusable: false`, `toolbar`, `screen-saver`): `pet` 400×300 (Figur auf einem Canvas, ganzzahliger
+  Geräte-Massstab `max(2, round(1.6·dpr))`, Pille «Diktiert mit SPACE» links der Figur, Tooltip, Menü) mit eigenem Cursor-Poll
+  (33 ms, 16 ms beim Ziehen; Trefferflächen = Figur-Körper aus dem Alphakanal + Pille + Menü, als Layout-Kasten ohne Pop-Skalierung
+  gemeldet) und `wurf` = ganzer Bildschirm, immer durchklickbar, nur für den Wurf sichtbar (≈ 0,65 s). Diktat: die Pille unten
+  Mitte nimmt weiter auf (derselbe Code), zeigt aber nichts (`petAktiv` in den Fenster-Einstellungen, `body.pet`), sendet die
+  neun Bänder (`pille:pegel`) und ihre Meldungen (`pille:meldung`) ans Pet. Nach der Transkription `pet.werfen(text)`: Blase mit
+  den ersten Worten (`wurfText`) fliegt im Bogen (`wurfBogen`, `WURF_MS` = 400 ≤ 450) von der Figur zum Mauszeiger
+  (`screen.getCursorScreenPoint`, das Caret ist unter Windows nicht sicher lesbar), dann erst `einfuegen()` — bestehender Weg
+  Zwischenablage → Strg+V. Fehler: Kopfschütteln, Pille rot. Leben (rein in regeln.js, getestet): `petReaktion` (danke/merci → Herz,
+  «?» → Frage, fertig/erledigt → Hüpfer, ≥ 80 Wörter → Daumen, höchstens alle 30 s), `petWachheit` (2 Min dösen = Visier halb,
+  10 Min schlafen = zZz, Diktat weckt), Klick = Squash, dreimal in 1,7 s = schwindlig (Spirale, 3,3 s), Idle-Posen stehen/Kaffee/
+  Klemmbrett + Atmen (Helm 1 px) + Blinzeln wie das Pixel-Büro. Zähler nur in `insel.json` (`petZaehler`: tag/heute/gesamt/streak,
+  `petZaehlen`, Level aus Gesamtwörtern 1k/5k/25k/100k, Tooltip `petTooltip` «Heute 320 Wörter · Level 2 · 4 Tage»), kein Shop,
+  keine Rangliste, kein Netz. Ziehen mit linker Taste (Main bewegt das Fenster im Poll, `petLage` klemmt den Körper in den
+  Arbeitsbereich, Position `petLage` in insel.json); in die Ecke unten rechts ziehen (`inEcke`) → Menü 1 Minute / 1 Stunde / bis ich
+  es zurückhole (`petVersteckt`: ms, −1, 0) — versteckt übernimmt die Pille unten Mitte wieder. Rechtsklick: Diktieren, SPACE
+  öffnen, Verstecken, Name ändern (das Namensfeld holt sich den Fokus über `pet:fokus`, wie die Insel). Infobereich: «SPACE Pet
+  anzeigen» (holt auch ein verstecktes Pet zurück). Das Sprite kommt als data-URL über `pet:sprite` (ein file://-Bild würde den
+  Canvas «tainten», die Sandbox-Preload hat kein fs). Debug ungepackt: `SPACE_INSEL_PET_LOG=1` loggt Trefferflächen, Klicks,
+  Fokus und die Konsole der Pet-Seite. Tests: `insel/regeln.test.js` (Pet-Regeln) + `insel/sprite.test.js`.
+  **Automatisch ausgeblendete Taskleiste:** dann ist der Arbeitsbereich der ganze Bildschirm, und eine Figur ganz unten stünde
+  genau dort, wo die Taskleiste beim Annähern der Maus hochfährt und jeden Klick nimmt — darum hält das Pet in diesem Fall
+  48 DIP Abstand (`petArbeitsbereich`, `TASKLEISTE_DIP`). Die Fenster der Insel sind nie fokussierbar; wird das Pet-Fenster
+  trotzdem aktiviert, gibt es den Fokus im `focus`-Ereignis sofort zurück (Strg+V geht ans Vordergrundfenster). Ein unsichtbares
+  DOM-Element darf nie über der Pille liegen: `[hidden]` verliert gegen eine eigene `display`-Regel (30.10.2026 fing das
+  «versteckte» Menü die ✓-Klicks der Pille ab — `.menue[hidden] { display: none }`). GUI-Tests mit synthetischer Maus nur,
+  wenn die Person gerade nicht am Rechner ist (`GetLastInputInfo`), sonst klauen sie ihr Klicks und Fokus. Electron 44.2 hat
+  nur noch `clipboard.readText/read/write`: `ablageLesen()` liest HTML/RTF/Bild nur, wenn die API da ist, und wirft nie — vorher
+  scheiterte jedes Einfügen mit «clipboard.readHTML is not a function» (behoben 30.10.2026). Ungepackt mit `SPACE_INSEL_TEST_TEXT`
+  behält die Pille auch stille Aufnahmen (`testDiktat`), damit der Wurf ohne Mikrofon-Signal prüfbar ist. Das App-Fenster darf jetzt das Mikrofon und (seit 29.10.2026, Kamera-Modus) die Kamera (nur Ton/Bild, nie den Bildschirm, nur App-Origin) — vorher war jede `media`-Anfrage
   abgelehnt. Tests: `npm test` (regeln), Demo-Daten nur ungepackt mit `SPACE_INSEL_DEMO=1` (`window.inselDemo`), fester
   Diktat-Text ungepackt mit `SPACE_INSEL_TEST_TEXT`. Nie einen Einfüge-Test laufen lassen, ohne vorher zu prüfen, welches Fenster
   vorne ist (Strg+V landet sonst in der App der Person). Eine zweite Test-Instanz hört die rechte Strg der Person mit — im

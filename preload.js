@@ -98,10 +98,15 @@ ipcRenderer.on('insel:datei-bereit', () => window.dispatchEvent(new Event('insel
 
 // The island shows the bot the person is talking to in the chat, and whether it is writing (web: lib/insel/desktop.ts).
 // Version 2: the island's switches for Einstellungen → Bot → Insel (null where there is no island).
+// v3 (SPACE Pet, 30.10.2026): einstellungen() also carries `pet` (switch) and `petName`; setzen('pet', bool) brings a
+// hidden pet back too, setzen('petName', string) renames it. Web: lib/insel/desktop.ts.
 contextBridge.exposeInMainWorld('spaceInselApp', {
-  version: 2,
+  version: 3,
   einstellungen: () => ipcRenderer.invoke('insel:app-einstellungen'),
-  setzen: (schluessel, wert) => ipcRenderer.invoke('insel:app-einstellung', { schluessel: String(schluessel), wert: !!wert }),
+  setzen: (schluessel, wert) => ipcRenderer.invoke('insel:app-einstellung', {
+    schluessel: String(schluessel),
+    wert: schluessel === 'petName' ? String(wert == null ? '' : wert).slice(0, 24) : !!wert,
+  }),
   beobachten: (melden) => {
     const listener = (_event, e) => { if (e && typeof e === 'object') melden(e); };
     ipcRenderer.on('insel:app-einstellungen', listener);

@@ -12,6 +12,8 @@
 //          same tick it reads the cursor (an IPC round trip loses clicks); while the left button is held inside the
 //          panel it takes the mouse, so a file dragged from Explorer finds a drop target.
 //   pille  bottom centre above the taskbar: the resting capsule, the toolbar on hover, the listening face.
+//   pet    bottom right (pet.js): the SPACE Bot as a pixel astronaut; while it is on, the pill records unseen and the
+//          pet shows the listening pill next to the figure and throws the words to the pointer before the paste.
 // The UI is local (insel/ui); the data comes from the app's API through the app's own session (cookies), so the
 // island signs in with the app and every AI step follows the person's KI-Option on the server (voice/transcribe).
 
@@ -22,6 +24,7 @@ const {
   diktatTaste, inselRahmen, pillenRahmen, imRechteck, inselLage, multipart, diktatFehler,
 } = require('./regeln');
 const { diktatWeg } = require('../lokal-regeln');
+const { createPet } = require('./pet');
 
 const PANEL = { breite: 720, hoehe: 320 };
 const STREIFEN = { breite: 300, hoehe: 10 }; // the hidden island: easy to hit at the top centre, a small handle shows where
@@ -36,11 +39,16 @@ const LAGE_OFFEN_MS = 6_000;
 const EINFUEGEN_WARTE_MS = 40;
 const ZURUECK_MS = 700;
 
-// lokalDiktat: dictation through the model on this PC (lokal.js) as soon as it is there — tray «Diktat auf diesem PC»
-const STANDARD = { an: true, diktat: true, toene: true, hoverOeffnen: false, begruesst: false, lokalDiktat: true };
+const STANDARD = {
+  an: true, diktat: true, toene: true, hoverOeffnen: false, begruesst: false,
+  // the SPACE Pet (pet.js): on by default; its name, its spot, hidden until (ms, −1 = until brought back), its counter
+  pet: true, petName: '', petLage: null, petVersteckt: 0, petZaehler: null,
+  // lokalDiktat: dictation through the model on this PC (lokal.js) as soon as it is there — tray «Diktat auf diesem PC»
+  lokalDiktat: true,
+};
 /** What the app's settings (Einstellungen → Bot → Insel) may read and change — never the internal flags. */
-const FUER_APP = ['an', 'diktat', 'toene', 'hoverOeffnen'];
-const fuerApp = (e) => Object.fromEntries(FUER_APP.map((k) => [k, !!e[k]]));
+const FUER_APP = ['an', 'diktat', 'toene', 'hoverOeffnen', 'pet'];
+const fuerApp = (e) => ({ ...Object.fromEntries(FUER_APP.map((k) => [k, !!e[k]])), petName: typeof e.petName === 'string' ? e.petName : '' });
 
 function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, navigieren, dateiZumChat, log, testText, demo, beiLage, beiEinstellungen, appFokussiert, lokalKi }) {
   const datei = path.join(userDataDir, 'insel.json');
@@ -49,7 +57,6 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
   const speichern = () => { try { fs.writeFileSync(datei, JSON.stringify(einstellungen, null, 2)); } catch { /* best effort */ } };
   // What the island and the pill see: the settings plus whether the model on this PC can hear right now (the pill
   // then sends WAV — the model hears nothing else; lokal-wav.js).
-  const fuerFenster = (e) => ({ ...e, lokalBereit: !!(lokalKi && lokalKi.bereit()) });
 
   const appSession = session.fromPartition(appPartition);
   // The island's own pages live in their own session: local files only, the microphone (audio) only.
@@ -100,12 +107,17 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     const l = lageMitApp();
     senden(insel, 'insel:lage', l);
     senden(pille, 'insel:lage', l);
+    if (pet) pet.lage(l);
     if (beiLage) beiLage(l);
   }
 
   const senden = (fenster, kanal, daten) => {
     if (fenster && !fenster.isDestroyed()) fenster.webContents.send(kanal, daten);
   };
+  /** The settings as the island's own windows see them: plus whether the pet is active right now. */
+  // testDiktat (unpackaged, SPACE_INSEL_TEST_TEXT): the pill keeps a silent take, so the paste can be tested without a voice
+  // lokalBereit: the model on this PC (lokal.js) is there → the pill sends WAV when lokalDiktat is on
+  const fuerFenster = () => ({ ...einstellungen, lokalBereit: !!(lokalKi && lokalKi.bereit()), petAktiv: !!(pet && pet.aktiv()), testDiktat: !!testText });
 
   // ---- windows ----
 
@@ -168,7 +180,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     insel.once('ready-to-show', () => {
       if (!insel || insel.isDestroyed()) return;
       insel.showInactive();
-      senden(insel, 'insel:einstellungen', fuerFenster(einstellungen));
+      senden(insel, 'insel:einstellungen', fuerFenster());
       senden(insel, 'insel:lage', lageMitApp());
     });
     insel.on('closed', () => { insel = null; });
@@ -208,7 +220,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     pille.once('ready-to-show', () => {
       if (!pille || pille.isDestroyed()) return;
       if (einstellungen.diktat) pille.showInactive();
-      senden(pille, 'insel:einstellungen', fuerFenster(einstellungen));
+      senden(pille, 'insel:einstellungen', fuerFenster());
       senden(pille, 'insel:lage', lageMitApp());
     });
     pille.on('closed', () => { pille = null; });
@@ -260,6 +272,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
   function neuAusrichten() {
     if (insel && !insel.isDestroyed()) { if (eingeklappt) streifenSetzen(); else insel.setBounds(panelRahmen()); }
     if (pille && !pille.isDestroyed()) pille.setBounds(pillenRahmen(anzeige().workArea, PILLE.breite, PILLE.hoehe, PILLE.abstand));
+    if (pet) pet.neuAusrichten();
     senden(insel, 'insel:anzeige', null);
   }
 
@@ -411,10 +424,12 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
         aufnahme = { id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}` };
         senden(pille, 'pille:start', { id: aufnahme.id });
         senden(insel, 'insel:diktat', { zustand: 'hoert' });
+        pet.diktat('hoert');
         taktStarten();
         break;
       case 'freihand':
         senden(pille, 'pille:freihand', { id });
+        pet.diktat('freihand');
         break;
       case 'senden':
         senden(pille, 'pille:stopp', { id, senden: true });
@@ -423,6 +438,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
       case 'verwerfen':
         senden(pille, 'pille:stopp', { id, senden: false, still: aktion === 'verwerfen' });
         senden(insel, 'insel:diktat', { zustand: 'aus' });
+        pet.diktat('aus');
         aufnahme = null;
         break;
       default:
@@ -465,6 +481,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
       const mausRunter = (e) => {
         if (e.button === 1) linksGedrueckt = true;
         tasteEreignis('andere');
+        pet.aussenKlick(screen.getCursorScreenPoint());
         // Hidden: a press at the top edge opens the island right away
         if (e.button === 1 && insel && !insel.isDestroyed() && eingeklappt && imRechteck(screen.getCursorScreenPoint(), weckZone())) {
           senden(insel, 'insel:aufklappen', null);
@@ -478,7 +495,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
           if (!drin) senden(insel, 'insel:aussen-klick', null);
         }
       };
-      const mausHoch = (e) => { if (e.button === 1) linksGedrueckt = false; };
+      const mausHoch = (e) => { if (e.button === 1) { linksGedrueckt = false; pet.linksLos(); } };
       // Right Ctrl + wheel is zoom, not a dictation
       const rad = () => tasteEreignis('andere');
       uIOhook.on('wheel', rad);
@@ -514,19 +531,32 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
 
   const warten = (ms) => new Promise((r) => setTimeout(r, ms));
 
+  // Electron 44.2 has no clipboard.readHTML/readRTF/readImage any more (only readText, read, write): read what this
+  // Electron offers, never throw — a paste must not fail because the old clipboard could not be captured in full.
+  const ablageVersuch = (fn) => { try { return fn(); } catch { return null; } };
   function ablageLesen() {
-    return { text: clipboard.readText(), html: clipboard.readHTML(), rtf: clipboard.readRTF(), image: clipboard.readImage() };
+    const c = clipboard;
+    return {
+      text: ablageVersuch(() => c.readText()) || '',
+      html: ablageVersuch(() => (typeof c.readHTML === 'function' ? c.readHTML() : c.read('text/html'))) || '',
+      rtf: ablageVersuch(() => (typeof c.readRTF === 'function' ? c.readRTF() : c.read('text/rtf'))) || '',
+      image: typeof c.readImage === 'function' ? ablageVersuch(() => c.readImage()) : null,
+    };
   }
 
   function ablageZurueck(vorher, unser) {
-    if (clipboard.readText() !== unser) return; // somebody copied something meanwhile — keep it
+    if (ablageVersuch(() => clipboard.readText()) !== unser) return; // somebody copied something meanwhile — keep it
     const zurueck = {};
     if (vorher.text) zurueck.text = vorher.text;
     if (vorher.html) zurueck.html = vorher.html;
     if (vorher.rtf) zurueck.rtf = vorher.rtf;
-    if (vorher.image && !vorher.image.isEmpty()) zurueck.image = vorher.image;
-    if (Object.keys(zurueck).length) clipboard.write(zurueck);
-    else clipboard.clear();
+    if (vorher.image && typeof vorher.image.isEmpty === 'function' && !vorher.image.isEmpty()) zurueck.image = vorher.image;
+    try {
+      if (Object.keys(zurueck).length) clipboard.write(zurueck);
+      else clipboard.clear();
+    } catch {
+      try { if (vorher.text) clipboard.writeText(vorher.text); else clipboard.clear(); } catch { /* the clipboard is busy */ }
+    }
   }
 
   /**
@@ -581,17 +611,37 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
 
   // ---- IPC from the island and the pill ----
 
-  const vonInsel = (event) => insel && !insel.isDestroyed() && event.sender === insel.webContents;
-  const vonPille = (event) => pille && !pille.isDestroyed() && event.sender === pille.webContents;
+  const von = (fenster, event) => !!fenster && !fenster.isDestroyed() && event.sender === fenster.webContents;
+  const vonInsel = (event) => von(insel, event);
+  const vonPille = (event) => von(pille, event);
+  const vonPet = (event) => !!pet && von(pet.fenster, event);
+  const vonWurf = (event) => !!pet && von(pet.wurfFenster, event);
   const kanaele = [];
+  /** wer: 'insel' | 'pille' | 'beide' (island + pill) | 'pet' | 'wurf' — the sender must be that window. */
   const kanal = (name, wer, handler) => {
     kanaele.push(name);
     ipcMain.handle(name, async (event, ...args) => {
-      const erlaubt = wer === 'beide' ? vonInsel(event) || vonPille(event) : wer === 'insel' ? vonInsel(event) : vonPille(event);
+      const erlaubt = wer === 'beide' ? vonInsel(event) || vonPille(event)
+        : wer === 'insel' ? vonInsel(event) : wer === 'pille' ? vonPille(event)
+          : wer === 'pet' ? vonPet(event) : wer === 'wurf' ? vonWurf(event) : false;
       if (!erlaubt) throw new Error('Nicht erlaubt.');
       return handler(event, ...args);
     });
   };
+
+  // The pet (pet.js) registers its own channels here; its windows come and go with the switches.
+  const pet = createPet({
+    fensterOptionen,
+    fensterSichern,
+    anzeige,
+    einstellungen: () => einstellungen,
+    aendern: (patch, opts) => aendern(patch, opts),
+    senden,
+    kanal,
+    taste: (was) => pillenTaste(was),
+    oeffnen: (pfad) => { zeigen(); if (typeof pfad === 'string' && pfad.startsWith('/') && !pfad.startsWith('//')) navigieren(pfad); },
+    log,
+  });
 
   kanal('insel:flaechen', 'insel', (_e, rects) => {
     flaechen = Array.isArray(rects)
@@ -668,9 +718,9 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     }
   });
   kanal('insel:einstellung', 'beide', (_e, input) => {
-    if (!input || !(input.schluessel in STANDARD)) return einstellungen;
+    if (!input || !(input.schluessel in STANDARD)) return fuerFenster();
     einstellungsAenderung(input.schluessel, !!input.wert);
-    return einstellungen;
+    return fuerFenster();
   });
 
   kanal('pille:flaechen', 'pille', (_e, rects) => {
@@ -678,9 +728,13 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
       ? rects.slice(0, 6).filter((r) => r && [r.x, r.y, r.width, r.height].every(Number.isFinite))
       : [];
   });
-  kanal('pille:pegel', 'pille', (_e, pegel) => { senden(insel, 'insel:pegel', Number(pegel) || 0); });
-  /** Buttons on the pill: dictate (hands-free now), ✓ finish, ✕ cancel. */
-  kanal('pille:taste', 'pille', (_e, was) => {
+  kanal('pille:pegel', 'pille', (_e, pegel, baender) => {
+    const mittel = Number(pegel) || 0;
+    senden(insel, 'insel:pegel', mittel);
+    pet.pegel(mittel, Array.isArray(baender) ? baender.slice(0, 16).map((v) => Number(v) || 0) : null);
+  });
+  /** Buttons on the pill (and the pet's pill): dictate (hands-free now), ✓ finish, ✕ cancel. */
+  function pillenTaste(was) {
     if (!einstellungen.diktat) return;
     let aktionen = [];
     if (was === 'freihand') aktionen = taste.freihand(Date.now());
@@ -690,6 +744,12 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
       aktionen = taste.ereignis({ art: 'esc', zeit: Date.now() });
     }
     for (const a of aktionen) diktatAktion(a);
+  }
+  kanal('pille:taste', 'pille', (_e, was) => pillenTaste(was));
+  /** A message the pill would show («Kopiert · Strg+V», «Mikrofon nicht verfügbar») while the pet shows the pill instead. */
+  kanal('pille:meldung', 'pille', (_e, input) => {
+    if (!input || typeof input.text !== 'string') return;
+    pet.diktat('meldung', { text: input.text.slice(0, 200), art: input.art === 'fehler' ? 'fehler' : 'info' });
   });
   kanal('pille:audio', 'pille', async (_e, input) => {
     if (!aufnahme || !input || input.id !== aufnahme.id) return { ok: false };
@@ -697,26 +757,35 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     const lauf = { id: input.id, abgebrochen: false };
     transkription = lauf;
     senden(insel, 'insel:diktat', { zustand: 'denkt' });
+    pet.diktat('denkt');
     try {
       const text = await transkribieren(Buffer.from(input.daten), String(input.mime || 'audio/webm'));
       if (transkription === lauf) transkription = null;
       if (!text || lauf.abgebrochen) {
         senden(insel, 'insel:diktat', { zustand: 'aus' });
+        pet.diktat('aus');
         return { ok: false, still: true };
       }
       letztesDiktat = text;
+      const woerter = text.split(/\s+/).filter(Boolean).length;
+      // The pet throws the words to the pointer first (≤ 450 ms); the paste lands on impact.
+      await pet.werfen(text);
       const eingefuegt = await einfuegen(text);
-      senden(insel, 'insel:diktat', { zustand: 'fertig', woerter: text.split(/\s+/).filter(Boolean).length });
+      senden(insel, 'insel:diktat', { zustand: 'fertig', woerter });
+      pet.diktat(eingefuegt ? 'fertig' : 'meldung', eingefuegt ? { woerter } : { text: 'Kopiert · Strg+V zum Einfügen', art: 'info' });
+      pet.gezaehlt(text, woerter);
       return { ok: true, text, kopiert: !eingefuegt };
     } catch (err) {
       if (transkription === lauf) transkription = null;
       senden(insel, 'insel:diktat', { zustand: 'aus' });
+      pet.diktat('fehler', { text: err.message });
       return { ok: false, meldung: err.message };
     }
   });
   kanal('pille:leer', 'pille', (_e, input) => {
     if (aufnahme && input && input.id === aufnahme.id) aufnahme = null;
     senden(insel, 'insel:diktat', { zustand: 'aus' });
+    pet.diktat('aus');
   });
   kanal('pille:nochmals', 'pille', async () => {
     if (!letztesDiktat) return false;
@@ -724,22 +793,36 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
   });
 
   function einstellungenSenden() {
-    senden(insel, 'insel:einstellungen', fuerFenster(einstellungen));
-    senden(pille, 'insel:einstellungen', fuerFenster(einstellungen));
+    senden(insel, 'insel:einstellungen', fuerFenster());
+    senden(pille, 'insel:einstellungen', fuerFenster());
   }
 
   function einstellungsAenderung(schluessel, wert) {
-    einstellungen = { ...einstellungen, [schluessel]: wert };
+    aendern({ [schluessel]: wert });
+  }
+
+  /**
+   * Change settings: save, act (dictation off, island on/off, pet shown/hidden), tell the windows; the app's settings
+   * page hears about it when one of its switches changed (or opts.app).
+   */
+  function aendern(patch, opts) {
+    const vorher = einstellungen;
+    einstellungen = { ...einstellungen, ...patch };
     speichern();
-    if (schluessel === 'diktat') {
+    const keys = Object.keys(patch);
+    if (keys.includes('diktat') && vorher.diktat !== einstellungen.diktat) {
+      const wert = einstellungen.diktat;
       if (!wert && aufnahme) diktatAktion('abbrechen');
       if (!wert && transkription) transkription.abgebrochen = true;
       taste.zuruecksetzen();
       if (pille && !pille.isDestroyed()) { if (wert) pille.showInactive(); else pille.hide(); }
     }
-    if (schluessel === 'an') { if (wert) starten(); else stoppen(); }
-    einstellungenSenden();
-    if (beiEinstellungen) beiEinstellungen(fuerApp(einstellungen));
+    if (keys.includes('an') && vorher.an !== einstellungen.an) { if (einstellungen.an) starten(); else stoppen(); }
+    if (einstellungen.an && keys.some((k) => k === 'pet' || k === 'petName' || k === 'petVersteckt')) pet.einstellungen();
+    senden(insel, 'insel:einstellungen', fuerFenster());
+    senden(pille, 'insel:einstellungen', fuerFenster());
+    const fuerDieApp = keys.some((k) => FUER_APP.includes(k) || k === 'petName') || (opts && opts.app);
+    if (fuerDieApp && beiEinstellungen) beiEinstellungen(fuerApp(einstellungen));
   }
 
   // ---- lifecycle ----
@@ -750,6 +833,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     // Every window is created at launch (hidden), never later — first show stays instant.
     pilleAnlegen();
     inselAnlegen();
+    pet.anlegen();
     hookStarten();
     lagePlanen(true);
   }
@@ -762,6 +846,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     lageTimer = null;
     hookStoppen();
     if (aufnahme) diktatAktion('abbrechen');
+    pet.zerstoeren();
     for (const f of [insel, pille]) if (f && !f.isDestroyed()) f.destroy();
     insel = null;
     pille = null;
@@ -779,18 +864,27 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     starten,
     get an() { return einstellungen.an; },
     get diktat() { return einstellungen.diktat; },
-    /** Tray: island on/off, dictation on/off. */
+    /** The pet switch is on and the pet is not hidden for a while. */
+    get pet() { return !!einstellungen.pet && pet.aktiv(); },
+    /** Tray: island on/off, dictation on/off, pet shown (also brings a hidden pet back) / off. */
     schalten(an) { einstellungsAenderung('an', !!an); },
     diktatSchalten(an) { einstellungsAenderung('diktat', !!an); },
     get lokalDiktat() { return einstellungen.lokalDiktat; },
     lokalDiktatSchalten(an) { einstellungsAenderung('lokalDiktat', !!an); },
     /** The model on this PC arrived or went away (main.js): the pill learns whether to send WAV. */
     lokalGeaendert() { einstellungenSenden(); },
-    /** The app's settings page: the switches the person may change there. */
+    petSchalten(an) { aendern(an ? { pet: true, petVersteckt: 0 } : { pet: false }); },
+    /** The app's settings page: the switches the person may change there (petName: the pet's name, a string). */
     einstellungenFuerApp() { return fuerApp(einstellungen); },
     einstellungSetzen(schluessel, wert) {
-      if (!FUER_APP.includes(schluessel)) return fuerApp(einstellungen);
-      if (einstellungen[schluessel] !== !!wert) einstellungsAenderung(schluessel, !!wert);
+      if (schluessel === 'petName') {
+        const n = String(wert == null ? '' : wert).replace(/[\r\n\t]/g, ' ').trim().slice(0, 24);
+        if (n !== einstellungen.petName) aendern({ petName: n });
+      } else if (schluessel === 'pet') {
+        if (!!wert !== (!!einstellungen.pet && pet.aktiv())) aendern(wert ? { pet: true, petVersteckt: 0 } : { pet: false });
+      } else if (FUER_APP.includes(schluessel)) {
+        if (einstellungen[schluessel] !== !!wert) einstellungsAenderung(schluessel, !!wert);
+      }
       return fuerApp(einstellungen);
     },
     /** The chat in the app: which bot, and whether it is writing an answer. */
@@ -818,6 +912,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     shutdown() {
       beendet = true;
       stoppen();
+      pet.shutdown();
       for (const k of kanaele) ipcMain.removeHandler(k);
     },
   };
