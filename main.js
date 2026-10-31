@@ -233,7 +233,7 @@ function trayMenue() {
   if (!tray) return;
   const autostart = app.getLoginItemSettings({ args: [IM_HINTERGRUND_ARG] }).openAtLogin;
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'SPACE öffnen', click: zeigen },
+    { label: 'SPACE App öffnen', click: zeigen },
     { type: 'separator' },
     { label: 'Mit Windows starten', type: 'checkbox', checked: autostart, enabled: app.isPackaged, click: (item) => mitWindowsStarten(item.checked) },
     ...(insel ? [
@@ -455,6 +455,7 @@ dateienKanal('dateien:freigabe-entfernen', (_event, id) => { dateien.freigabeEnt
 dateienKanal('dateien:liste', (_event, id, unterpfad) => dateien.liste(id, unterpfad));
 dateienKanal('dateien:alle', (_event, id) => dateien.alle(id));
 dateienKanal('dateien:lesen', (_event, id, pfad) => dateien.lesen(id, pfad));
+dateienKanal('dateien:schreiben', (_event, id, pfad, inhalt, opts) => dateien.schreiben(id, pfad, inhalt, opts));
 dateienKanal('dateien:beobachten', async (event, input) => {
   const abo = input && typeof input.abo === 'string' && /^[\w-]{1,64}$/.test(input.abo) ? input.abo : null;
   if (!abo) throw new DateienFehler('allgemein');

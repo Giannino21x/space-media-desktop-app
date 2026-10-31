@@ -3,7 +3,8 @@
 //
 // The person picks a folder in the system dialog; from then on the app's pages may list it, read files from it
 // and watch it for changes — to sync it into «Meine Dateien» and to let the bots look into it live while the app
-// is open. Read only: nothing here writes, moves or deletes a file of the person. Every path is resolved against
+// is open. Reading, and since v2 (31.10.2026, «Vertrag E», first slice) writing ONE text file inside a share after
+// the person confirmed it in the chat — nothing here moves or deletes a file of the person, nothing runs. Every path is resolved against
 // the real root of the share (realpath, no «..», symlinks pointing outside are invisible), drive roots, the home
 // folder (and above), hidden folders and the places where programs keep secrets (AppData, Library, this app's own
 // data) cannot be shared — also not through a network path back to this computer. Hidden entries, node_modules and
@@ -22,6 +23,8 @@ const MAX_ORDNER = 50_000;
 /** Entries read from one folder at most (liste shows up to this many, alle reports `abgeschnitten`). */
 const MAX_EBENE = 10_000;
 const MAX_LESEN_BYTES = 50 * 1024 * 1024;
+/** v2 schreiben: one text file at most this big (the bot's answer, a note, a CSV). */
+const MAX_SCHREIBEN_BYTES = 1024 * 1024;
 const LESEN_STUECK = 1024 * 1024;
 /** A dead network drive or a cloud file that never arrives must not block every later call. */
 const LESEN_ZEIT_MS = 3 * 60_000;
@@ -49,6 +52,9 @@ const MELDUNG = {
   pfad: 'Dieser Pfad liegt nicht in der Freigabe.',
   nichtGefunden: 'Datei oder Ordner nicht gefunden.',
   zuGross: 'Die Datei ist grösser als 50 MB.',
+  zuGrossSchreiben: 'Der Inhalt ist grösser als 1 MB.',
+  vorhanden: 'Die Datei gibt es schon. Zum Ersetzen braucht es «überschreiben».',
+  keinText: 'Geschrieben wird nur Text.',
   zugriff: 'Kein Zugriff auf diese Datei oder diesen Ordner.',
   belegt: 'Die Datei ist gerade in einem anderen Programm geöffnet.',
   zuVieleBeobachter: 'Es werden schon zu viele Ordner gleichzeitig beobachtet.',
@@ -517,6 +523,33 @@ function createDateienHost(o) {
     }
   }, { zeitMs: LESEN_ZEIT_MS });
 
+  /**
+   * v2: write a UTF-8 text file inside the share. The parent folder must exist and lie inside (links resolved
+   * like everywhere else); the file itself may be new, or — only with `ueberschreiben` — an existing plain file.
+   * 'wx' creates, 'w' replaces; a link or folder under that name is never written through.
+   */
+  const dateiSchreiben = begrenzt(LESEN_PARALLEL, async (id, teile, inhalt, ueberschreiben) => {
+    const { wurzel } = await wurzelVon(id);
+    const daten = Buffer.from(inhalt, 'utf8');
+    if (daten.length > MAX_SCHREIBEN_BYTES) throw new DateienFehler('zuGrossSchreiben');
+    const eltern = teile.length > 1 ? await aufloesen(wurzel, teile.slice(0, -1)) : { real: wurzel, stat: await fsp.stat(wurzel) };
+    if (!eltern) throw new DateienFehler('nichtGefunden');
+    if (!eltern.stat.isDirectory()) throw new DateienFehler('nichtGefunden');
+    const ziel = p.join(eltern.real, teile[teile.length - 1]);
+    let vorhanden = null;
+    try { vorhanden = await fsp.lstat(ziel); } catch { /* new file */ }
+    if (vorhanden) {
+      if (!ueberschreiben) throw new DateienFehler('vorhanden');
+      if (!vorhanden.isFile()) throw new DateienFehler('keineDatei');
+    }
+    try {
+      await fsp.writeFile(ziel, daten, { flag: ueberschreiben ? 'w' : 'wx' });
+    } catch (err) {
+      throw new DateienFehler(err && err.code === 'EEXIST' ? 'vorhanden' : grundVon(err));
+    }
+    return { bytes: daten.length };
+  }, { zeitMs: LESEN_ZEIT_MS });
+
   const host = {
     datei,
 
@@ -620,6 +653,15 @@ function createDateienHost(o) {
       if (!teile) throw new DateienFehler('pfad');
       if (!teile.length) throw new DateienFehler('keineDatei');
       return dateiLesen(id, teile);
+    },
+
+    /** v2 (Vertrag E, Scheibe 1): a text file inside the share — see dateiSchreiben. */
+    async schreiben(id, pfad, inhalt, opts) {
+      const teile = pfadTeile(pfad, platform);
+      if (!teile) throw new DateienFehler('pfad');
+      if (!teile.length) throw new DateienFehler('keineDatei');
+      if (typeof inhalt !== 'string') throw new DateienFehler('keinText');
+      return dateiSchreiben(id, teile, inhalt, !!(opts && opts.ueberschreiben === true));
     },
 
     /**
@@ -737,6 +779,7 @@ module.exports = {
   begrenzt,
   MAX_ALLE,
   MAX_LESEN_BYTES,
+  MAX_SCHREIBEN_BYTES,
   MELDUNG,
   ausgelassen,
   createDateienHost,

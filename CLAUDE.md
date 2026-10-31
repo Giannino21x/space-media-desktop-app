@@ -180,7 +180,11 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
   `--dev`). Kopplung + Gerätetoken liegen in `<userData>/connector/` (Dev: `connector-dev/`), Protokoll dort in
   `connector.log`. Der Connector selbst (CLI, Bundle) lebt im Web-Repo unter `src/lib/connector/client/`.
 - **PC-Ordner (dateien.js, `window.spaceDateien`):** Vertrag «D» im Web-Repo (`docs/plans/2026-10-26-dateien.md`) ist die
-  einzige Schnittstelle — neue Felder oder Methoden nur mit Versionssprung und Eintrag dort. Nur Lesen; nur Ordner, die
+  einzige Schnittstelle — neue Felder oder Methoden nur mit Versionssprung und Eintrag dort. Lesen, und seit **v2**
+  (31.10.2026, Vertrag «E» Scheibe 1, `docs/plans/2026-10-31-pc-befehle.md` im Web-Repo) `schreiben(id, pfad, inhalt,
+  { ueberschreiben })`: EINE Textdatei (UTF-8, ≤ 1 MB) in einer Freigabe, nachdem die Person es im Chat bestätigt hat —
+  nie versteckte oder Systemnamen, nie durch einen Link, Bestehendes nur mit `ueberschreiben` und nur eine echte Datei;
+  nichts wird verschoben, gelöscht oder ausgeführt. Nur Ordner, die
   die Person im System-Dialog gewählt hat (`ordnerWaehlen` nur direkt nach einem Klick, `navigator.userActivation`);
   jeder Pfad gegen die echte Wurzel aufgelöst (`realpath`, Links nach draussen unsichtbar, Wurzel ersetzt → «weg»).
   Nie freigebbar: Laufwerkswurzeln (auch `\\server\share`), Benutzerordner und darüber, versteckte Ordner,

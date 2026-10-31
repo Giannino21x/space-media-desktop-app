@@ -41,7 +41,8 @@ const dateienAufruf = async (kanal, ...args) => {
 };
 
 contextBridge.exposeInMainWorld('spaceDateien', {
-  version: 1,
+  // v2 (31.10.2026): schreiben — one text file inside a share, after the person confirmed it in the chat
+  version: 2,
   ordnerWaehlen: async () => {
     // Only right after a click or key press of the person — no page pops the dialog up on its own.
     if (navigator.userActivation && !navigator.userActivation.isActive) {
@@ -54,6 +55,7 @@ contextBridge.exposeInMainWorld('spaceDateien', {
   freigabeEntfernen: async (id) => { await dateienAufruf('dateien:freigabe-entfernen', id); },
   liste: (id, unterpfad) => dateienAufruf('dateien:liste', id, unterpfad),
   alle: (id) => dateienAufruf('dateien:alle', id),
+  schreiben: (id, pfad, inhalt, opts) => dateienAufruf('dateien:schreiben', id, pfad, inhalt, opts),
   lesen: async (id, pfad) => {
     const datei = await dateienAufruf('dateien:lesen', id, pfad);
     const bytes = datei.daten; // a Buffer in main arrives as Uint8Array
@@ -99,9 +101,10 @@ ipcRenderer.on('insel:datei-bereit', () => window.dispatchEvent(new Event('insel
 // The island shows the bot the person is talking to in the chat, and whether it is writing (web: lib/insel/desktop.ts).
 // Version 2: the island's switches for Einstellungen → Bot → Insel (null where there is no island).
 // v3 (SPACE Pet, 30.10.2026): einstellungen() also carries `pet` (switch) and `petName`; setzen('pet', bool) brings a
-// hidden pet back too, setzen('petName', string) renames it. Web: lib/insel/desktop.ts.
+// hidden pet back too, setzen('petName', string) renames it. v4 (30.10.2026): `lokalDiktat` (switch) and the read-only
+// `lokalBereit` (the model on this PC is there). Web: lib/insel/desktop.ts.
 contextBridge.exposeInMainWorld('spaceInselApp', {
-  version: 3,
+  version: 4,
   einstellungen: () => ipcRenderer.invoke('insel:app-einstellungen'),
   setzen: (schluessel, wert) => ipcRenderer.invoke('insel:app-einstellung', {
     schluessel: String(schluessel),

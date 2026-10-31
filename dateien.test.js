@@ -8,7 +8,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const {
-  MAX_LESEN_BYTES, MELDUNG, ausgelassen, begrenzt, createDateienHost, eigenerRechner, eindeutigerName, fehlerMeldung,
+  MAX_LESEN_BYTES, MAX_SCHREIBEN_BYTES, MELDUNG, ausgelassen, begrenzt, createDateienHost, eigenerRechner, eindeutigerName, fehlerMeldung,
   freigabeVerboten, istInnerhalb, mimeVon, pfadTeile,
 } = require('./dateien');
 
@@ -435,6 +435,47 @@ test('lesen: content, name, mime, time — at most 50 MB, only files inside', as
   assert.equal((await host.lesen(id, 'Gross.bin')).daten.length, MAX_LESEN_BYTES);
   fs.truncateSync(gross, MAX_LESEN_BYTES + 1);
   await abweisen(host.lesen(id, 'Gross.bin'), 'zuGross');
+});
+
+test('schreiben (v2): text file inside the share; no replace without flag; never hidden, outside or over 1 MB', async (t) => {
+  const { tmp, freigabe, draussen, host } = aufbauen();
+  t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+  const { id } = await host.freigabeAnlegen(freigabe);
+
+  assert.deepEqual(await host.schreiben(id, 'Unterordner/Antwort.txt', 'Halbtax: CHF 190'), { bytes: 16 });
+  assert.equal(fs.readFileSync(path.join(freigabe, 'Unterordner', 'Antwort.txt'), 'utf8'), 'Halbtax: CHF 190');
+  await abweisen(host.schreiben(id, 'Unterordner/Antwort.txt', 'neu'), 'vorhanden');
+  assert.deepEqual(await host.schreiben(id, 'Unterordner/Antwort.txt', 'neu', { ueberschreiben: true }), { bytes: 3 });
+  assert.equal(fs.readFileSync(path.join(freigabe, 'Unterordner', 'Antwort.txt'), 'utf8'), 'neu');
+  // Umlauts as UTF-8, bytes counted, not characters
+  assert.deepEqual(await host.schreiben(id, 'Notiz-ä.md', 'Grüezi'), { bytes: 7 });
+
+  await abweisen(host.schreiben(id, '.env', 'x'), 'pfad');
+  await abweisen(host.schreiben(id, 'Thumbs.db', 'x', { ueberschreiben: true }), 'pfad');
+  await abweisen(host.schreiben(id, '../../../geheim/neu.txt', 'x'), 'pfad');
+  assert.ok(!fs.existsSync(path.join(draussen, 'neu.txt')));
+  await abweisen(host.schreiben(id, 'Fehlt/neu.txt', 'x'), 'nichtGefunden');
+  await abweisen(host.schreiben(id, 'Unterordner', 'x', { ueberschreiben: true }), 'keineDatei');
+  await abweisen(host.schreiben(id, '', 'x'), 'keineDatei');
+  await abweisen(host.schreiben(id, 'gross.txt', 'x'.repeat(MAX_SCHREIBEN_BYTES + 1)), 'zuGrossSchreiben');
+  await abweisen(host.schreiben(id, 'zahl.txt', 42), 'keinText');
+  assert.ok(!fs.existsSync(path.join(freigabe, 'gross.txt')));
+  // A link under the name is never written through, even with the flag
+  fs.writeFileSync(path.join(draussen, 'ziel.txt'), 'draussen');
+  let link = true;
+  try { fs.symlinkSync(path.join(draussen, 'ziel.txt'), path.join(freigabe, 'Link.txt'), 'file'); } catch (err) {
+    if (err.code !== 'EPERM') throw err;
+    link = false; // file links need a privilege on Windows — the folder-link cases cover the same rule
+  }
+  if (link) {
+    await abweisen(host.schreiben(id, 'Link.txt', 'x', { ueberschreiben: true }), 'keineDatei');
+    assert.equal(fs.readFileSync(path.join(draussen, 'ziel.txt'), 'utf8'), 'draussen');
+  }
+  // A folder link under the name (junction, no privilege needed) is refused the same way
+  ordnerLink(draussen, path.join(freigabe, 'LinkOrdner'));
+  await abweisen(host.schreiben(id, 'LinkOrdner', 'x', { ueberschreiben: true }), 'keineDatei');
+  await abweisen(host.schreiben(id, 'LinkOrdner/neu.txt', 'x'), 'nichtGefunden');
+  assert.ok(!fs.existsSync(path.join(draussen, 'neu.txt')));
 });
 
 /** Next report of a watcher, or null after `ms`. */
