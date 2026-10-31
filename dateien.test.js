@@ -8,8 +8,8 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const {
-  MAX_LESEN_BYTES, MAX_SCHREIBEN_BYTES, MELDUNG, ausgelassen, begrenzt, createDateienHost, eigenerRechner, eindeutigerName, fehlerMeldung,
-  freigabeVerboten, istInnerhalb, mimeVon, pfadTeile,
+  MAX_AUSGABE_BYTES, MAX_LESEN_BYTES, MAX_SCHREIBEN_BYTES, MELDUNG, ausgelassen, begrenzt, createDateienHost, eigenerRechner, eindeutigerName, fehlerMeldung,
+  freigabeVerboten, istInnerhalb, mimeVon, pfadTeile, umgebungFuer,
 } = require('./dateien');
 
 // ── Pure rules ───────────────────────────────────────────────────────────────
@@ -500,6 +500,51 @@ test('oeffnen (v2): file or folder inside the share through the default program;
   fs.mkdirSync(path.join(tmp, 'ud2'), { recursive: true });
   const f2 = await ohne.freigabeAnlegen(freigabe);
   await abweisen(ohne.oeffnen(f2.id, 'Offerte.pdf'), 'nichtVerfuegbar');
+});
+
+test('umgebungFuer: only the path and program places, never secrets', () => {
+  const env = { PATH: '/bin', HOME: '/h', AWS_SECRET_ACCESS_KEY: 'x', GITHUB_TOKEN: 'y', SUPABASE_SERVICE_KEY: 'z', LANG: 'de' };
+  assert.deepEqual(umgebungFuer(env, 'linux'), { PATH: '/bin', HOME: '/h', LANG: 'de' });
+  assert.deepEqual(umgebungFuer({ Path: 'C:\\x', SystemRoot: 'C:\\Windows', OPENAI_API_KEY: 'k' }, 'win32'), { Path: 'C:\\x', SystemRoot: 'C:\\Windows' });
+});
+
+test('ausfuehren (v2): one command in the share, exit code, output limit, time limit, forbidden refused', { timeout: 60_000 }, async (t) => {
+  const { tmp, freigabe, host } = aufbauen();
+  t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+  const { id } = await host.freigabeAnlegen(freigabe);
+  const node = JSON.stringify(process.execPath);
+
+  const echo = await host.ausfuehren(id, 'echo hallo');
+  assert.equal(echo.code, 0);
+  assert.match(echo.stdout, /hallo/);
+  assert.equal(echo.zeit, false);
+
+  // runs in the share's root
+  const cwd = await host.ausfuehren(id, `${node} -e "process.stdout.write(process.cwd())"`);
+  assert.equal(fs.realpathSync.native(cwd.stdout.trim()), freigabe);
+
+  const code = await host.ausfuehren(id, `${node} -e "console.error('kaputt'); process.exit(3)"`);
+  assert.equal(code.code, 3);
+  assert.match(code.stderr, /kaputt/);
+
+  const gross = await host.ausfuehren(id, `${node} -e "process.stdout.write('x'.repeat(${MAX_AUSGABE_BYTES * 2}))"`);
+  assert.equal(gross.abgeschnitten, true);
+  assert.equal(Buffer.byteLength(gross.stdout), MAX_AUSGABE_BYTES);
+
+  const lang = await host.ausfuehren(id, `${node} -e "setTimeout(() => {}, 30000)"`, { zeitMs: 1500 });
+  assert.equal(lang.zeit, true);
+  assert.equal(lang.code, null);
+  assert.ok(lang.dauerMs < 10_000, `took ${lang.dauerMs} ms`);
+
+  await abweisen(host.ausfuehren(id, 'rm -rf .'), 'befehl_loeschen');
+  await abweisen(host.ausfuehren(id, 'sudo ls'), 'befehl_rechte');
+  await abweisen(host.ausfuehren(id, ''), 'befehl_leer');
+  assert.equal(MELDUNG.befehl_loeschen, 'Befehle, die Dateien oder Laufwerke löschen oder formatieren, führt der Bot nicht aus.');
+  // secrets of this process never reach the command
+  process.env.SPACE_TEST_GEHEIM = 'geheim';
+  const geheim = await host.ausfuehren(id, `${node} -e "process.stdout.write(String(process.env.SPACE_TEST_GEHEIM))"`);
+  delete process.env.SPACE_TEST_GEHEIM;
+  assert.equal(geheim.stdout.trim(), 'undefined');
 });
 
 /** Next report of a watcher, or null after `ms`. */

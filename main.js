@@ -457,6 +457,7 @@ dateienKanal('dateien:alle', (_event, id) => dateien.alle(id));
 dateienKanal('dateien:lesen', (_event, id, pfad) => dateien.lesen(id, pfad));
 dateienKanal('dateien:schreiben', (_event, id, pfad, inhalt, opts) => dateien.schreiben(id, pfad, inhalt, opts));
 dateienKanal('dateien:oeffnen', (_event, id, pfad) => dateien.oeffnen(id, pfad));
+dateienKanal('dateien:ausfuehren', (_event, id, befehl, opts) => dateien.ausfuehren(id, befehl, opts));
 dateienKanal('dateien:beobachten', async (event, input) => {
   const abo = input && typeof input.abo === 'string' && /^[\w-]{1,64}$/.test(input.abo) ? input.abo : null;
   if (!abo) throw new DateienFehler('allgemein');

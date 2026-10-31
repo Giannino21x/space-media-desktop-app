@@ -57,6 +57,7 @@ contextBridge.exposeInMainWorld('spaceDateien', {
   alle: (id) => dateienAufruf('dateien:alle', id),
   schreiben: (id, pfad, inhalt, opts) => dateienAufruf('dateien:schreiben', id, pfad, inhalt, opts),
   oeffnen: (id, pfad) => dateienAufruf('dateien:oeffnen', id, pfad),
+  ausfuehren: (id, befehl, opts) => dateienAufruf('dateien:ausfuehren', id, befehl, opts),
   lesen: async (id, pfad) => {
     const datei = await dateienAufruf('dateien:lesen', id, pfad);
     const bytes = datei.daten; // a Buffer in main arrives as Uint8Array

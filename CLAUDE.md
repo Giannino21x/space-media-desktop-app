@@ -185,7 +185,10 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
   { ueberschreiben })`: EINE Textdatei (UTF-8, ≤ 1 MB) in einer Freigabe, nachdem die Person es im Chat bestätigt hat —
   nie versteckte oder Systemnamen, nie durch einen Link, Bestehendes nur mit `ueberschreiben` und nur eine echte Datei;
   nichts wird verschoben, gelöscht oder ausgeführt; dazu `oeffnen(id, pfad)`: Datei oder Ordner der Freigabe mit dem
-  Standardprogramm (`shell.openPath`), ebenfalls nur nach Bestätigung. Nur Ordner, die
+  Standardprogramm (`shell.openPath`), ebenfalls nur nach Bestätigung; und `ausfuehren(id, befehl, { zeitMs })`: EIN
+  Befehl in der Wurzel der Freigabe (cmd.exe /c bzw. /bin/sh -c), kleine Umgebung (`umgebungFuer`, nie Schlüssel), ≤ 5 Min.,
+  Ausgabe ≤ 1 MB, Prozessbaum wird bei Zeitüberschreitung beendet; was nie läuft, steht in `befehle-regeln.js` — 1:1 wie
+  `src/lib/pc/befehle-regeln.ts` im Web-Repo, beide zusammen ändern. Nur Ordner, die
   die Person im System-Dialog gewählt hat (`ordnerWaehlen` nur direkt nach einem Klick, `navigator.userActivation`);
   jeder Pfad gegen die echte Wurzel aufgelöst (`realpath`, Links nach draussen unsichtbar, Wurzel ersetzt → «weg»).
   Nie freigebbar: Laufwerkswurzeln (auch `\\server\share`), Benutzerordner und darüber, versteckte Ordner,

@@ -11,6 +11,8 @@
 // system files (Thumbs.db, desktop.ini, ~$ lock files) are never listed, read or reported.
 
 const { randomUUID } = require('crypto');
+const { spawn, spawnSync } = require('child_process');
+const { MELDUNG_BEFEHL, befehlVerboten } = require('./befehle-regeln');
 const fs = require('fs');
 const fsp = require('fs/promises');
 const os = require('os');
@@ -25,6 +27,10 @@ const MAX_EBENE = 10_000;
 const MAX_LESEN_BYTES = 50 * 1024 * 1024;
 /** v2 schreiben: one text file at most this big (the bot's answer, a note, a CSV). */
 const MAX_SCHREIBEN_BYTES = 1024 * 1024;
+/** v2 ausfuehren: output kept at most this big, a command runs at most this long (Vertrag E). */
+const MAX_AUSGABE_BYTES = 1024 * 1024;
+const MAX_BEFEHL_ZEIT_MS = 5 * 60_000;
+const STANDARD_BEFEHL_ZEIT_MS = 60_000;
 const LESEN_STUECK = 1024 * 1024;
 /** A dead network drive or a cloud file that never arrives must not block every later call. */
 const LESEN_ZEIT_MS = 3 * 60_000;
@@ -56,6 +62,7 @@ const MELDUNG = {
   vorhanden: 'Die Datei gibt es schon. Zum Ersetzen braucht es «überschreiben».',
   keinText: 'Geschrieben wird nur Text.',
   oeffnen: 'Die Datei liess sich auf dem PC nicht öffnen.',
+  ...Object.fromEntries(Object.entries(MELDUNG_BEFEHL).map(([grund, text]) => [`befehl_${grund}`, text])),
   zugriff: 'Kein Zugriff auf diese Datei oder diesen Ordner.',
   belegt: 'Die Datei ist gerade in einem anderen Programm geöffnet.',
   zuVieleBeobachter: 'Es werden schon zu viele Ordner gleichzeitig beobachtet.',
@@ -290,6 +297,55 @@ function grundVon(err) {
   if (err && (err.code === 'ENOENT' || err.code === 'ENOTDIR')) return 'nichtGefunden';
   if (err && (err.code === 'EACCES' || err.code === 'EPERM')) return 'zugriff';
   return 'allgemein';
+}
+
+// ── Commands (v2, Vertrag E) ────────────────────────────────────────────────
+
+/** The small environment a command gets: the path and the places programs need, never the person's secrets. */
+function umgebungFuer(env, platform = process.platform) {
+  const erlaubt = platform === 'win32'
+    ? ['PATH', 'Path', 'SystemRoot', 'SYSTEMROOT', 'SystemDrive', 'windir', 'TEMP', 'TMP', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'ComSpec', 'COMSPEC', 'PATHEXT', 'LANG', 'PROGRAMFILES', 'ProgramFiles', 'ProgramFiles(x86)', 'LOCALAPPDATA', 'NUMBER_OF_PROCESSORS', 'OS']
+    : ['PATH', 'HOME', 'TMPDIR', 'LANG', 'LC_ALL', 'SHELL', 'USER', 'TERM'];
+  const out = {};
+  for (const name of Object.keys(env || {})) if (erlaubt.includes(name)) out[name] = env[name];
+  return out;
+}
+
+/**
+ * Run one command in `cwd` (the share's root) and collect what it printed — at most MAX_AUSGABE_BYTES, at most
+ * `zeitMs`; over time the whole process tree is killed. Never throws for a failing command: the exit code is the answer.
+ */
+function befehlLaufen(cwd, befehl, zeitMs, { platform = process.platform, env = process.env } = {}) {
+  return new Promise((resolve) => {
+    const win = platform === 'win32';
+    const proc = win
+      ? spawn(env.ComSpec || env.COMSPEC || 'cmd.exe', ['/d', '/s', '/c', `"${befehl}"`], { cwd, env: umgebungFuer(env, platform), windowsHide: true, windowsVerbatimArguments: true, stdio: ['ignore', 'pipe', 'pipe'] })
+      : spawn('/bin/sh', ['-c', befehl], { cwd, env: umgebungFuer(env, platform), stdio: ['ignore', 'pipe', 'pipe'] });
+    const start = Date.now();
+    const out = []; const err = [];
+    let bytes = 0; let abgeschnitten = false; let zeit = false; let beendet = false;
+    const sammeln = (ziel) => (chunk) => {
+      const rest = MAX_AUSGABE_BYTES - bytes;
+      if (rest <= 0) { abgeschnitten = true; return; }
+      const teil = chunk.length > rest ? chunk.subarray(0, rest) : chunk;
+      if (chunk.length > rest) abgeschnitten = true;
+      ziel.push(teil); bytes += teil.length;
+    };
+    proc.stdout.on('data', sammeln(out));
+    proc.stderr.on('data', sammeln(err));
+    const toeten = () => {
+      if (win) spawnSync('taskkill', ['/pid', String(proc.pid), '/T', '/F'], { windowsHide: true, timeout: 5_000 });
+      else { try { proc.kill('SIGKILL'); } catch { /* gone */ } }
+    };
+    const timer = setTimeout(() => { zeit = true; toeten(); }, zeitMs);
+    const fertig = (code) => {
+      if (beendet) return;
+      beendet = true; clearTimeout(timer);
+      resolve({ code: zeit ? null : code, stdout: Buffer.concat(out).toString('utf8'), stderr: Buffer.concat(err).toString('utf8'), abgeschnitten, zeit, dauerMs: Date.now() - start });
+    };
+    proc.on('error', (e) => { err.push(Buffer.from(String(e && e.message || e))); fertig(-1); });
+    proc.on('close', (code) => fertig(code));
+  });
 }
 
 // ── Host ─────────────────────────────────────────────────────────────────────
@@ -675,6 +731,18 @@ function createDateienHost(o) {
       return { geoeffnet: true };
     },
 
+    /**
+     * v2 (Vertrag E, Scheibe 3): ONE command in the share's root folder, after the person confirmed it in the chat.
+     * Refused here again whatever the chat said (befehle-regeln.js); small environment, time and output limits.
+     */
+    async ausfuehren(id, befehl, opts) {
+      const grund = befehlVerboten(befehl);
+      if (grund) throw new DateienFehler(`befehl_${grund}`);
+      const { wurzel } = await wurzelVon(id);
+      const zeitMs = Math.min(MAX_BEFEHL_ZEIT_MS, Math.max(1_000, Number(opts && opts.zeitMs) || STANDARD_BEFEHL_ZEIT_MS));
+      return befehlLaufen(wurzel, befehl, zeitMs, { platform });
+    },
+
     /** v2 (Vertrag E, Scheibe 1): a text file inside the share — see dateiSchreiben. */
     async schreiben(id, pfad, inhalt, opts) {
       const teile = pfadTeile(pfad, platform);
@@ -798,9 +866,13 @@ module.exports = {
   DateienFehler,
   begrenzt,
   MAX_ALLE,
+  MAX_AUSGABE_BYTES,
+  MAX_BEFEHL_ZEIT_MS,
   MAX_LESEN_BYTES,
   MAX_SCHREIBEN_BYTES,
   MELDUNG,
+  befehlLaufen,
+  umgebungFuer,
   ausgelassen,
   createDateienHost,
   eigenerRechner,
