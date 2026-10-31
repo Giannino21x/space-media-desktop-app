@@ -184,7 +184,8 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
   (31.10.2026, Vertrag «E» Scheibe 1, `docs/plans/2026-10-31-pc-befehle.md` im Web-Repo) `schreiben(id, pfad, inhalt,
   { ueberschreiben })`: EINE Textdatei (UTF-8, ≤ 1 MB) in einer Freigabe, nachdem die Person es im Chat bestätigt hat —
   nie versteckte oder Systemnamen, nie durch einen Link, Bestehendes nur mit `ueberschreiben` und nur eine echte Datei;
-  nichts wird verschoben, gelöscht oder ausgeführt. Nur Ordner, die
+  nichts wird verschoben, gelöscht oder ausgeführt; dazu `oeffnen(id, pfad)`: Datei oder Ordner der Freigabe mit dem
+  Standardprogramm (`shell.openPath`), ebenfalls nur nach Bestätigung. Nur Ordner, die
   die Person im System-Dialog gewählt hat (`ordnerWaehlen` nur direkt nach einem Klick, `navigator.userActivation`);
   jeder Pfad gegen die echte Wurzel aufgelöst (`realpath`, Links nach draussen unsichtbar, Wurzel ersetzt → «weg»).
   Nie freigebbar: Laufwerkswurzeln (auch `\\server\share`), Benutzerordner und darüber, versteckte Ordner,

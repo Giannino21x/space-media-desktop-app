@@ -174,8 +174,9 @@ function aufbauen() {
   schreiben(path.join(draussen, 'passwort.txt'), 'geheim');
   fs.mkdirSync(path.join(home, '.ssh'), { recursive: true });
   fs.mkdirSync(userDataDir, { recursive: true });
-  const host = createDateienHost({ userDataDir, isDev: false, home, env: {} });
-  return { tmp, home, userDataDir, freigabe, draussen, schreiben, host };
+  const geoeffnet = [];
+  const host = createDateienHost({ userDataDir, isDev: false, home, env: {}, oeffnen: async (real) => { geoeffnet.push(real); return real.endsWith('Kaputt.txt') ? 'Failed to open' : ''; } });
+  return { tmp, home, userDataDir, freigabe, draussen, schreiben, host, geoeffnet };
 }
 
 /** Directory link that works without admin rights on Windows (junction). */
@@ -476,6 +477,29 @@ test('schreiben (v2): text file inside the share; no replace without flag; never
   await abweisen(host.schreiben(id, 'LinkOrdner', 'x', { ueberschreiben: true }), 'keineDatei');
   await abweisen(host.schreiben(id, 'LinkOrdner/neu.txt', 'x'), 'nichtGefunden');
   assert.ok(!fs.existsSync(path.join(draussen, 'neu.txt')));
+});
+
+test('oeffnen (v2): file or folder inside the share through the default program; nothing outside, nothing missing', async (t) => {
+  const { tmp, freigabe, draussen, host, geoeffnet } = aufbauen();
+  t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+  const { id } = await host.freigabeAnlegen(freigabe);
+
+  assert.deepEqual(await host.oeffnen(id, 'Offerte.pdf'), { geoeffnet: true });
+  assert.deepEqual(await host.oeffnen(id, 'Unterordner'), { geoeffnet: true });
+  assert.deepEqual(await host.oeffnen(id, ''), { geoeffnet: true });
+  assert.deepEqual(geoeffnet, [path.join(freigabe, 'Offerte.pdf'), path.join(freigabe, 'Unterordner'), freigabe]);
+  await abweisen(host.oeffnen(id, '.env'), 'pfad');
+  await abweisen(host.oeffnen(id, '../../../geheim/passwort.txt'), 'pfad');
+  await abweisen(host.oeffnen(id, 'Fehlt.pdf'), 'nichtGefunden');
+  ordnerLink(draussen, path.join(freigabe, 'Draussen'));
+  await abweisen(host.oeffnen(id, 'Draussen'), 'nichtGefunden');
+  fs.writeFileSync(path.join(freigabe, 'Kaputt.txt'), 'x');
+  await abweisen(host.oeffnen(id, 'Kaputt.txt'), 'oeffnen');
+  assert.equal(geoeffnet.length, 4);
+  const ohne = createDateienHost({ userDataDir: path.join(tmp, 'ud2'), isDev: false, home: path.join(tmp, 'home'), env: {} });
+  fs.mkdirSync(path.join(tmp, 'ud2'), { recursive: true });
+  const f2 = await ohne.freigabeAnlegen(freigabe);
+  await abweisen(ohne.oeffnen(f2.id, 'Offerte.pdf'), 'nichtVerfuegbar');
 });
 
 /** Next report of a watcher, or null after `ms`. */

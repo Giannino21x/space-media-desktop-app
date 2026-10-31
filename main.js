@@ -456,6 +456,7 @@ dateienKanal('dateien:liste', (_event, id, unterpfad) => dateien.liste(id, unter
 dateienKanal('dateien:alle', (_event, id) => dateien.alle(id));
 dateienKanal('dateien:lesen', (_event, id, pfad) => dateien.lesen(id, pfad));
 dateienKanal('dateien:schreiben', (_event, id, pfad, inhalt, opts) => dateien.schreiben(id, pfad, inhalt, opts));
+dateienKanal('dateien:oeffnen', (_event, id, pfad) => dateien.oeffnen(id, pfad));
 dateienKanal('dateien:beobachten', async (event, input) => {
   const abo = input && typeof input.abo === 'string' && /^[\w-]{1,64}$/.test(input.abo) ? input.abo : null;
   if (!abo) throw new DateienFehler('allgemein');
@@ -544,7 +545,7 @@ app.on('ready', () => {
     // over the subscription after a restart. «Mit Windows starten» in the tray menu turns it off.
     onGekoppelt: () => mitWindowsStarten(true),
   });
-  dateien = createDateienHost({ userDataDir: app.getPath('userData'), isDev, home: os.homedir() });
+  dateien = createDateienHost({ userDataDir: app.getPath('userData'), isDev, home: os.homedir(), oeffnen: (real) => shell.openPath(real) });
   // «Done for you» (27.10.2026): Documents, Desktop and Downloads are shared once, live only — the bots look in
   // while the app is open, nothing is copied; a folder the person removes stays removed (dateien.js standardFreigeben).
   const ueblicheOrdner = [['documents', 'Dokumente'], ['desktop', 'Schreibtisch'], ['downloads', 'Downloads']]

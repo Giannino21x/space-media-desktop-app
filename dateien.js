@@ -55,6 +55,7 @@ const MELDUNG = {
   zuGrossSchreiben: 'Der Inhalt ist grösser als 1 MB.',
   vorhanden: 'Die Datei gibt es schon. Zum Ersetzen braucht es «überschreiben».',
   keinText: 'Geschrieben wird nur Text.',
+  oeffnen: 'Die Datei liess sich auf dem PC nicht öffnen.',
   zugriff: 'Kein Zugriff auf diese Datei oder diesen Ordner.',
   belegt: 'Die Datei ist gerade in einem anderen Programm geöffnet.',
   zuVieleBeobachter: 'Es werden schon zu viele Ordner gleichzeitig beobachtet.',
@@ -303,6 +304,7 @@ function grundVon(err) {
  * @param {string[]} [o.rechner]   this computer's host name and addresses (default: from os)
  * @param {number} [o.maxAlle]     tests only
  * @param {(ort: string) => Promise<string|null>} [o.identitaet]  tests only
+ * @param {(real: string) => Promise<string>} [o.oeffnen]  v2: Electron shell.openPath ('' = ok, else the error); tests: a fake
  */
 function createDateienHost(o) {
   const platform = o.platform ?? process.platform;
@@ -653,6 +655,24 @@ function createDateienHost(o) {
       if (!teile) throw new DateienFehler('pfad');
       if (!teile.length) throw new DateienFehler('keineDatei');
       return dateiLesen(id, teile);
+    },
+
+    /**
+     * v2 (Vertrag E): open a file or folder of the share with the person's default program (shell.openPath) — after
+     * she confirmed it in the chat. Resolved like everything else: only inside, links pointing outside invisible.
+     */
+    async oeffnen(id, pfad) {
+      const teile = pfadTeile(pfad, platform);
+      if (!teile) throw new DateienFehler('pfad');
+      const { wurzel } = await wurzelVon(id);
+      const ziel = teile.length ? await aufloesen(wurzel, teile) : { real: wurzel, stat: await fsp.stat(wurzel) };
+      if (!ziel) throw new DateienFehler('nichtGefunden');
+      if (!ziel.stat.isFile() && !ziel.stat.isDirectory()) throw new DateienFehler('nichtGefunden');
+      if (typeof o.oeffnen !== 'function') throw new DateienFehler('nichtVerfuegbar');
+      let fehler;
+      try { fehler = await o.oeffnen(ziel.real); } catch { fehler = 'x'; }
+      if (fehler) throw new DateienFehler('oeffnen');
+      return { geoeffnet: true };
     },
 
     /** v2 (Vertrag E, Scheibe 1): a text file inside the share — see dateiSchreiben. */
