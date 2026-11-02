@@ -9,7 +9,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const {
   MAX_AUSGABE_BYTES, MAX_LESEN_BYTES, MAX_SCHREIBEN_BYTES, MELDUNG, ausgelassen, begrenzt, createDateienHost, eigenerRechner, eindeutigerName, fehlerMeldung,
-  freigabeVerboten, istInnerhalb, mimeVon, pfadTeile, umgebungFuer,
+  freigabeVerboten, istInnerhalb, mimeVon, oeffnenErlaubt, pfadTeile, schreibenErlaubt, umgebungFuer,
 } = require('./dateien');
 
 // ── Pure rules ───────────────────────────────────────────────────────────────
@@ -175,8 +175,14 @@ function aufbauen() {
   fs.mkdirSync(path.join(home, '.ssh'), { recursive: true });
   fs.mkdirSync(userDataDir, { recursive: true });
   const geoeffnet = [];
-  const host = createDateienHost({ userDataDir, isDev: false, home, env: {}, oeffnen: async (real) => { geoeffnet.push(real); return real.endsWith('Kaputt.txt') ? 'Failed to open' : ''; } });
-  return { tmp, home, userDataDir, freigabe, draussen, schreiben, host, geoeffnet };
+  const fragen = [];
+  const antwort = { ja: true };
+  const host = createDateienHost({
+    userDataDir, isDev: false, home, env: {},
+    oeffnen: async (real) => { geoeffnet.push(real); return real.endsWith('Kaputt.txt') ? 'Failed to open' : ''; },
+    bestaetigen: async (frage) => { fragen.push(frage); return antwort.ja; },
+  });
+  return { tmp, home, userDataDir, freigabe, draussen, schreiben, host, geoeffnet, fragen, antwort };
 }
 
 /** Directory link that works without admin rights on Windows (junction). */
@@ -442,6 +448,7 @@ test('schreiben (v2): text file inside the share; no replace without flag; never
   const { tmp, freigabe, draussen, host } = aufbauen();
   t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
   const { id } = await host.freigabeAnlegen(freigabe);
+  host.freigabeAendern(id, { live: true });
 
   assert.deepEqual(await host.schreiben(id, 'Unterordner/Antwort.txt', 'Halbtax: CHF 190'), { bytes: 16 });
   assert.equal(fs.readFileSync(path.join(freigabe, 'Unterordner', 'Antwort.txt'), 'utf8'), 'Halbtax: CHF 190');
@@ -456,7 +463,9 @@ test('schreiben (v2): text file inside the share; no replace without flag; never
   await abweisen(host.schreiben(id, '../../../geheim/neu.txt', 'x'), 'pfad');
   assert.ok(!fs.existsSync(path.join(draussen, 'neu.txt')));
   await abweisen(host.schreiben(id, 'Fehlt/neu.txt', 'x'), 'nichtGefunden');
-  await abweisen(host.schreiben(id, 'Unterordner', 'x', { ueberschreiben: true }), 'keineDatei');
+  await abweisen(host.schreiben(id, 'Unterordner', 'x', { ueberschreiben: true }), 'dateityp');
+  fs.mkdirSync(path.join(freigabe, 'Ordner.txt'));
+  await abweisen(host.schreiben(id, 'Ordner.txt', 'x', { ueberschreiben: true }), 'keineDatei');
   await abweisen(host.schreiben(id, '', 'x'), 'keineDatei');
   await abweisen(host.schreiben(id, 'gross.txt', 'x'.repeat(MAX_SCHREIBEN_BYTES + 1)), 'zuGrossSchreiben');
   await abweisen(host.schreiben(id, 'zahl.txt', 42), 'keinText');
@@ -474,7 +483,8 @@ test('schreiben (v2): text file inside the share; no replace without flag; never
   }
   // A folder link under the name (junction, no privilege needed) is refused the same way
   ordnerLink(draussen, path.join(freigabe, 'LinkOrdner'));
-  await abweisen(host.schreiben(id, 'LinkOrdner', 'x', { ueberschreiben: true }), 'keineDatei');
+  ordnerLink(draussen, path.join(freigabe, 'LinkOrdner.txt'));
+  await abweisen(host.schreiben(id, 'LinkOrdner.txt', 'x', { ueberschreiben: true }), 'keineDatei');
   await abweisen(host.schreiben(id, 'LinkOrdner/neu.txt', 'x'), 'nichtGefunden');
   assert.ok(!fs.existsSync(path.join(draussen, 'neu.txt')));
 });
@@ -483,6 +493,7 @@ test('oeffnen (v2): file or folder inside the share through the default program;
   const { tmp, freigabe, draussen, host, geoeffnet } = aufbauen();
   t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
   const { id } = await host.freigabeAnlegen(freigabe);
+  host.freigabeAendern(id, { live: true });
 
   assert.deepEqual(await host.oeffnen(id, 'Offerte.pdf'), { geoeffnet: true });
   assert.deepEqual(await host.oeffnen(id, 'Unterordner'), { geoeffnet: true });
@@ -499,7 +510,78 @@ test('oeffnen (v2): file or folder inside the share through the default program;
   const ohne = createDateienHost({ userDataDir: path.join(tmp, 'ud2'), isDev: false, home: path.join(tmp, 'home'), env: {} });
   fs.mkdirSync(path.join(tmp, 'ud2'), { recursive: true });
   const f2 = await ohne.freigabeAnlegen(freigabe);
+  ohne.freigabeAendern(f2.id, { live: true });
   await abweisen(ohne.oeffnen(f2.id, 'Offerte.pdf'), 'nichtVerfuegbar');
+});
+
+test('file types: a bot writes only text and opens only documents, never programs, scripts or shortcuts', () => {
+  for (const name of ['Notiz.md', 'liste.CSV', 'a.b.txt']) assert.equal(schreibenErlaubt(name), true, name);
+  for (const name of ['x.bat', 'x.cmd', 'x.exe', 'x.ps1', 'x.hta', 'x.vbs', 'x.js', 'x.lnk', 'x.url', 'x.scf', 'x.reg', 'x.msi', 'x.jar', 'x.html', 'x.svg',
+    'x.txt.', 'x.txt ', 'x.txt.bat', 'Makefile', '.txt']) assert.equal(schreibenErlaubt(name), false, name);
+  for (const name of ['Offerte.PDF', 'Plan.dwg', 'Bericht.docx', 'Foto.jpg', 'Notiz.md']) assert.equal(oeffnenErlaubt(name), true, name);
+  for (const name of ['setup.exe', 'x.bat', 'x.lnk', 'x.url', 'x.hta', 'x.ps1', 'x.msi', 'Makro.docm', 'Makro.xlsm', 'x.html', 'x.pdf.exe', 'x.pdf ']) {
+    assert.equal(oeffnenErlaubt(name), false, name);
+  }
+});
+
+test('write and open need a live share and the yes on this PC; without it nothing happens', async (t) => {
+  const { tmp, freigabe, host, geoeffnet, fragen, antwort } = aufbauen();
+  t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+  const { id } = await host.freigabeAnlegen(freigabe);
+
+  // Share without live access: refused before anyone is asked
+  await abweisen(host.schreiben(id, 'a.txt', 'x'), 'nichtLive');
+  await abweisen(host.oeffnen(id, 'Offerte.pdf'), 'nichtLive');
+  assert.equal(fragen.length, 0);
+  host.freigabeAendern(id, { live: true });
+
+  // A forbidden type: refused before anyone is asked
+  fs.writeFileSync(path.join(freigabe, 'setup.exe'), 'MZ');
+  await abweisen(host.schreiben(id, 'start.bat', 'x'), 'dateityp');
+  await abweisen(host.oeffnen(id, 'setup.exe'), 'dateityp');
+  assert.equal(fragen.length, 0);
+
+  // The person says no
+  antwort.ja = false;
+  await abweisen(host.schreiben(id, 'a.txt', 'Inhalt'), 'nichtBestaetigt');
+  await abweisen(host.oeffnen(id, 'Offerte.pdf'), 'nichtBestaetigt');
+  assert.ok(!fs.existsSync(path.join(freigabe, 'a.txt')));
+  assert.deepEqual(geoeffnet, []);
+  assert.equal(fragen.length, 2);
+  // She sees the full place on this PC, the size and the start of the text
+  assert.deepEqual(fragen[0], { art: 'schreiben', ort: path.join(freigabe, 'a.txt'), bytes: 6, ueberschreiben: false, vorschau: 'Inhalt' });
+  assert.deepEqual(fragen[1], { art: 'oeffnen', ort: path.join(freigabe, 'Offerte.pdf'), ordner: false });
+
+  // Yes
+  antwort.ja = true;
+  assert.deepEqual(await host.schreiben(id, 'a.txt', 'Inhalt'), { bytes: 6 });
+  assert.deepEqual(await host.oeffnen(id, 'Offerte.pdf'), { geoeffnet: true });
+});
+
+test('the yes fails closed: no question possible, an error or anything but true means no', async (t) => {
+  const { tmp, home, freigabe } = aufbauen();
+  t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+  for (const [i, bestaetigen] of [undefined, async () => { throw new Error('kaputt'); }, async () => 'ja', async () => 1].entries()) {
+    const userDataDir = path.join(tmp, `ud-${i}`);
+    fs.mkdirSync(userDataDir, { recursive: true });
+    const host = createDateienHost({ userDataDir, isDev: false, home, env: {}, oeffnen: async () => '', bestaetigen });
+    const { id } = await host.freigabeAnlegen(freigabe);
+    host.freigabeAendern(id, { live: true });
+    await abweisen(host.schreiben(id, `b${i}.txt`, 'x'), 'nichtBestaetigt');
+    await abweisen(host.oeffnen(id, 'Offerte.pdf'), 'nichtBestaetigt');
+    assert.ok(!fs.existsSync(path.join(freigabe, `b${i}.txt`)));
+  }
+});
+
+test('the dialog shows the real name: no direction or control characters', async (t) => {
+  const { tmp, freigabe, host, fragen, antwort } = aufbauen();
+  t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+  const { id } = await host.freigabeAnlegen(freigabe);
+  host.freigabeAendern(id, { live: true });
+  antwort.ja = false;
+  await abweisen(host.schreiben(id, 'a\u202egnp.txt', 'Text\u202eumgedreht\u0007'), 'nichtBestaetigt');
+  assert.equal(fragen[0].ort, path.join(freigabe, 'agnp.txt'));
+  assert.equal(fragen[0].vorschau, 'Textumgedreht');
 });
 
 test('umgebungFuer: only the path and program places, never secrets', () => {

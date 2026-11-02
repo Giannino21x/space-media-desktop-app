@@ -364,7 +364,7 @@ function multipart(feld, dateiname, mime, bytes) {
 
 /** What a failed transcription tells the person (the app's German message when it has one). */
 function diktatFehler(status, antwort) {
-  if (status === 401) return 'Bitte zuerst in SPACE anmelden.';
+  if (status === 401) return 'Bitte zuerst in SME anmelden.';
   if (status === 429) return 'Kurz warten — zu viele Diktate hintereinander.';
   const meldung = antwort && (antwort.error || antwort.message);
   if (typeof meldung === 'string' && meldung.length < 200) return meldung;

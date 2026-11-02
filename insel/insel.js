@@ -47,7 +47,7 @@ const STANDARD = {
   lokalDiktat: true,
 };
 /** What the app's settings (Einstellungen → Bot → Insel) may read and change — never the internal flags. */
-// v4 (Desktop 1.0.14): lokalDiktat (dictation through the model on this PC) plus the read-only lokalBereit.
+// v4 (Desktop 1.0.13): lokalDiktat (dictation through the model on this PC) plus the read-only lokalBereit.
 const FUER_APP = ['an', 'diktat', 'toene', 'hoverOeffnen', 'pet', 'lokalDiktat'];
 const fuerApp = (e, lokalBereit) => ({
   ...Object.fromEntries(FUER_APP.map((k) => [k, !!e[k]])),

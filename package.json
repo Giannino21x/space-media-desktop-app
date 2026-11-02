@@ -1,6 +1,6 @@
 {
   "name": "space-media",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "description": "SPACE Media — AI-Powered Sales & Marketing Automation",
   "main": "main.js",
   "author": {
@@ -10,7 +10,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "test": "node --test befehle-regeln.test.js connector.test.js dateien.test.js fenster.test.js lokal-regeln.test.js lokal.test.js insel/regeln.test.js insel/sprite.test.js",
+    "test": "node --test paket.test.js befehle-regeln.test.js connector.test.js dateien.test.js fenster.test.js lokal-regeln.test.js lokal.test.js insel/regeln.test.js insel/sprite.test.js",
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
     "build:all": "electron-builder --win --mac"
@@ -28,6 +28,7 @@
       "main.js",
       "preload.js",
       "connector.js",
+      "befehle-regeln.js",
       "dateien.js",
       "fenster.js",
       "lokal.js",

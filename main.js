@@ -233,7 +233,7 @@ function trayMenue() {
   if (!tray) return;
   const autostart = app.getLoginItemSettings({ args: [IM_HINTERGRUND_ARG] }).openAtLogin;
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'SPACE App öffnen', click: zeigen },
+    { label: 'SME öffnen', click: zeigen },
     { type: 'separator' },
     { label: 'Mit Windows starten', type: 'checkbox', checked: autostart, enabled: app.isPackaged, click: (item) => mitWindowsStarten(item.checked) },
     ...(insel ? [
@@ -395,11 +395,51 @@ ipcMain.handle('connector:entkoppeln', (event) => { connectorSenderOrigin(event)
 
 // «Dateien» (window.spaceDateien, dateien.js): PC folders the person picked in the system dialog (plus Documents,
 // Desktop and Downloads, shared once at the first start — live only). The web app lists,
-// reads and watches them — sync into «Meine Dateien», the bots' live access while the app is open. Read only.
+// reads and watches them — sync into «Meine Dateien», the bots' live access while the app is open. Writing one text
+// file or opening one document needs a yes in a dialog here (aufDiesemPcBestaetigen); commands are not exposed at all.
 // Answers are { ok, wert } / { ok: false, grund, meldung }, so the page gets the German message, not Electron's
 // «Error invoking remote method …».
 let dateien = null;
 let ordnerDialogOffen = false;
+let pcFrageOffen = false;
+/** The web tool waits 90 s (WARTEN_BESTAETIGUNG_MS): an unanswered question ends first, as a no. */
+const PC_FRAGE_MS = 75_000;
+const pcGroesse = (bytes) => (bytes < 1024 ? `${bytes} Bytes` : `${Math.round(bytes / 1024)} KB`);
+
+/**
+ * The person's own yes before a bot writes or opens something on this PC (security review 02.11.2026). Runs in the main
+ * process, so neither a page nor a bad deploy can answer it, and only someone at this computer can. One question at a
+ * time, Cancel is the default, no answer within 75 s is a no. No parent window: the main window may be hidden in the tray.
+ */
+const aufDiesemPcBestaetigen = async (frage) => {
+  if (pcFrageOffen) return false;
+  pcFrageOffen = true;
+  const abbruch = new AbortController();
+  const zeit = setTimeout(() => abbruch.abort(), PC_FRAGE_MS);
+  try {
+    const schreiben = frage.art === 'schreiben';
+    const zeilen = schreiben
+      ? [frage.ort, `${pcGroesse(frage.bytes)}${frage.ueberschreiben ? ', die bestehende Datei wird ersetzt' : ''}`, '', frage.vorschau]
+      : [frage.ort];
+    const { response } = await dialog.showMessageBox({
+      type: 'question',
+      title: 'Space Media Engine',
+      message: schreiben
+        ? (frage.ueberschreiben ? 'Ein Bot möchte diese Datei auf diesem PC ersetzen.' : 'Ein Bot möchte diese Datei auf diesem PC anlegen.')
+        : (frage.ordner ? 'Ein Bot möchte diesen Ordner auf diesem PC öffnen.' : 'Ein Bot möchte diese Datei auf diesem PC öffnen.'),
+      detail: zeilen.join('\n'),
+      buttons: ['Abbrechen', schreiben ? (frage.ueberschreiben ? 'Ersetzen' : 'Anlegen') : 'Öffnen'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      signal: abbruch.signal,
+    });
+    return response === 1;
+  } finally {
+    clearTimeout(zeit);
+    pcFrageOffen = false;
+  }
+};
 /** webContents id → { seite, abos: Map(abo → abmelden) }; seite counts the page's navigations */
 const dateienSeiten = new Map();
 
@@ -437,9 +477,9 @@ dateienKanal('dateien:ordner-waehlen', async (event) => {
   try {
     const fenster = BrowserWindow.fromWebContents(event.sender);
     const optionen = {
-      title: 'Ordner für SPACE freigeben',
+      title: 'Ordner für SME freigeben',
       buttonLabel: 'Freigeben',
-      message: 'SPACE darf diesen Ordner lesen, aber nie ändern.',
+      message: 'Bots dürfen diesen Ordner lesen. Schreiben oder öffnen nur mit deinem Ja hier auf dem PC.',
       properties: ['openDirectory', 'dontAddToRecent'],
     };
     const { canceled, filePaths } = fenster ? await dialog.showOpenDialog(fenster, optionen) : await dialog.showOpenDialog(optionen);
@@ -457,7 +497,6 @@ dateienKanal('dateien:alle', (_event, id) => dateien.alle(id));
 dateienKanal('dateien:lesen', (_event, id, pfad) => dateien.lesen(id, pfad));
 dateienKanal('dateien:schreiben', (_event, id, pfad, inhalt, opts) => dateien.schreiben(id, pfad, inhalt, opts));
 dateienKanal('dateien:oeffnen', (_event, id, pfad) => dateien.oeffnen(id, pfad));
-dateienKanal('dateien:ausfuehren', (_event, id, befehl, opts) => dateien.ausfuehren(id, befehl, opts));
 dateienKanal('dateien:beobachten', async (event, input) => {
   const abo = input && typeof input.abo === 'string' && /^[\w-]{1,64}$/.test(input.abo) ? input.abo : null;
   if (!abo) throw new DateienFehler('allgemein');
@@ -546,7 +585,7 @@ app.on('ready', () => {
     // over the subscription after a restart. «Mit Windows starten» in the tray menu turns it off.
     onGekoppelt: () => mitWindowsStarten(true),
   });
-  dateien = createDateienHost({ userDataDir: app.getPath('userData'), isDev, home: os.homedir(), oeffnen: (real) => shell.openPath(real) });
+  dateien = createDateienHost({ userDataDir: app.getPath('userData'), isDev, home: os.homedir(), oeffnen: (real) => shell.openPath(real), bestaetigen: aufDiesemPcBestaetigen });
   // «Done for you» (27.10.2026): Documents, Desktop and Downloads are shared once, live only — the bots look in
   // while the app is open, nothing is copied; a folder the person removes stays removed (dateien.js standardFreigeben).
   const ueblicheOrdner = [['documents', 'Dokumente'], ['desktop', 'Schreibtisch'], ['downloads', 'Downloads']]

@@ -548,8 +548,8 @@
       rolle.textContent = 'nicht angemeldet';
       zeit.textContent = '';
       titel.className = 'titel';
-      titel.textContent = 'Melde dich in SPACE an, dann bin ich hier oben für dich da.';
-      knoepfe.append(knopf('SPACE App öffnen', 'haupt', () => api.oeffnen('/'), 'oeffnen'));
+      titel.textContent = 'Melde dich in SME an, dann bin ich hier oben für dich da.';
+      knoepfe.append(knopf('SME öffnen', 'haupt', () => api.oeffnen('/'), 'oeffnen'));
       karte.dataset.wash = '';
     } else if (l.laufend.length) {
       const h = l.laufend[0];
@@ -570,7 +570,7 @@
       titel.innerHTML = st.einstellungen.diktat
         ? 'Halte <span class="taste">Strg</span> rechts, sprich, lass los.'
         : 'Frag mich etwas oder leg eine Datei ab.';
-      knoepfe.append(knopf(l.steno ? 'Steno öffnen' : 'SPACE App öffnen', '', () => api.oeffnen(l.steno ? '/sitzungen' : '/chat'), 'oeffnen'));
+      knoepfe.append(knopf(l.steno ? 'Steno öffnen' : 'SME öffnen', '', () => api.oeffnen(l.steno ? '/sitzungen' : '/chat'), 'oeffnen'));
       karte.dataset.wash = '';
     }
 
@@ -606,7 +606,7 @@
       }
     } else {
       const aktionen = !l || !l.angemeldet
-        ? [['SPACE App öffnen', '/', 'oeffnen']]
+        ? [['SME öffnen', '/', 'oeffnen']]
         : l.steno
           ? [['Aufnehmen', '/sitzungen/new', 'aufnahme'], ['Diktat', '/sitzungen/diktat', 'mikrofon'], ['Chat', '/chat', 'chat'], ['Dokumente', '/sitzungen/dokumente', 'datei']]
           : [['Chat', '/chat', 'chat'], ['Sitzung aufnehmen', '/sitzungen/new', 'aufnahme'], ['Mail', '/mail', 'mail'], ['Aktivität', '/aktivitaet', 'glocke']];
@@ -648,7 +648,7 @@
     K.spielen(entscheid === 'approve' ? 'fertig' : 'stups');
     const r = await api.freigabe(a.id, entscheid);
     if (!r || !r.ok) {
-      hinweis('Das ging nicht', (r && r.meldung) || 'Versuch es in SPACE.', 'rot', [['In SPACE ansehen', () => api.oeffnen('/aktivitaet')]]);
+      hinweis('Das ging nicht', (r && r.meldung) || 'Versuch es in SME.', 'rot', [['In SME ansehen', () => api.oeffnen('/aktivitaet')]]);
       return;
     }
     st.lage.freigaben.shift();
@@ -725,7 +725,7 @@
   function diktatDienstText(l, e) {
     if (e && e.lokalDiktat && e.lokalBereit) return 'Zu Text auf diesem PC — nichts geht ins Netz.';
     const d = l && l.diktatDienst;
-    if (!d) return 'Zu Text nach deiner KI-Option in der SPACE App.';
+    if (!d) return 'Zu Text nach deiner KI-Option in SME.';
     if (!d.server) return 'Kein Transkriptionsdienst hinterlegt — Diktate scheitern.';
     return `Zu Text durch ${d.name} · ${d.ort}.`;
   }
@@ -769,7 +769,7 @@
     fuss.className = 'fuss';
     fuss.innerHTML = `<span>${escape(diktatDienstText(st.lage, st.einstellungen))}</span>`;
     const aus = knopf('Insel ausblenden', 'leise', () => api.einstellung('an', false));
-    aus.title = 'Wieder einschalten: SPACE-Symbol unten rechts oder in SPACE unter Einstellungen → Bot';
+    aus.title = 'Wieder einschalten: SME-Symbol unten rechts oder in SME unter Einstellungen → Bot';
     fuss.append(aus);
     liste.append(fuss);
   }
@@ -976,7 +976,7 @@
     if (datei.size > MAX_DATEI) {
       gesichtGross.visierOeffnen(0);
       K.spielen('fehler');
-      hinweis('Zu gross', `${datei.name} ist grösser als 10 MB. Leg sie in SPACE unter «Dateien» ab.`, 'rot', [['Zurück', () => ansichtZeigen('ablage')]]);
+      hinweis('Zu gross', `${datei.name} ist grösser als 10 MB. Leg sie in SME unter «Dateien» ab.`, 'rot', [['Zurück', () => ansichtZeigen('ablage')]]);
       return;
     }
     const lesen = datei.arrayBuffer();

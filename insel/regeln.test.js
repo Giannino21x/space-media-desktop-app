@@ -93,7 +93,7 @@ test('multipart body carries the file', () => {
 });
 
 test('dictation errors in German', () => {
-  assert.equal(diktatFehler(401, null), 'Bitte zuerst in SPACE anmelden.');
+  assert.equal(diktatFehler(401, null), 'Bitte zuerst in SME anmelden.');
   assert.equal(diktatFehler(403, { error: 'Sprache ist mit «Nur Schweiz» gesperrt.' }), 'Sprache ist mit «Nur Schweiz» gesperrt.');
   assert.equal(diktatFehler(500, {}), 'Das Diktat liess sich nicht lesen.');
 });

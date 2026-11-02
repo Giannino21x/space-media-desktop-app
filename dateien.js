@@ -3,8 +3,9 @@
 //
 // The person picks a folder in the system dialog; from then on the app's pages may list it, read files from it
 // and watch it for changes — to sync it into «Meine Dateien» and to let the bots look into it live while the app
-// is open. Reading, and since v2 (31.10.2026, «Vertrag E», first slice) writing ONE text file inside a share after
-// the person confirmed it in the chat — nothing here moves or deletes a file of the person, nothing runs. Every path is resolved against
+// is open. Reading, and since v2 (31.10.2026, «Vertrag E», first slice) writing ONE text file inside a share or opening
+// one document — both only with a live share, an allowed file type and the person's own yes in a dialog of this PC
+// (o.bestaetigen, security review 02.11.2026). Nothing here moves or deletes a file of the person. Every path is resolved against
 // the real root of the share (realpath, no «..», symlinks pointing outside are invisible), drive roots, the home
 // folder (and above), hidden folders and the places where programs keep secrets (AppData, Library, this app's own
 // data) cannot be shared — also not through a network path back to this computer. Hidden entries, node_modules and
@@ -61,6 +62,9 @@ const MELDUNG = {
   zuGrossSchreiben: 'Der Inhalt ist grösser als 1 MB.',
   vorhanden: 'Die Datei gibt es schon. Zum Ersetzen braucht es «überschreiben».',
   keinText: 'Geschrieben wird nur Text.',
+  dateityp: 'Diese Art Datei schreibt oder öffnet ein Bot nicht: nur Dokumente, Bilder und Pläne, keine Programme, Skripte oder Verknüpfungen.',
+  nichtLive: 'Dieser Ordner ist für die Bots nicht freigegeben.',
+  nichtBestaetigt: 'Auf dem PC nicht bestätigt.',
   oeffnen: 'Die Datei liess sich auf dem PC nicht öffnen.',
   ...Object.fromEntries(Object.entries(MELDUNG_BEFEHL).map(([grund, text]) => [`befehl_${grund}`, text])),
   zugriff: 'Kein Zugriff auf diese Datei oder diesen Ordner.',
@@ -80,6 +84,29 @@ class DateienFehler extends Error {
 }
 
 // ── Pure helpers (dateien.test.js) ───────────────────────────────────────────
+
+/**
+ * What a bot may write and open. Allowlists on purpose: a .bat, .hta, .lnk or .url written or opened through the
+ * default program is code execution, and a list of what is forbidden would miss the next extension. Macro-enabled
+ * Office files (.docm, .xlsm …) stay out. A trailing dot or space (Windows drops them) never matches.
+ */
+const TEXT_ENDUNGEN = ['.txt', '.md', '.csv', '.tsv', '.log', '.json', '.xml', '.yaml', '.yml'];
+const SCHREIBEN_ENDUNGEN = new Set(TEXT_ENDUNGEN);
+const OEFFNEN_ENDUNGEN = new Set([
+  ...TEXT_ENDUNGEN,
+  '.pdf', '.rtf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods', '.odp',
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tif', '.tiff', '.heic',
+  '.mp3', '.wav', '.m4a', '.mp4', '.mov', '.webm', '.avi', '.mkv',
+  '.eml', '.msg', '.ics', '.dwg', '.dxf', '.ifc',
+]);
+const endungVon = (name) => {
+  const punkt = String(name).lastIndexOf('.');
+  return punkt > 0 ? String(name).slice(punkt).toLowerCase() : '';
+};
+const schreibenErlaubt = (name) => SCHREIBEN_ENDUNGEN.has(endungVon(name));
+const oeffnenErlaubt = (name) => OEFFNEN_ENDUNGEN.has(endungVon(name));
+/** Control and direction characters could make the dialog show another name than the real one. */
+const fuerDialog = (text) => String(text).replace(/[\u0000-\u0008\u000b-\u001f\u007f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '');
 
 const SYSTEMDATEIEN = new Set(['node_modules', 'thumbs.db', 'ehthumbs.db', 'desktop.ini', '$recycle.bin', 'system volume information']);
 
@@ -581,6 +608,13 @@ function createDateienHost(o) {
     }
   }, { zeitMs: LESEN_ZEIT_MS });
 
+  /** The person's own yes on this PC. Fails closed: no dialog, an error or anything but true means no. */
+  const aufDemPcBestaetigt = async (frage) => {
+    let ja = false;
+    try { ja = typeof o.bestaetigen === 'function' && (await o.bestaetigen(frage)) === true; } catch { ja = false; }
+    if (!ja) throw new DateienFehler('nichtBestaetigt');
+  };
+
   /**
    * v2: write a UTF-8 text file inside the share. The parent folder must exist and lie inside (links resolved
    * like everywhere else); the file itself may be new, or — only with `ueberschreiben` — an existing plain file.
@@ -720,11 +754,15 @@ function createDateienHost(o) {
     async oeffnen(id, pfad) {
       const teile = pfadTeile(pfad, platform);
       if (!teile) throw new DateienFehler('pfad');
-      const { wurzel } = await wurzelVon(id);
+      const { freigabe, wurzel } = await wurzelVon(id);
+      if (!freigabe.live) throw new DateienFehler('nichtLive');
       const ziel = teile.length ? await aufloesen(wurzel, teile) : { real: wurzel, stat: await fsp.stat(wurzel) };
       if (!ziel) throw new DateienFehler('nichtGefunden');
       if (!ziel.stat.isFile() && !ziel.stat.isDirectory()) throw new DateienFehler('nichtGefunden');
+      // The real name counts: a link inside the share must not turn a harmless name into a program.
+      if (ziel.stat.isFile() && !oeffnenErlaubt(p.basename(ziel.real))) throw new DateienFehler('dateityp');
       if (typeof o.oeffnen !== 'function') throw new DateienFehler('nichtVerfuegbar');
+      await aufDemPcBestaetigt({ art: 'oeffnen', ort: fuerDialog(ziel.real), ordner: ziel.stat.isDirectory() });
       let fehler;
       try { fehler = await o.oeffnen(ziel.real); } catch { fehler = 'x'; }
       if (fehler) throw new DateienFehler('oeffnen');
@@ -749,7 +787,16 @@ function createDateienHost(o) {
       if (!teile) throw new DateienFehler('pfad');
       if (!teile.length) throw new DateienFehler('keineDatei');
       if (typeof inhalt !== 'string') throw new DateienFehler('keinText');
-      return dateiSchreiben(id, teile, inhalt, !!(opts && opts.ueberschreiben === true));
+      if (!schreibenErlaubt(teile[teile.length - 1])) throw new DateienFehler('dateityp');
+      const bytes = Buffer.byteLength(inhalt, 'utf8');
+      if (bytes > MAX_SCHREIBEN_BYTES) throw new DateienFehler('zuGrossSchreiben');
+      const { freigabe } = await wurzelVon(id);
+      if (!freigabe.live) throw new DateienFehler('nichtLive');
+      const ueberschreiben = !!(opts && opts.ueberschreiben === true);
+      await aufDemPcBestaetigt({
+        art: 'schreiben', ort: fuerDialog(p.join(freigabe.ort, ...teile)), bytes, ueberschreiben, vorschau: fuerDialog(inhalt.slice(0, 300)),
+      });
+      return dateiSchreiben(id, teile, inhalt, ueberschreiben);
     },
 
     /**
@@ -871,6 +918,8 @@ module.exports = {
   MAX_LESEN_BYTES,
   MAX_SCHREIBEN_BYTES,
   MELDUNG,
+  oeffnenErlaubt,
+  schreibenErlaubt,
   befehlLaufen,
   umgebungFuer,
   ausgelassen,
