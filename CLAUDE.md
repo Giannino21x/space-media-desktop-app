@@ -245,7 +245,13 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
   Web-Repo: Teil E (Sync in «Meine Dateien», Live-Zugriff der Bots, `PcBruecke`, `/api/pc/*`). Geprüft mit `node --test` und
   `electron . --dev` gegen eine Testseite (Playwright, Dialog im Main-Prozess ersetzt): Wählen nur nach Klick,
   Liste/Lesen/Ausbruch, Änderungen entprellt, Neuladen räumt Watcher weg.
-- **Desktop:** letztes veröffentlichtes GitHub Release ist `v1.0.11` (26.10.2026: PC-Ordner für «Dateien» — Brücke
+- **Desktop:** letztes veröffentlichtes GitHub Release ist `v1.0.13` (02.11.2026: Schreiben und Öffnen auf dem PC nur mit Ja im
+  Dialog des Hauptprozesses, Live-Freigabe und erlaubter Dateiart; `ausfuehren` ist nicht in der Brücke, der Code bleibt ungenutzt
+  liegen, bis es eine Programm-Allowlist ohne Shell gibt, Web `docs/plans/2026-10-31-pc-befehle.md`). Vor jedem Release: `npm test`
+  (`paket.test.js` prüft `build.files` von den Einstiegsdateien aus), danach `dist\win-unpacked` einmal starten; die Tests laufen
+  aus den Quellen und sehen eine fehlende Datei nicht. Bei einem Tag bricht der Build ab, sonst kommt auch ein Mac-Installer dazu.
+  Offen: Connector-Bundle ohne Signatur (`connector.js` prüft nur heuristisch), Freigaben gelten pro Rechner statt pro Konto.
+  Davor `v1.0.12` (30.10.2026). Davor `v1.0.11` (26.10.2026: PC-Ordner für «Dateien» — Brücke
   `window.spaceDateien` v1, nur Lesen; das App-Fenster prüft die Herkunft exakt (`fenster.js`) statt mit `startsWith`).
   Davor `v1.0.10` (23.10.2026: läuft im Hintergrund — X versteckt das
   Fenster (Windows), Symbol im Infobereich mit «SPACE öffnen» / «Mit Windows starten» / «Beenden»; Koppeln schaltet den
