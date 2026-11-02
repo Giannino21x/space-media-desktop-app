@@ -155,16 +155,22 @@ function weckStreifen(fenster, breite, hoehe) {
  * From the app's answers (GET /api/runs/laufend, /api/approvals, /api/team, /api/profile) to the island's state.
  * Never throws on odd input — a missing answer just means «nothing to show».
  */
-function inselLage({ laufend, freigaben, team, profil } = {}) {
+function inselLage({ laufend, freigaben, team, profil, sprache } = {}) {
   const laeufe = Array.isArray(laufend && laufend.laufend) ? laufend.laufend : [];
   const fertig = Array.isArray(laufend && laufend.fertig) ? laufend.fertig : [];
   const karten = Array.isArray(freigaben && freigaben.approvals) ? freigaben.approvals : [];
   const bots = Array.isArray(team && team.bots) ? team.bots.filter((b) => b && !b.archivedAt) : [];
   const access = (profil && profil.access) || {};
   const steno = access.plan === 'spacebot' || (profil && profil.produkt === 'steno');
+  // which service turns dictation into text (GET /api/voice/status → dienst, the person's KI-Option on the server)
+  const d = sprache && sprache.dienst;
+  const diktatDienst = d && typeof d.name === 'string'
+    ? { name: d.name, ort: typeof d.ort === 'string' ? d.ort : '', server: !!d.server }
+    : null;
   return {
     angemeldet: !!profil,
     steno,
+    diktatDienst,
     name: (profil && typeof profil.nickname === 'string' && profil.nickname.trim()) || null,
     laufend: laeufe.map((l) => ({ id: String(l.id), titel: String(l.titel || 'Auftrag'), bot: l.bot || null, start: l.start || null })),
     fertig: fertig.map((f) => ({ id: String(f.id), titel: String(f.titel || 'Auftrag'), bot: f.bot || null, ok: !!f.ok })),

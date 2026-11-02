@@ -18,7 +18,7 @@
   const reduziert = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const HOEHE = { uebersicht: 160, freigabe: 160, fragen: 160, ablage: 176, datei: 176, mail: 240, einstellungen: 228, hinweis: 160, begruessung: 150 };
-  const TITEL = { uebersicht: '', freigabe: 'Freigabe', fragen: 'SPACE fragen', ablage: 'Datei ablegen', datei: '', mail: 'Per Mail senden', einstellungen: 'Insel', hinweis: '', begruessung: '' };
+  const TITEL = { uebersicht: '', freigabe: 'Freigabe', fragen: 'SPACE Bot fragen', ablage: 'Datei ablegen', datei: '', mail: 'Per Mail senden', einstellungen: 'Insel', hinweis: '', begruessung: '' };
   const KOMPAKT_ZU_MS = 60_000;
   const OFFEN_ZU_MS = 15_000;
   const HOVER_ZU_MS = 600;
@@ -200,6 +200,8 @@
 
   /** Height of a view; the overview grows with the team (two tiles per row, up to four rows of 28 px). */
   function hoeheFuer(name) {
+    // settings grow by one row («Diktat auf diesem PC») once the model on this PC is there
+    if (name === 'einstellungen') return HOEHE.einstellungen + (st.einstellungen.lokalBereit ? 40 : 0);
     if (name !== 'uebersicht') return HOEHE[name] || 160;
     const l = st.lage;
     const kacheln = l && l.angemeldet && l.team.length > 1 ? Math.min(8, l.team.length) : 4;
@@ -542,12 +544,12 @@
     const standard = aktiverBotInfo();
     $('u-punkt').style.setProperty('--wer-farbe', `rgb(${(standard && BOT_FARBEN[standard.farbe]) || BOT_FARBEN.sky})`);
     if (!l || !l.angemeldet) {
-      name.textContent = 'SPACE';
+      name.textContent = 'SPACE Bot';
       rolle.textContent = 'nicht angemeldet';
       zeit.textContent = '';
       titel.className = 'titel';
       titel.textContent = 'Melde dich in SPACE an, dann bin ich hier oben für dich da.';
-      knoepfe.append(knopf('SPACE öffnen', 'haupt', () => api.oeffnen('/'), 'oeffnen'));
+      knoepfe.append(knopf('SPACE App öffnen', 'haupt', () => api.oeffnen('/'), 'oeffnen'));
       karte.dataset.wash = '';
     } else if (l.laufend.length) {
       const h = l.laufend[0];
@@ -568,7 +570,7 @@
       titel.innerHTML = st.einstellungen.diktat
         ? 'Halte <span class="taste">Strg</span> rechts, sprich, lass los.'
         : 'Frag mich etwas oder leg eine Datei ab.';
-      knoepfe.append(knopf(l.steno ? 'Steno öffnen' : 'SPACE öffnen', '', () => api.oeffnen(l.steno ? '/sitzungen' : '/chat'), 'oeffnen'));
+      knoepfe.append(knopf(l.steno ? 'Steno öffnen' : 'SPACE App öffnen', '', () => api.oeffnen(l.steno ? '/sitzungen' : '/chat'), 'oeffnen'));
       karte.dataset.wash = '';
     }
 
@@ -604,7 +606,7 @@
       }
     } else {
       const aktionen = !l || !l.angemeldet
-        ? [['SPACE öffnen', '/', 'oeffnen']]
+        ? [['SPACE App öffnen', '/', 'oeffnen']]
         : l.steno
           ? [['Aufnehmen', '/sitzungen/new', 'aufnahme'], ['Diktat', '/sitzungen/diktat', 'mikrofon'], ['Chat', '/chat', 'chat'], ['Dokumente', '/sitzungen/dokumente', 'datei']]
           : [['Chat', '/chat', 'chat'], ['Sitzung aufnehmen', '/sitzungen/new', 'aufnahme'], ['Mail', '/mail', 'mail'], ['Aktivität', '/aktivitaet', 'glocke']];
@@ -670,7 +672,7 @@
     const ak = aktiverBotInfo();
     const gewaehlt = bots.find((b) => b.id === st.botWahl) || (ak && bots.find((b) => b.id === ak.id)) || bots.find((b) => b.standard) || null;
     const hinweisEl = $('q-hinweis');
-    hinweisEl.innerHTML = `Frag <b>${escape(gewaehlt ? gewaehlt.name : 'SPACE')}</b> — die Antwort kommt im Chat.`;
+    hinweisEl.innerHTML = `Frag <b>${escape(gewaehlt ? gewaehlt.name : 'SPACE Bot')}</b> — die Antwort kommt im Chat.`;
     hinweisEl.classList.toggle('allein', bots.length <= 1);
     if (bots.length > 1) {
       const reihe = document.createElement('div');
@@ -719,6 +721,14 @@
     ['toene', 'Töne', 'Kurze, leise Klänge, wenn etwas passiert'],
     ['hoverOeffnen', 'Beim Darüberfahren öffnen', 'Sonst öffnet ein Klick die Insel'],
   ];
+  /** The settings' footer: which service turns a dictation into text (lage.diktatDienst from the app, or the model on this PC). */
+  function diktatDienstText(l, e) {
+    if (e && e.lokalDiktat && e.lokalBereit) return 'Zu Text auf diesem PC — nichts geht ins Netz.';
+    const d = l && l.diktatDienst;
+    if (!d) return 'Zu Text nach deiner KI-Option in der SPACE App.';
+    if (!d.server) return 'Kein Transkriptionsdienst hinterlegt — Diktate scheitern.';
+    return `Zu Text durch ${d.name} · ${d.ort}.`;
+  }
   function einstellungenZeichnen() {
     const liste = $('e-liste');
     liste.innerHTML = '';
@@ -739,9 +749,25 @@
       });
       liste.append(b);
     }
+    // dictation on this PC (lokal.js) — only once the model is there; otherwise the app's service (the person's KI-Option)
+    if (st.einstellungen.lokalBereit) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'schalter';
+      b.setAttribute('role', 'switch');
+      b.setAttribute('aria-checked', String(!!st.einstellungen.lokalDiktat));
+      b.innerHTML = `<span class="s-text"><span class="s-titel">Diktat auf diesem PC</span><span class="s-unter">Das Modell auf diesem Rechner hört, nichts geht ins Netz</span></span><span class="s-knopf"></span>`;
+      b.addEventListener('click', async () => {
+        const neu = !st.einstellungen.lokalDiktat;
+        st.einstellungen = { ...st.einstellungen, lokalDiktat: neu };
+        b.setAttribute('aria-checked', String(neu));
+        await api.einstellung('lokalDiktat', neu);
+      });
+      liste.append(b);
+    }
     const fuss = document.createElement('div');
     fuss.className = 'fuss';
-    fuss.innerHTML = '<span>Diktate werden nach deiner KI-Option in SPACE zu Text.</span>';
+    fuss.innerHTML = `<span>${escape(diktatDienstText(st.lage, st.einstellungen))}</span>`;
     const aus = knopf('Insel ausblenden', 'leise', () => api.einstellung('an', false));
     aus.title = 'Wieder einschalten: SPACE-Symbol unten rechts oder in SPACE unter Einstellungen → Bot';
     fuss.append(aus);

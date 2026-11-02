@@ -287,7 +287,7 @@
   if (api.onLage) api.onLage((lage) => {
     const steno = !!(lage && lage.steno);
     gesicht.figur(steno ? 'steno' : 'space');
-    const name = steno ? 'Steno' : 'SPACE';
+    const name = steno ? 'Steno' : 'SPACE Bot';
     $('p-oeffnen').dataset.tipp = `${name} öffnen`;
     $('p-oeffnen').setAttribute('aria-label', `${name} öffnen`);
   });

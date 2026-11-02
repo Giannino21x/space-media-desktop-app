@@ -1,6 +1,6 @@
 // The SPACE Pet page: the bot as a pixel astronaut (sprite.js, the Pixel-Büro sheet recoloured to the bot's colour),
 // drawn crisp at an integer scale on one canvas, 30 fps while something moves, 12 while it only breathes, 4 asleep.
-// Next to it the dictation pill («Diktiert mit SPACE» + the nine level dots, fed by the pill window through main),
+// Next to it the dictation pill («Diktiert mit SPACE Bot» + the nine level dots, fed by the pill window through main),
 // the tooltip with the counter, the menu (right click; or the hide menu after a drag into the corner).
 // Silent on purpose. Main (pet.js) owns the clock, the counters, the reactions and the throw; this page shows them.
 
@@ -111,7 +111,7 @@
   const uhren = {};
   const uhr = (name, ms, fn) => { clearTimeout(uhren[name]); uhren[name] = ms == null ? undefined : setTimeout(fn, ms); };
 
-  function botName() { return z.steno ? 'Steno' : 'SPACE'; }
+  function botName() { return z.steno ? 'Steno' : 'SPACE Bot'; }
 
   // ---- the idle pool: stand (breathe), a coffee, a look at the clipboard — never twice the same in a row ----
 
@@ -293,7 +293,9 @@
     if (!figur) return;
     pille.style.right = `${Math.round(W - figur.x + 10)}px`;
     pille.style.top = `${Math.round(figur.y + figur.height * 0.28 - 17)}px`;
-    const tb = tipp.getBoundingClientRect().width || 160;
+    // offsetWidth, not getBoundingClientRect: the pop transition starts at scale 0.85, and a width measured mid-pop
+    // placed the tooltip too far right — its last characters ran off the window («… · 0 Ta»)
+    const tb = tipp.offsetWidth || 160;
     tipp.style.left = `${Math.round(Math.min(W - tb - 4, Math.max(4, figur.x + figur.width / 2 - tb / 2)))}px`;
     tipp.style.top = `${Math.round(Math.max(4, figur.y - 36))}px`;
     menue.style.right = `${Math.round(W - figur.x + 8)}px`;
@@ -381,6 +383,8 @@
     const a = knopf.dataset.aktion;
     if (a === 'diktieren') { menueSchliessen(false); api.petTaste('freihand'); }
     else if (a === 'oeffnen') { menueSchliessen(false); api.petOeffnen('/'); }
+    // the app's settings page, Bot tab: island switches, the pet, which service turns dictation into text
+    else if (a === 'einstellungen') { menueSchliessen(false); api.petOeffnen('/settings?tab=bot'); }
     else if (a === '1min' || a === '1std' || a === 'immer') { z.menueOffen = null; menue.hidden = true; flaechenMelden(); api.petVerstecken(a); }
     else if (a === 'name') {
       $('m-name').hidden = false;

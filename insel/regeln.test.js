@@ -65,10 +65,13 @@ test('island state from the app answers', () => {
     freigaben: { approvals: [{ id: 'a1', title: 'Mail an Huber', summary: 'Antwort auf die Offerte', kind: 'email_send', bot_id: 'b1' }] },
     team: { bots: [{ id: 'b1', name: 'SPACE Bot', color: 'sky', isDefault: true }, { id: 'b2', name: 'Alt', color: 'red', archivedAt: '2026-01-01' }] },
     profil: { access: { plan: 'standard' }, nickname: 'Giannino' },
+    sprache: { stt: true, tts: true, dienst: { name: 'OpenAI Whisper', ort: 'USA', server: true } },
   });
   assert.equal(lage.angemeldet, true);
   assert.equal(lage.steno, false);
   assert.equal(lage.name, 'Giannino');
+  assert.deepEqual(lage.diktatDienst, { name: 'OpenAI Whisper', ort: 'USA', server: true });
+  assert.equal(inselLage({ profil: {} }).diktatDienst, null);
   assert.equal(lage.laufend.length, 1);
   assert.equal(lage.freigabenZahl, 2);
   assert.equal(lage.freigaben[0].titel, 'Mail an Huber');

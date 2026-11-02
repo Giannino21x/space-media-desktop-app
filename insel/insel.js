@@ -47,8 +47,13 @@ const STANDARD = {
   lokalDiktat: true,
 };
 /** What the app's settings (Einstellungen → Bot → Insel) may read and change — never the internal flags. */
-const FUER_APP = ['an', 'diktat', 'toene', 'hoverOeffnen', 'pet'];
-const fuerApp = (e) => ({ ...Object.fromEntries(FUER_APP.map((k) => [k, !!e[k]])), petName: typeof e.petName === 'string' ? e.petName : '' });
+// v4 (Desktop 1.0.14): lokalDiktat (dictation through the model on this PC) plus the read-only lokalBereit.
+const FUER_APP = ['an', 'diktat', 'toene', 'hoverOeffnen', 'pet', 'lokalDiktat'];
+const fuerApp = (e, lokalBereit) => ({
+  ...Object.fromEntries(FUER_APP.map((k) => [k, !!e[k]])),
+  petName: typeof e.petName === 'string' ? e.petName : '',
+  lokalBereit: !!lokalBereit,
+});
 
 function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, navigieren, dateiZumChat, log, testText, demo, beiLage, beiEinstellungen, appFokussiert, lokalKi }) {
   const datei = path.join(userDataDir, 'insel.json');
@@ -118,6 +123,8 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
   // testDiktat (unpackaged, SPACE_INSEL_TEST_TEXT): the pill keeps a silent take, so the paste can be tested without a voice
   // lokalBereit: the model on this PC (lokal.js) is there → the pill sends WAV when lokalDiktat is on
   const fuerFenster = () => ({ ...einstellungen, lokalBereit: !!(lokalKi && lokalKi.bereit()), petAktiv: !!(pet && pet.aktiv()), testDiktat: !!testText });
+  /** The app's settings page: the switches plus whether the model on this PC is there (lokalBereit). */
+  const fuerAppJetzt = () => fuerApp(einstellungen, lokalKi && lokalKi.bereit());
 
   // ---- windows ----
 
@@ -370,7 +377,9 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
       if (!stamm || Date.now() - stamm.zeit > STAMM_MS) {
         const profil = await api('/api/profile');
         const team = profil.ok ? await api('/api/team') : { ok: false };
-        stamm = profil.ok ? { profil: profil.daten, team: team.ok ? team.daten : null, zeit: Date.now() } : null;
+        // which service turns dictation into text (the person's KI-Option on the server) — shown in the island's settings
+        const sprache = profil.ok ? await api('/api/voice/status') : { ok: false };
+        stamm = profil.ok ? { profil: profil.daten, team: team.ok ? team.daten : null, sprache: sprache.ok ? sprache.daten : null, zeit: Date.now() } : null;
       }
       if (!stamm) {
         lage = inselLage();
@@ -383,6 +392,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
         lage = stamm ? inselLage({
           profil: stamm.profil,
           team: stamm.team,
+          sprache: stamm.sprache,
           laufend: laufend.ok ? laufend.daten : null,
           freigaben: freigaben.ok ? freigaben.daten : null,
         }) : inselLage();
@@ -822,7 +832,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     senden(insel, 'insel:einstellungen', fuerFenster());
     senden(pille, 'insel:einstellungen', fuerFenster());
     const fuerDieApp = keys.some((k) => FUER_APP.includes(k) || k === 'petName') || (opts && opts.app);
-    if (fuerDieApp && beiEinstellungen) beiEinstellungen(fuerApp(einstellungen));
+    if (fuerDieApp && beiEinstellungen) beiEinstellungen(fuerAppJetzt());
   }
 
   // ---- lifecycle ----
@@ -872,10 +882,10 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     get lokalDiktat() { return einstellungen.lokalDiktat; },
     lokalDiktatSchalten(an) { einstellungsAenderung('lokalDiktat', !!an); },
     /** The model on this PC arrived or went away (main.js): the pill learns whether to send WAV. */
-    lokalGeaendert() { einstellungenSenden(); },
+    lokalGeaendert() { einstellungenSenden(); if (beiEinstellungen) beiEinstellungen(fuerAppJetzt()); },
     petSchalten(an) { aendern(an ? { pet: true, petVersteckt: 0 } : { pet: false }); },
     /** The app's settings page: the switches the person may change there (petName: the pet's name, a string). */
-    einstellungenFuerApp() { return fuerApp(einstellungen); },
+    einstellungenFuerApp() { return fuerAppJetzt(); },
     einstellungSetzen(schluessel, wert) {
       if (schluessel === 'petName') {
         const n = String(wert == null ? '' : wert).replace(/[\r\n\t]/g, ' ').trim().slice(0, 24);
@@ -885,7 +895,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
       } else if (FUER_APP.includes(schluessel)) {
         if (einstellungen[schluessel] !== !!wert) einstellungsAenderung(schluessel, !!wert);
       }
-      return fuerApp(einstellungen);
+      return fuerAppJetzt();
     },
     /** The chat in the app: which bot, and whether it is writing an answer. */
     aktiverBot(b) {
