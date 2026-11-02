@@ -402,14 +402,14 @@ ipcMain.handle('connector:entkoppeln', (event) => { connectorSenderOrigin(event)
 let dateien = null;
 let ordnerDialogOffen = false;
 let pcFrageOffen = false;
-/** The web tool waits 90 s (WARTEN_BESTAETIGUNG_MS): an unanswered question ends first, as a no. */
-const PC_FRAGE_MS = 75_000;
+/** The web tool waits 90 s (WARTEN_BESTAETIGUNG_MS), a request can take up to 30 s to arrive: an unanswered question ends first, as a no. */
+const PC_FRAGE_MS = 55_000;
 const pcGroesse = (bytes) => (bytes < 1024 ? `${bytes} Bytes` : `${Math.round(bytes / 1024)} KB`);
 
 /**
  * The person's own yes before a bot writes or opens something on this PC (security review 02.11.2026). Runs in the main
- * process, so neither a page nor a bad deploy can answer it, and only someone at this computer can. One question at a
- * time, Cancel is the default, no answer within 75 s is a no. No parent window: the main window may be hidden in the tray.
+ * process, so a page cannot answer it, only someone at this computer can. One question at a time, Cancel is the
+ * default, no answer within 55 s is a no. No parent window: the main window may be hidden in the tray.
  */
 const aufDiesemPcBestaetigen = async (frage) => {
   if (pcFrageOffen) return false;

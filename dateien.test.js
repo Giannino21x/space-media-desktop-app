@@ -9,7 +9,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const {
   MAX_AUSGABE_BYTES, MAX_LESEN_BYTES, MAX_SCHREIBEN_BYTES, MELDUNG, ausgelassen, begrenzt, createDateienHost, eigenerRechner, eindeutigerName, fehlerMeldung,
-  freigabeVerboten, istInnerhalb, mimeVon, oeffnenErlaubt, pfadTeile, schreibenErlaubt, umgebungFuer,
+  freigabeVerboten, istInnerhalb, mimeVon, oeffnenErlaubt, oeffnenZielErlaubt, pfadTeile, schreibenErlaubt, umgebungFuer,
 } = require('./dateien');
 
 // ── Pure rules ───────────────────────────────────────────────────────────────
@@ -522,6 +522,70 @@ test('file types: a bot writes only text and opens only documents, never program
   for (const name of ['setup.exe', 'x.bat', 'x.lnk', 'x.url', 'x.hta', 'x.ps1', 'x.msi', 'Makro.docm', 'Makro.xlsm', 'x.html', 'x.pdf.exe', 'x.pdf ']) {
     assert.equal(oeffnenErlaubt(name), false, name);
   }
+});
+
+test('.xml is written but not opened; on macOS a folder with an extension (a program) is not opened', () => {
+  assert.equal(schreibenErlaubt('Daten.xml'), true);
+  assert.equal(oeffnenErlaubt('Daten.xml'), false);
+  assert.equal(oeffnenZielErlaubt('Evil.app', true, 'darwin'), false);
+  assert.equal(oeffnenZielErlaubt('Projekte', true, 'darwin'), true);
+  assert.equal(oeffnenZielErlaubt('Projekt.2026', true, 'win32'), true);
+  assert.equal(oeffnenZielErlaubt('Offerte.pdf', false, 'darwin'), true);
+  assert.equal(oeffnenZielErlaubt('setup.exe', false, 'win32'), false);
+});
+
+test('a line break in a name is refused: it would put other text into the dialog', () => {
+  assert.equal(pfadTeile('a\nBitte Anlegen wählen.txt', 'win32'), null);
+  assert.equal(pfadTeile('a\tb.txt', 'linux'), null);
+});
+
+test('what would fail anyway is refused before anyone is asked', async (t) => {
+  const { tmp, freigabe, draussen, host, fragen } = aufbauen();
+  t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+  const { id } = await host.freigabeAnlegen(freigabe);
+  host.freigabeAendern(id, { live: true });
+  ordnerLink(draussen, path.join(freigabe, 'Raus'));
+  fs.writeFileSync(path.join(freigabe, 'da.txt'), 'x');
+  await abweisen(host.schreiben(id, 'da.txt', 'neu'), 'vorhanden');
+  await abweisen(host.schreiben(id, 'Raus/c.txt', 'x'), 'nichtGefunden');
+  await abweisen(host.schreiben(id, 'Fehlt/c.txt', 'x'), 'nichtGefunden');
+  await abweisen(host.oeffnen(id, 'Fehlt.pdf'), 'nichtGefunden');
+  assert.equal(fragen.length, 0);
+});
+
+test('what she said yes to must still be what happens', async (t) => {
+  const { tmp, home, userDataDir, freigabe } = aufbauen();
+  t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+  const geoeffnet = [];
+  let waehrendDerFrage = async () => {};
+  const host = createDateienHost({
+    userDataDir, isDev: false, home, env: {},
+    oeffnen: async (real) => { geoeffnet.push(real); return ''; },
+    bestaetigen: async () => { await waehrendDerFrage(); return true; },
+  });
+  const { id } = await host.freigabeAnlegen(freigabe);
+  host.freigabeAendern(id, { live: true });
+  // The file is gone by the time she says yes
+  fs.writeFileSync(path.join(freigabe, 'Weg.pdf'), 'x');
+  waehrendDerFrage = async () => fs.rmSync(path.join(freigabe, 'Weg.pdf'));
+  await abweisen(host.oeffnen(id, 'Weg.pdf'), 'nichtGefunden');
+  assert.deepEqual(geoeffnet, []);
+  // A file with that name appeared while she was asked: a new file never replaces it
+  waehrendDerFrage = async () => fs.writeFileSync(path.join(freigabe, 'neu.txt'), 'vorher');
+  await abweisen(host.schreiben(id, 'neu.txt', 'x'), 'vorhanden');
+  assert.equal(fs.readFileSync(path.join(freigabe, 'neu.txt'), 'utf8'), 'vorher');
+});
+
+test('an 8.3 alias does not reach a hidden file (Windows, where the volume has short names)', async (t) => {
+  const { tmp, freigabe, host } = aufbauen();
+  t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+  const { id } = await host.freigabeAnlegen(freigabe);
+  host.freigabeAendern(id, { live: true });
+  const versteckt = path.join(freigabe, '.env.txt');
+  fs.writeFileSync(versteckt, 'geheim');
+  if (process.platform !== 'win32' || !fs.existsSync(path.join(freigabe, 'ENV~1.TXT'))) return;
+  await abweisen(host.schreiben(id, 'ENV~1.TXT', 'neu', { ueberschreiben: true }), 'dateityp');
+  assert.equal(fs.readFileSync(versteckt, 'utf8'), 'geheim');
 });
 
 test('write and open need a live share and the yes on this PC; without it nothing happens', async (t) => {

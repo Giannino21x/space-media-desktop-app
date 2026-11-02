@@ -87,13 +87,14 @@ class DateienFehler extends Error {
 
 /**
  * What a bot may write and open. Allowlists on purpose: a .bat, .hta, .lnk or .url written or opened through the
- * default program is code execution, and a list of what is forbidden would miss the next extension. Macro-enabled
- * Office files (.docm, .xlsm …) stay out. A trailing dot or space (Windows drops them) never matches.
+ * default program is code execution, and a list of what is forbidden would miss the next extension. .docm, .xlsm and
+ * .pptm stay out; old .doc, .xls and .ppt can still carry macros, Office asks before running them. .xml can be written
+ * but not opened (a written one can start Word through MSOXMLED). A trailing dot or space (Windows drops them) never matches.
  */
 const TEXT_ENDUNGEN = ['.txt', '.md', '.csv', '.tsv', '.log', '.json', '.xml', '.yaml', '.yml'];
 const SCHREIBEN_ENDUNGEN = new Set(TEXT_ENDUNGEN);
 const OEFFNEN_ENDUNGEN = new Set([
-  ...TEXT_ENDUNGEN,
+  ...TEXT_ENDUNGEN.filter((endung) => endung !== '.xml'),
   '.pdf', '.rtf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods', '.odp',
   '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tif', '.tiff', '.heic',
   '.mp3', '.wav', '.m4a', '.mp4', '.mov', '.webm', '.avi', '.mkv',
@@ -105,6 +106,8 @@ const endungVon = (name) => {
 };
 const schreibenErlaubt = (name) => SCHREIBEN_ENDUNGEN.has(endungVon(name));
 const oeffnenErlaubt = (name) => OEFFNEN_ENDUNGEN.has(endungVon(name));
+/** On macOS a program is a folder (Evil.app): there a folder with an extension is treated like a file we do not open. */
+const oeffnenZielErlaubt = (name, ordner, platform) => (ordner ? !(platform === 'darwin' && endungVon(name)) : oeffnenErlaubt(name));
 /** Control and direction characters could make the dialog show another name than the real one. */
 const fuerDialog = (text) => String(text).replace(/[\u0000-\u0008\u000b-\u001f\u007f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '');
 
@@ -123,7 +126,8 @@ const WINDOWS_GERAET = /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(\..*)?$
  * stream), no device names (CON, NUL, …).
  */
 function pfadTeile(pfad, platform = process.platform) {
-  if (typeof pfad !== 'string' || pfad.length > 4096 || pfad.includes('\0')) return null;
+  // Control characters: a line break in a name would put other text between the path lines of the dialog
+  if (typeof pfad !== 'string' || pfad.length > 4096 || /[\u0000-\u001f\u007f]/.test(pfad)) return null;
   const teile = pfad.split('/').filter(Boolean);
   for (const t of teile) {
     if (t === '.' || t === '..' || ausgelassen(t)) return null;
@@ -620,10 +624,8 @@ function createDateienHost(o) {
    * like everywhere else); the file itself may be new, or — only with `ueberschreiben` — an existing plain file.
    * 'wx' creates, 'w' replaces; a link or folder under that name is never written through.
    */
-  const dateiSchreiben = begrenzt(LESEN_PARALLEL, async (id, teile, inhalt, ueberschreiben) => {
+  const schreibZiel = async (id, teile, ueberschreiben) => {
     const { wurzel } = await wurzelVon(id);
-    const daten = Buffer.from(inhalt, 'utf8');
-    if (daten.length > MAX_SCHREIBEN_BYTES) throw new DateienFehler('zuGrossSchreiben');
     const eltern = teile.length > 1 ? await aufloesen(wurzel, teile.slice(0, -1)) : { real: wurzel, stat: await fsp.stat(wurzel) };
     if (!eltern) throw new DateienFehler('nichtGefunden');
     if (!eltern.stat.isDirectory()) throw new DateienFehler('nichtGefunden');
@@ -633,7 +635,17 @@ function createDateienHost(o) {
     if (vorhanden) {
       if (!ueberschreiben) throw new DateienFehler('vorhanden');
       if (!vorhanden.isFile()) throw new DateienFehler('keineDatei');
+      // The name on disk counts: the 8.3 alias ENV~1.TXT passes the allowlist and would write to the hidden .env.txt
+      const real = await fsp.realpath(ziel);
+      if (!schreibenErlaubt(p.basename(real)) || !sichtbar(wurzel, real)) throw new DateienFehler('dateityp');
     }
+    return ziel;
+  };
+
+  const dateiSchreiben = begrenzt(LESEN_PARALLEL, async (id, teile, inhalt, ueberschreiben) => {
+    const daten = Buffer.from(inhalt, 'utf8');
+    if (daten.length > MAX_SCHREIBEN_BYTES) throw new DateienFehler('zuGrossSchreiben');
+    const ziel = await schreibZiel(id, teile, ueberschreiben);
     try {
       await fsp.writeFile(ziel, daten, { flag: ueberschreiben ? 'w' : 'wx' });
     } catch (err) {
@@ -756,13 +768,19 @@ function createDateienHost(o) {
       if (!teile) throw new DateienFehler('pfad');
       const { freigabe, wurzel } = await wurzelVon(id);
       if (!freigabe.live) throw new DateienFehler('nichtLive');
-      const ziel = teile.length ? await aufloesen(wurzel, teile) : { real: wurzel, stat: await fsp.stat(wurzel) };
-      if (!ziel) throw new DateienFehler('nichtGefunden');
-      if (!ziel.stat.isFile() && !ziel.stat.isDirectory()) throw new DateienFehler('nichtGefunden');
-      // The real name counts: a link inside the share must not turn a harmless name into a program.
-      if (ziel.stat.isFile() && !oeffnenErlaubt(p.basename(ziel.real))) throw new DateienFehler('dateityp');
+      const finden = async () => {
+        const gefunden = teile.length ? await aufloesen(wurzel, teile) : { real: wurzel, stat: await fsp.stat(wurzel) };
+        if (!gefunden) throw new DateienFehler('nichtGefunden');
+        if (!gefunden.stat.isFile() && !gefunden.stat.isDirectory()) throw new DateienFehler('nichtGefunden');
+        // The real name counts: a link inside the share must not turn a harmless name into a program.
+        if (!oeffnenZielErlaubt(p.basename(gefunden.real), gefunden.stat.isDirectory(), platform)) throw new DateienFehler('dateityp');
+        return gefunden;
+      };
+      const ziel = await finden();
       if (typeof o.oeffnen !== 'function') throw new DateienFehler('nichtVerfuegbar');
       await aufDemPcBestaetigt({ art: 'oeffnen', ort: fuerDialog(ziel.real), ordner: ziel.stat.isDirectory() });
+      // What she said yes to must still be what opens
+      if ((await finden()).real !== ziel.real) throw new DateienFehler('nichtGefunden');
       let fehler;
       try { fehler = await o.oeffnen(ziel.real); } catch { fehler = 'x'; }
       if (fehler) throw new DateienFehler('oeffnen');
@@ -793,6 +811,8 @@ function createDateienHost(o) {
       const { freigabe } = await wurzelVon(id);
       if (!freigabe.live) throw new DateienFehler('nichtLive');
       const ueberschreiben = !!(opts && opts.ueberschreiben === true);
+      // Refused before anyone is asked: a question that fails anyway only teaches people to click.
+      await schreibZiel(id, teile, ueberschreiben);
       await aufDemPcBestaetigt({
         art: 'schreiben', ort: fuerDialog(p.join(freigabe.ort, ...teile)), bytes, ueberschreiben, vorschau: fuerDialog(inhalt.slice(0, 300)),
       });
@@ -919,6 +939,7 @@ module.exports = {
   MAX_SCHREIBEN_BYTES,
   MELDUNG,
   oeffnenErlaubt,
+  oeffnenZielErlaubt,
   schreibenErlaubt,
   befehlLaufen,
   umgebungFuer,
