@@ -2,17 +2,20 @@
 # gratis und ohne Warteschlange). Codemagic im Gratis-Plan liess am 12.10.2026
 # jeden Build 40–100 Minuten auf einen Mac warten.
 #
-# Signieren ohne .p12: Xcode holt Zertifikat und Profile über den App-Store-
-# Connect-API-Schlüssel selbst (-allowProvisioningUpdates, cloud-verwaltet).
-# Der Schlüssel braucht die Rolle «Admin».
+# Signieren wie bei Codemagic: vorhandenes Verteilungszertifikat und das aktive
+# App-Store-Profil je Ziel (.github/scripts/asc-profile.mjs). Automatisches
+# Signieren geht nicht: das Archiv bräuchte ein Entwicklungsprofil und damit ein
+# registriertes Gerät, das Team hat keines (05.11.2026).
 #
 # Geheimnisse (Repo › Settings › Secrets › Actions):
-#   ASC_KEY_ID      Schlüssel-ID (z. B. ABCD123456)
-#   ASC_ISSUER_ID   Issuer-ID (UUID oben auf der Seite der API-Schlüssel)
-#   ASC_KEY_P8      Inhalt der AuthKey_<ID>.p8
+#   ASC_KEY_ID             Schlüssel-ID (z. B. ABCD123456)
+#   ASC_ISSUER_ID          Issuer-ID (UUID oben auf der Seite der API-Schlüssel)
+#   ASC_KEY_P8             Inhalt der AuthKey_<ID>.p8
+#   IOS_DIST_P12_BASE64    Verteilungszertifikat samt Schlüssel, base64
+#   IOS_DIST_P12_PASSWORD  Passwort dazu
 #
-# Start: Actions › «iOS TestFlight» › Run workflow (Branch wählen) oder ein Tag
-# `testflight-*`. Das Einreichen zur Review bleibt bei Codemagic (Tag `ios-*`).
+# Start: ein Tag `testflight-*`. Das Einreichen zur Review bleibt bei Codemagic
+# (Tag `ios-*`).
 name: iOS TestFlight
 
 on:
@@ -76,26 +79,41 @@ jobs:
           echo "BUILD_NR=$NR" >> "$GITHUB_ENV"
           echo "Build-Nummer: $NR"
 
-      - name: Archivieren
+      - name: Signatur einrichten
         shell: bash
         env:
+          IOS_DIST_P12_BASE64: ${{ secrets.IOS_DIST_P12_BASE64 }}
+          IOS_DIST_P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: |
+          if [ -z "$IOS_DIST_P12_BASE64" ] || [ -z "$IOS_DIST_P12_PASSWORD" ]; then
+            echo "Geheimnisse IOS_DIST_P12_BASE64 / IOS_DIST_P12_PASSWORD fehlen (siehe Kopf dieser Datei)."; exit 1
+          fi
+          SCHLUESSELBUND="$RUNNER_TEMP/signieren.keychain-db"
+          BUND_PW=$(uuidgen)
+          echo "::add-mask::$BUND_PW"
+          security create-keychain -p "$BUND_PW" "$SCHLUESSELBUND"
+          security set-keychain-settings -lut 3600 "$SCHLUESSELBUND"
+          security unlock-keychain -p "$BUND_PW" "$SCHLUESSELBUND"
+          printf '%s' "$IOS_DIST_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/verteilung.p12"
+          security import "$RUNNER_TEMP/verteilung.p12" -k "$SCHLUESSELBUND" -f pkcs12 \
+            -P "$IOS_DIST_P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          rm -f "$RUNNER_TEMP/verteilung.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$BUND_PW" "$SCHLUESSELBUND" > /dev/null
+          security list-keychains -d user -s "$SCHLUESSELBUND" $(security list-keychains -d user | tr -d '"')
+          echo "SCHLUESSELBUND=$SCHLUESSELBUND" >> "$GITHUB_ENV"
+          security find-identity -v -p codesigning "$SCHLUESSELBUND" | grep -q "Apple Distribution"
+          node .github/scripts/asc-profile.mjs
+
+      - name: Archivieren
+        shell: bash
+        run: |
           set -o pipefail
-          # Das Projekt signiert von Hand (Profile aus Codemagic) — hier automatisch,
-          # Xcode legt fehlende Profile über den API-Schlüssel selbst an.
+          # Das Projekt signiert von Hand; asc-profile.mjs hat die Profilnamen eingetragen.
           xcodebuild -project "$PROJEKT" -scheme "$SCHEMA" -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/App.xcarchive" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$ASC_KEY_PATH" \
-            -authenticationKeyID "$ASC_KEY_ID" \
-            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
-            CODE_SIGN_STYLE=Automatic \
-            CODE_SIGN_IDENTITY="Apple Development" \
-            PROVISIONING_PROFILE_SPECIFIER= \
-            DEVELOPMENT_TEAM="$TEAM_ID" \
             CURRENT_PROJECT_VERSION="$BUILD_NR" \
             archive 2>&1 | tee archive.log | grep -E "error:|warning: .*(sign|profile|entitlement)|ARCHIVE (SUCCEEDED|FAILED)" || true
           grep -q "ARCHIVE SUCCEEDED" archive.log
@@ -114,7 +132,13 @@ jobs:
           <dict>
             <key>method</key><string>app-store-connect</string>
             <key>destination</key><string>upload</string>
-            <key>signingStyle</key><string>automatic</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>signingCertificate</key><string>Apple Distribution</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>ch.spacemedia.app</key><string>$PROFIL_APP</string>
+              <key>ch.spacemedia.app.LiveActivity</key><string>$PROFIL_LIVE</string>
+            </dict>
             <key>teamID</key><string>$TEAM_ID</string>
             <key>manageAppVersionAndBuildNumber</key><false/>
             <key>uploadSymbols</key><true/>
@@ -125,7 +149,6 @@ jobs:
             -archivePath "$RUNNER_TEMP/App.xcarchive" \
             -exportOptionsPlist "$RUNNER_TEMP/export.plist" \
             -exportPath "$RUNNER_TEMP/export" \
-            -allowProvisioningUpdates \
             -authenticationKeyPath "$ASC_KEY_PATH" \
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID" 2>&1 | tee export.log | grep -E "error:|Upload|EXPORT (SUCCEEDED|FAILED)" || true
@@ -145,4 +168,6 @@ jobs:
       - name: Schlüssel entfernen
         if: always()
         shell: bash
-        run: rm -f "$RUNNER_TEMP/asc/"*.p8
+        run: |
+          rm -f "$RUNNER_TEMP/asc/"*.p8 "$RUNNER_TEMP/verteilung.p12"
+          if [ -n "$SCHLUESSELBUND" ]; then security delete-keychain "$SCHLUESSELBUND" || true; fi
