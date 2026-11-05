@@ -12,7 +12,7 @@
 //          same tick it reads the cursor (an IPC round trip loses clicks); while the left button is held inside the
 //          panel it takes the mouse, so a file dragged from Explorer finds a drop target.
 //   pille  bottom centre above the taskbar: the resting capsule, the toolbar on hover, the listening face.
-//   pet    bottom right (pet.js): the SPACE Bot as a pixel astronaut; while it is on, the pill records unseen and the
+//   pet    bottom right (pet.js): the island's head on its own; while it is on, the pill records unseen and the
 //          pet shows the listening pill next to the figure and throws the words to the pointer before the paste.
 // The UI is local (insel/ui); the data comes from the app's API through the app's own session (cookies), so the
 // island signs in with the app and every AI step follows the person's KI-Option on the server (voice/transcribe).

@@ -1,17 +1,17 @@
-// The SPACE Pet — our bot as a pixel astronaut living bottom right above the taskbar, wired into the island
-// (insel.js): while the right Ctrl is held the dictation pill appears next to it, after the transcription it throws
-// the words into the text field (a bubble flies in an arc to the pointer, the paste lands on impact). It reacts to
-// what was said, dozes after two minutes, sleeps after ten, takes a poke, can be dragged, and hides when dragged into
-// the corner. Behaviour after Aqua Voice's pet (pet of aquavoice.com, researched 30.10.2026) — figure, colours and
-// motion are ours (the Pixel-Büro sprite of the web app).
+// The SPACE Pet — the island's head (gesicht.js: the real helmet with the LED eyes) living bottom right above the
+// taskbar, wired into the island (insel.js): its eyes follow the pointer anywhere on screen, while the right Ctrl is
+// held the dictation pill appears next to it, after the transcription it throws the words into the text field (a
+// bubble flies in an arc to the pointer, the paste lands on impact). It reacts to what was said, dozes after two
+// minutes, sleeps after ten, takes a poke, can be dragged, and hides when dragged into the corner. A compact head with
+// a face instead of a whole figure and the behaviour after Aqua Voice's pet (aquavoice.com/pet, researched 30.10.2026
+// and 05.11.2026); helmet, colours and motion are ours.
 //
 // Two windows, both transparent, always on top, never focused (the name field asks for focus once):
-//   pet   400×230 bottom right: the figure (canvas), the dictation pill left of it, the tooltip, the context menu.
+//   pet   400×300 bottom right: the head (canvas), the dictation pill left of it, the tooltip, the context menu.
 //         Click-through outside the figure/pill/menu, decided by the cursor poll in main (same tick as the read).
 //   wurf  the whole display, click-through, shown only for the throw (≈ 0.6 s), hidden again right after.
 // Silent on purpose. Counters (words today, ever, streak, level) only in insel.json — no shop, no leaderboard.
 
-const fs = require('fs');
 const path = require('path');
 const { BrowserWindow, screen } = require('electron');
 const {
@@ -19,7 +19,7 @@ const {
   lokalerTag, petZaehlen, petTooltip, wurfText, petFarbe, WURF_MS,
 } = require('./regeln');
 
-const FENSTER = { breite: 400, hoehe: 300 }; // room for the menu above the feet
+const FENSTER = { breite: 400, hoehe: 300 }; // room for the menu next to the head
 const POLL_MS = 33;
 const ZIEH_POLL_MS = 16;
 const WACHHEIT_MS = 10_000;
@@ -47,6 +47,7 @@ function createPet(d) {
   let figur = null;           // the figure's body, window-local CSS px (from the renderer) — for clamping and the corner
   let durchklick = null;
   let zeigerDrin = null;
+  let blick = null;           // the pointer as last sent to the eyes, window-local
   let poll = null;
   let pollMs = 0;
   let zieh = null;            // { zeiger, fenster, bewegt } while the left button drags the figure
@@ -84,7 +85,7 @@ function createPet(d) {
   }
 
   function lageJetzt() {
-    const f = figur || { x: 300, y: 100, width: 72, height: 124 };
+    const f = figur || { x: 306, y: 236, width: 66, height: 57 }; // the head until the page has measured it
     return petLage(e().petLage, arbeitsbereich(), FENSTER, f);
   }
 
@@ -217,6 +218,11 @@ function createPet(d) {
       zeigerDrin = drin;
       d.senden(fenster, 'pet:zeiger', { drin, x: lokal.x, y: lokal.y });
     }
+    // The eyes follow the pointer anywhere on screen, like the island's. Only when it moved; asleep they stay shut.
+    if (wachheit !== 'schlaeft' && (!blick || blick.x !== lokal.x || blick.y !== lokal.y)) {
+      blick = lokal;
+      d.senden(fenster, 'pet:blick', lokal);
+    }
   }
 
   function pollStarten(ms) {
@@ -345,11 +351,6 @@ function createPet(d) {
       figur = f;
       if (erst) { d.log(`pet: Figur ${Math.round(f.x)},${Math.round(f.y)} ${Math.round(f.width)}×${Math.round(f.height)}`); neuAusrichten(); } // the window clamps to the real body now
     }
-  });
-  let spriteUrl = null;
-  d.kanal('pet:sprite', 'pet', () => {
-    if (!spriteUrl) spriteUrl = `data:image/png;base64,${fs.readFileSync(path.join(__dirname, 'ui', 'astronaut-36.png')).toString('base64')}`;
-    return spriteUrl;
   });
   d.kanal('pet:bereit', 'pet', () => { zustandSenden(); if (diktat.zustand !== 'aus') diktatSenden(diktat.zustand, diktat); });
   d.kanal('pet:ziehen', 'pet', () => ziehStart());

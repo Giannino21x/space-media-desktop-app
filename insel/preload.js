@@ -31,7 +31,6 @@ contextBridge.exposeInMainWorld('spaceInsel', {
   nochmals: () => ipcRenderer.invoke('pille:nochmals'),
   meldung: (text, art) => ipcRenderer.invoke('pille:meldung', { text, art }),
   // pet → main
-  petSprite: () => ipcRenderer.invoke('pet:sprite'),
   petFlaechen: (flaechen, figur) => ipcRenderer.invoke('pet:flaechen', { flaechen, figur }),
   petBereit: () => ipcRenderer.invoke('pet:bereit'),
   petZiehen: () => ipcRenderer.invoke('pet:ziehen'),
@@ -59,6 +58,7 @@ contextBridge.exposeInMainWorld('spaceInsel', {
   onPetDiktat: abo('pet:diktat'),
   onPetPegel: abo('pet:pegel'),
   onPetZeiger: abo('pet:zeiger'),
+  onPetBlick: abo('pet:blick'),
   onPetEcke: abo('pet:ecke'),
   onPetAussenKlick: abo('pet:aussen-klick'),
   onPetReaktion: abo('pet:reaktion'),

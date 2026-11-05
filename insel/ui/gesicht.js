@@ -28,7 +28,7 @@
   // The real helmet of the app's bots (koepfe/kopf-<px>.png: silver shell, S logo, ear pieces, antenna, empty glass
   // visor — made with Higgsfield from the SPACE Bot figure). The engine draws it and puts the living LED eyes and the
   // bot-coloured visor rim on the glass. Geometry as fractions of the square image (measured on the 2k original).
-  const KOPF = { breite: 0.961, visier: { x: 0.155, y: 0.293, w: 0.687, h: 0.483, r: 0.3 } };
+  const KOPF = { breite: 0.961, visier: { x: 0.155, y: 0.293, w: 0.687, h: 0.483, r: 0.3 }, sichtbar: { x: 0.02, y: 0.086, w: 0.957, h: 0.824 } };
   const KOPF_GROESSEN = [32, 64, 128, 256];
   const kopfBilder = {};
   function kopfBild(px) {
@@ -111,7 +111,7 @@
       case 'spirale': {
         ctx.lineWidth = Math.max(1, w * 0.22);
         ctx.beginPath();
-        const dreh = t * 9 * seite;
+        const dreh = ruhig() ? 0 : t * 9 * seite;
         for (let i = 0; i <= 40; i++) {
           const a = dreh + (i / 40) * TAU * 2.2;
           const r = (i / 40) * w * 0.66;
@@ -199,8 +199,8 @@
       schwindligBis: 0, stupse: [],
       // state
       zustand: 'bereit', farbe: rgb(o.farbe || figur.led), farbZiel: rgb(o.farbe || figur.led), eigeneFarbe: o.farbe || null,
-      abzeichen: null, abzeichenSkala: 0, abzeichenWechsel: -1e9, abzeichenNeu: null,
-      denkt: false, hoert: false, pegel: 0, pegelGlatt: 0, schlaeft: false, staunt: false,
+      abzeichen: null, abzeichenSkala: 0, abzeichenWechsel: -1e9, abzeichenNeu: null, abzeichenKurzTimer: null,
+      denkt: false, hoert: false, pegel: 0, pegelGlatt: 0, schlaeft: false, doest: false, staunt: false,
       visier: 0, visierZiel: 0,
       // particles & gestures
       herzen: [], zs: [], funken: [],
@@ -256,13 +256,13 @@
       if (z.denkt) { zx = zx * 0.3 + 0.55; zy = zy * 0.3 - 0.55; }
       if (z.staunt) { zx *= 0.4; zy = -0.85; }
       if (z.schlaeft) { zx = 0; zy = 0.3; }
-      if (z.schwindligBis > t) { zx = 0.35 * Math.sin(z.t * 9); zy = 0.2 * Math.cos(z.t * 9); }
+      if (z.schwindligBis > t) { const w = ruhig() ? 0 : 1; zx = w * 0.35 * Math.sin(z.t * 9); zy = w * 0.2 * Math.cos(z.t * 9); }
       z.bx = naeher(z.bx, zx, 0.0025, dt);
       z.by = naeher(z.by, zy, 0.0025, dt);
 
       // body: tilt toward the gaze, wobble when dizzy
       // small faces turn their whole head a little more, so the look reads at 13–24 px
-      const zielNeigung = z.bx * (details ? 0.06 : 0.12) + (z.schwindligBis > t ? Math.sin(z.t * 9) * 0.1 : 0);
+      const zielNeigung = z.bx * (details ? 0.06 : 0.12) + (z.schwindligBis > t && !ruhig() ? Math.sin(z.t * 9) * 0.1 : 0);
       z.neigung = naeher(z.neigung, zielNeigung, 0.0008, dt);
 
       // squash keyframes
@@ -324,7 +324,7 @@
         if (z.abzeichenNeu !== undefined) { z.abzeichen = z.abzeichenNeu; z.abzeichenNeu = undefined; }
         const p = klemmen((ae - 100) / 280, 0, 1);
         const c = 1.70158;
-        z.abzeichenSkala = z.abzeichen ? 1 + (c + 1) * Math.pow(p - 1, 3) + c * Math.pow(p - 1, 2) : 0;
+        z.abzeichenSkala = !z.abzeichen ? 0 : ruhig() ? 1 : 1 + (c + 1) * Math.pow(p - 1, 3) + c * Math.pow(p - 1, 2);
       }
 
       z.visier = naeher(z.visier, z.visierZiel, 0.0001, dt);
@@ -333,7 +333,7 @@
       // particles
       z.herzen = z.herzen.filter((h) => t - h.start < h.leben);
       z.funken = z.funken.filter((f) => t - f.start < 700);
-      if (z.schlaeft && (!z.zs.length || t - z.zs[z.zs.length - 1].start > 1300)) z.zs.push({ start: t });
+      if (z.schlaeft && !ruhig() && (!z.zs.length || t - z.zs[z.zs.length - 1].start > 1300)) z.zs.push({ start: t });
       z.zs = z.zs.filter((q) => t - q.start < 2600);
     }
 
@@ -344,6 +344,24 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, groesse, groesse);
       const farbe = z.farbe.map(Math.round).join(',');
+      // the real helmet when its image is loaded (o.bild false = always drawn, e.g. tray icons)
+      const bild = o.bild === false ? null : kopfBild((W / KOPF.breite) * dpr);
+      if (o.nurBild && !bild) return; // the pet never shows the drawn stand-in, not even for the first frames
+
+      if (o.boden) { // it sits on the desktop: a soft contact shadow that shrinks and fades while it is in the air
+        const luft = klemmen(-z.hop / 0.25, 0, 1);
+        ctx.save();
+        ctx.translate(cx, cy + (KOPF.sichtbar.y + KOPF.sichtbar.h - 0.5) * (W / KOPF.breite));
+        ctx.scale(W * 0.44 * (1 - luft * 0.3), W * 0.075 * (1 - luft * 0.3));
+        const schatten = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+        schatten.addColorStop(0, `rgba(0,0,0,${0.36 * (1 - luft * 0.6)})`);
+        schatten.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = schatten;
+        ctx.beginPath();
+        ctx.arc(0, 0, 1, 0, TAU);
+        ctx.fill();
+        ctx.restore();
+      }
 
       const atem = Math.sin(z.t * (z.schlaeft ? 1.8 : 1.5));
       const amp = ruhig() ? 0 : z.schlaeft ? 1 : 0.35;
@@ -357,10 +375,15 @@
       ctx.translate(0, -H / 2);
       const x0 = -W / 2;
       const y0 = -H / 2;
-      // the real helmet when its image is loaded (o.bild false = always drawn, e.g. tray icons)
-      const bild = o.bild === false ? null : kopfBild((W / KOPF.breite) * dpr);
       const S = W / KOPF.breite;
-      if (bild) ctx.drawImage(bild, -S / 2, -S / 2, S, S);
+      if (bild) {
+        if (o.kontur) { // the silver shell on a white page: a fine edge keeps its outline (invisible on dark)
+          ctx.shadowColor = 'rgba(20,28,40,0.55)';
+          ctx.shadowBlur = Math.max(1.5, W * 0.03) * dpr;
+        }
+        ctx.drawImage(bild, -S / 2, -S / 2, S, S);
+        ctx.shadowBlur = 0;
+      }
 
       // antenna (behind the shell); its tip lags behind the head a little
       if (details && !bild) {
@@ -503,7 +526,7 @@
           // curved glass: the eye nearer the edge gets narrower
           const s = 1 - Math.max(0, seite * z.bx) * 0.16;
           ctx.translate(seite * A.abstand + ex, ey);
-          const lid = form === 'oval' || form === 'gross' ? z.offen : Math.max(z.offen, 0.7);
+          const lid = form === 'oval' || form === 'gross' ? z.offen * (z.doest ? 0.42 : 1) : Math.max(z.offen, 0.7);
           ctx.scale(s, lid);
           augeZeichnen(ctx, form, aw, ah, seite, z.t, `rgb(${farbe})`);
           ctx.restore();
@@ -597,7 +620,7 @@
         ctx.lineCap = 'round';
         if (z.abzeichen === 'punkte') {
           for (let i = 0; i < 3; i++) {
-            const puls = 0.55 + 0.45 * Math.sin(z.t * TAU * 2.4 - i * 0.22 * TAU);
+            const puls = ruhig() ? 0.85 : 0.55 + 0.45 * Math.sin(z.t * TAU * 2.4 - i * 0.22 * TAU);
             ctx.globalAlpha = puls;
             ctx.beginPath();
             ctx.arc((i - 1) * r * 0.48, 0, r * 0.16, 0, TAU);
@@ -628,6 +651,11 @@
           ctx.moveTo(r * 0.35, -r * 0.35);
           ctx.lineTo(-r * 0.35, r * 0.35);
           ctx.stroke();
+        } else if (z.abzeichen === '?') {
+          ctx.font = `700 ${r * 1.45}px system-ui, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('?', 0, r * 0.06);
         }
         ctx.restore();
       }
@@ -700,8 +728,8 @@
       z.zuletzt = t;
       schritt(dt, t);
       zeichnen(t);
-      // still: 12 fps (blinks and breathing stay alive); asleep: 4 fps
-      planen(z.schlaeft ? 250 : bewegt(t) ? 0 : 83);
+      // still: 12 fps (blinks and breathing stay alive); asleep: 4 fps; o.bewegtMs caps the moving rate
+      planen(z.schlaeft ? 250 : bewegt(t) ? (o.bewegtMs || 0) : 83);
     }
 
     function starten() {
@@ -736,7 +764,7 @@
 
     function herzenZeigen() {
       const t = jetzt();
-      for (let i = 0; i < 4; i++) z.herzen.push({ start: t + i * 140, dx: (Math.random() - 0.5) * 0.9, s: Math.random(), leben: 1300 + Math.random() * 500 });
+      if (!ruhig()) for (let i = 0; i < 4; i++) z.herzen.push({ start: t + i * 140, dx: (Math.random() - 0.5) * 0.9, s: Math.random(), leben: 1300 + Math.random() * 500 });
       ausdruck('herz', 1800);
       hupf(0.1);
     }
@@ -775,7 +803,7 @@
       z.rollStart = ruhig() ? -1e9 : t + 120;
       z.rollDauer = 950;
       z.rollRunden = 1;
-      for (let i = 0; i < 5; i++) z.funken.push({ start: t + 500, a: -Math.PI / 2 + (i - 2) * 0.55 });
+      if (!ruhig()) for (let i = 0; i < 5; i++) z.funken.push({ start: t + 500, a: -Math.PI / 2 + (i - 2) * 0.55 });
     }
 
     function winken() {
@@ -800,13 +828,30 @@
       ausdruck('bogen', 1100);
     }
 
+    function abzeichenFuer(name) {
+      return name === 'arbeitet' ? 'punkte' : name === 'wartet' ? '!' : name === 'fertig' ? '✓' : name === 'fehler' ? '×' : null;
+    }
+
+    /** A passing badge (the pet's «?»); the state's own badge returns afterwards. */
+    function abzeichenKurz(zeichen, ms) {
+      clearTimeout(z.abzeichenKurzTimer);
+      z.abzeichenWechsel = jetzt();
+      z.abzeichenNeu = zeichen;
+      aufwecken();
+      z.abzeichenKurzTimer = setTimeout(() => {
+        z.abzeichenWechsel = jetzt();
+        z.abzeichenNeu = abzeichenFuer(z.zustand);
+        aufwecken();
+      }, ms);
+    }
+
     /** State → LED colour and badge: bereit | arbeitet | wartet | fertig | fehler | hoert | schlaeft. */
     function zustand(name) {
       if (name === z.zustand) return;
       const vorher = z.zustand;
       z.zustand = name;
       z.farbZiel = rgb(name === 'bereit' ? (z.eigeneFarbe || figur.led) : name === 'hoert' && figur.hoert ? figur.hoert : (FARBEN[name] || figur.led));
-      const neu = name === 'arbeitet' ? 'punkte' : name === 'wartet' ? '!' : name === 'fertig' ? '✓' : name === 'fehler' ? '×' : null;
+      const neu = abzeichenFuer(name);
       if (neu !== z.abzeichen) { z.abzeichenWechsel = jetzt(); z.abzeichenNeu = neu; }
       z.denkt = name === 'arbeitet';
       if (name === 'wartet' && vorher !== 'wartet') hupf(0.2);
@@ -816,8 +861,14 @@
     }
 
     return {
-      starten, stoppen, stups, hupf, winken, fertig, visierOeffnen, schlucken, herzenZeigen, ausdruck, zustand,
+      starten, stoppen, stups, hupf, winken, fertig, visierOeffnen, schlucken, herzenZeigen, ausdruck, zustand, abzeichenKurz,
       groesse: groesseSetzen,
+      /** The visible helmet at rest, canvas-local CSS px (the image's alpha, measured on the 256-px head). */
+      rahmen() {
+        const s = m.W / KOPF.breite;
+        const v = KOPF.sichtbar;
+        return { x: m.cx - s / 2 + v.x * s, y: m.cy - s / 2 + v.y * s, width: v.w * s, height: v.h * s };
+      },
       /** Pointer in canvas-local CSS px (anywhere on screen), or null. */
       zeiger(p) {
         if (p && z.zeiger && Math.abs(p.x - z.zeiger.x) + Math.abs(p.y - z.zeiger.y) > 0.5) aufwecken();
@@ -835,6 +886,8 @@
       hoert(an) { z.hoert = !!an; if (!an) z.pegel = 0; aufwecken(); },
       pegel(p) { z.pegel = klemmen(p, 0, 1); },
       schlaf(an) { if (z.schlaeft !== !!an) { z.schlaeft = !!an; if (!an) z.zs = []; aufwecken(); } },
+      /** Dozing: the eyes stay half shut. */
+      doesen(an) { if (z.doest !== !!an) { z.doest = !!an; aufwecken(); } },
       /** 'space' | 'steno' — the character; the LEDs fade to its colour when it is ready. */
       figur(name) {
         const neu = FIGUREN[name] || FIGUREN.space;

@@ -1,5 +1,5 @@
-/* The SPACE Pet — bottom right above the taskbar. The figure is drawn on the canvas (pet-ui.js); the dictation pill,
-   the tooltip and the menu are DOM, in the look of the island's pill (pille.css). */
+/* The SPACE Pet — the island's head, bottom right above the taskbar. It is drawn on the canvas (gesicht.js via
+   pet-ui.js); the dictation pill, the tooltip and the menu are DOM, in the look of the island's pill (pille.css). */
 
 :root {
   color-scheme: dark;
@@ -16,7 +16,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: def
 button:focus-visible { outline: 2px solid var(--akzent); outline-offset: 2px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
-#buehne { position: absolute; inset: 0; image-rendering: pixelated; pointer-events: none; }
+#kopf { position: absolute; pointer-events: none; }
 
 /* ---- the dictation pill next to the figure ---- */
 
@@ -54,7 +54,7 @@ button:focus-visible { outline: 2px solid var(--akzent); outline-offset: 2px; }
 .p-fertig { background: #f5f6f8; color: #0b0c0e; margin-right: -2px; }
 .p-klein svg { width: 12px; height: 12px; }
 
-/* ---- the tooltip above the figure ---- */
+/* ---- the tooltip beside the head ---- */
 
 .tipp {
   position: absolute;
@@ -70,7 +70,7 @@ button:focus-visible { outline: 2px solid var(--akzent); outline-offset: 2px; }
   white-space: nowrap;
   opacity: 0;
   scale: 0.85;
-  transform-origin: bottom center;
+  transform-origin: right center;
   transition: opacity 0.12s, scale 0.12s;
   pointer-events: none;
 }

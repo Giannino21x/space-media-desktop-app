@@ -28,8 +28,7 @@ insel/             → Die Insel (Desktop, Windows): SPACE oben am Bildschirmran
                      ui/koepfe/kopf-<px>.png = der echte Helm der App-Bots mit leerem Visier (Higgsfield, 27.10.2026),
                      gesicht.js zeichnet darauf Augen und Visierrand in der Farbe des Bots (Geometrie KOPF);
                      pet.js = SPACE Pet (Main: Fenster unten rechts, Ziehen, Verstecken, Zähler, Wurf), ui/pet.html/-ui.js/.css
-                     + ui/wurf.html/-ui.js/.css (Wurf-Overlay), ui/sprite.js = rein + Tests (Zellen, Umfärben, Glyphen),
-                     ui/astronaut-36.png = Kopie des Pixel-Büro-Sheets aus dem Web-Repo (public/images/team/)
+                     (der Kopf der Insel über gesicht.js) + ui/wurf.html/-ui.js/.css (Wurf-Overlay)
 connector.js       → SPACE Connector im Hintergrund: Bundle von <App>/connector/space-connector.mjs laden, mit
                      Electrons Node (ELECTRON_RUN_AS_NODE) `pair`/`run` starten, beim Beenden stoppen;
                      reine Teile in connector.test.js (`npm test`)
@@ -136,30 +135,36 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
   v3 (`einstellungen()`, `setzen()`, `beobachten()` — `an`, `diktat`, `toene`, `hoverOeffnen`, seit v3 `pet` (bool, `setzen('pet', true)`
   holt ein verstecktes Pet zurück) und `petName` (String, `setzen('petName', 'Pixel')`); Web: `lib/insel/desktop.ts`),
   Änderungen auf der Insel oder im Infobereich meldet main.js dem App-Fenster sofort.
-- **SPACE Pet (insel/pet.js, seit 30.10.2026, nur Windows, Standard an):** unser Bot als Pixel-Astronaut unten rechts über der
-  Taskleiste — Verhalten nach dem Pet von Aqua Voice (aquavoice.com/pet, Recherche 30.10.2026), Figur = das Sprite-Sheet des
-  Pixel-Büros der Web-App (`ui/astronaut-36.png`, Zellen 36×54 wie `src/lib/team/pixel/sprites.ts`, Cyan-Akzente 170–207° → Bot-Farbe
-  wie `recolor.ts`; Farbe aus `aktiverBot` bzw. Standard-Bot des Teams, `petFarbe` in regeln.js). Keine neuen Bilder, kein Ton.
-  Zwei Fenster wie die Pille (`focusable: false`, `toolbar`, `screen-saver`): `pet` 400×300 (Figur auf einem Canvas, ganzzahliger
-  Geräte-Massstab `max(2, round(1.6·dpr))`, Pille «Diktiert mit SPACE» links der Figur, Tooltip, Menü) mit eigenem Cursor-Poll
-  (33 ms, 16 ms beim Ziehen; Trefferflächen = Figur-Körper aus dem Alphakanal + Pille + Menü, als Layout-Kasten ohne Pop-Skalierung
+- **SPACE Pet (insel/pet.js, seit 30.10.2026, nur Windows, Standard an; seit 05.11.2026 der Kopf der Insel, Giannino: «so ein
+  kopf von der insel … ähnlich wie bei aqua, nicht das jetzige pet»):** nur der Helm mit den LED-Augen unten rechts über der
+  Taskleiste, kein ganzer Körper — kompakt wie der «Droplet» von Aqua Voice (aquavoice.com/pet), Helm, Farben und Bewegung sind
+  unsere. Dieselbe Maschine wie auf der Insel (`ui/gesicht.js`, Canvas 110 px = Helm 66×57 px, `koepfe/kopf-<px>.png`, Optionen
+  `nurBild`, `boden` = Kontaktschatten, `bewegtMs: 16`); Augen und Visierrand in der Farbe von `aktiverBot` bzw. Standard-Bot
+  (`petFarbe` in regeln.js), Steno behält Gold und Amber. Die Augen folgen dem Zeiger überall auf dem Bildschirm: der Cursor-Poll
+  schickt `pet:blick` nur, wenn er sich bewegt hat, und nicht im Schlaf. Kein Ton.
+  Zwei Fenster wie die Pille (`focusable: false`, `toolbar`, `screen-saver`): `pet` 400×300 (Kopf auf einem Canvas, Pille
+  «Diktiert mit SPACE Bot» links davon, Tooltip, Menü) mit eigenem Cursor-Poll
+  (33 ms, 16 ms beim Ziehen; Trefferflächen = Helm aus `rahmen()` der Maschine + Pille + Menü, als Layout-Kasten ohne Pop-Skalierung
   gemeldet) und `wurf` = ganzer Bildschirm, immer durchklickbar, nur für den Wurf sichtbar (≈ 0,65 s). Diktat: die Pille unten
   Mitte nimmt weiter auf (derselbe Code), zeigt aber nichts (`petAktiv` in den Fenster-Einstellungen, `body.pet`), sendet die
   neun Bänder (`pille:pegel`) und ihre Meldungen (`pille:meldung`) ans Pet. Nach der Transkription `pet.werfen(text)`: Blase mit
   den ersten Worten (`wurfText`) fliegt im Bogen (`wurfBogen`, `WURF_MS` = 400 ≤ 450) von der Figur zum Mauszeiger
   (`screen.getCursorScreenPoint`, das Caret ist unter Windows nicht sicher lesbar), dann erst `einfuegen()` — bestehender Weg
-  Zwischenablage → Strg+V. Fehler: Kopfschütteln, Pille rot. Leben (rein in regeln.js, getestet): `petReaktion` (danke/merci → Herz,
-  «?» → Frage, fertig/erledigt → Hüpfer, ≥ 80 Wörter → Daumen, höchstens alle 30 s), `petWachheit` (2 Min dösen = Visier halb,
-  10 Min schlafen = zZz, Diktat weckt), Klick = Squash, dreimal in 1,7 s = schwindlig (Spirale, 3,3 s), Idle-Posen stehen/Kaffee/
-  Klemmbrett + Atmen (Helm 1 px) + Blinzeln wie das Pixel-Büro. Zähler nur in `insel.json` (`petZaehler`: tag/heute/gesamt/streak,
+  Zwischenablage → Strg+V. Fehler: rote LEDs mit genervtem Blick und ×, Pille rot. Leben (rein in regeln.js, getestet): `petReaktion`
+  (danke/merci → Herzen, «?» → grosse Augen und «?», fertig/erledigt → Hüpfer, ≥ 80 Wörter → Augenrolle und Funken, höchstens alle
+  30 s), `petWachheit` (2 Min dösen = Augen halb zu, 10 Min schlafen = zZz, Diktat weckt), Klick = Squash und genervter Blick, dreimal
+  in 1,7 s = schwindlig (Spiralen, 3,3 s), Zeiger 1,9 s darauf = Herzen, Wurf = kleiner Hüpfer mit fröhlichen Augen; Atmen und
+  Blinzeln wie auf der Insel. «Bewegung reduzieren» (in `gesicht.js`, gilt auch für die Insel): kein Hüpfer, kein Atmen, keine
+  aufsteigenden Herzen, Funken und zZz, nichts dreht oder wackelt; den Zustand tragen Augenform und Farbe. Der Tooltip steht neben
+  dem Kopf, über ihm steigen die Herzen. Ganz am linken Bildschirmrand ragen Pille, Menü und Tooltip aus dem Bild (das Fenster
+  liegt links vom Kopf), offen. Zähler nur in `insel.json` (`petZaehler`: tag/heute/gesamt/streak,
   `petZaehlen`, Level aus Gesamtwörtern 1k/5k/25k/100k, Tooltip `petTooltip` «Heute 320 Wörter · Level 2 · 4 Tage»), kein Shop,
   keine Rangliste, kein Netz. Ziehen mit linker Taste (Main bewegt das Fenster im Poll, `petLage` klemmt den Körper in den
   Arbeitsbereich, Position `petLage` in insel.json); in die Ecke unten rechts ziehen (`inEcke`) → Menü 1 Minute / 1 Stunde / bis ich
   es zurückhole (`petVersteckt`: ms, −1, 0) — versteckt übernimmt die Pille unten Mitte wieder. Rechtsklick: Diktieren, SPACE
   öffnen, Verstecken, Name ändern (das Namensfeld holt sich den Fokus über `pet:fokus`, wie die Insel). Infobereich: «SPACE Pet
-  anzeigen» (holt auch ein verstecktes Pet zurück). Das Sprite kommt als data-URL über `pet:sprite` (ein file://-Bild würde den
-  Canvas «tainten», die Sandbox-Preload hat kein fs). Debug ungepackt: `SPACE_INSEL_PET_LOG=1` loggt Trefferflächen, Klicks,
-  Fokus und die Konsole der Pet-Seite. Tests: `insel/regeln.test.js` (Pet-Regeln) + `insel/sprite.test.js`.
+  anzeigen» (holt auch ein verstecktes Pet zurück). Debug ungepackt: `SPACE_INSEL_PET_LOG=1` loggt Trefferflächen, Klicks,
+  Fokus und die Konsole der Pet-Seite. Tests: `insel/regeln.test.js` (Pet-Regeln) + `insel/pet-kopf.test.js`.
   **Automatisch ausgeblendete Taskleiste:** dann ist der Arbeitsbereich der ganze Bildschirm, und eine Figur ganz unten stünde
   genau dort, wo die Taskleiste beim Annähern der Maus hochfährt und jeden Klick nimmt — darum hält das Pet in diesem Fall
   48 DIP Abstand (`petArbeitsbereich`, `TASKLEISTE_DIP`). Die Fenster der Insel sind nie fokussierbar; wird das Pet-Fenster
