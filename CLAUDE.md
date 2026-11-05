@@ -250,7 +250,10 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
   Web-Repo: Teil E (Sync in «Meine Dateien», Live-Zugriff der Bots, `PcBruecke`, `/api/pc/*`). Geprüft mit `node --test` und
   `electron . --dev` gegen eine Testseite (Playwright, Dialog im Main-Prozess ersetzt): Wählen nur nach Klick,
   Liste/Lesen/Ausbruch, Änderungen entprellt, Neuladen räumt Watcher weg.
-- **Desktop:** letztes veröffentlichtes GitHub Release ist `v1.0.13` (02.11.2026: Schreiben und Öffnen auf dem PC nur mit Ja im
+- **Desktop:** letztes veröffentlichtes GitHub Release ist `v1.0.14` (05.11.2026, aus `6872dc1` = v1.0.13 + SME Pet als Kopf der
+  Insel; uncommittete Arbeit einer anderen Sitzung im Ordner (Live-Fenster, `updates.js`, `beenden.js`) ist NICHT drin und kommt
+  frühestens mit `v1.0.15`. Lokal gebaut in einem sauberen `git worktree` mit `npm ci`, `gh release create --target`; der Tag-Build
+  scheiterte am Mac-Signieren, der Release-Job lief deshalb nicht und überschrieb nichts). Davor `v1.0.13` (02.11.2026: Schreiben und Öffnen auf dem PC nur mit Ja im
   Dialog des Hauptprozesses, Live-Freigabe und erlaubter Dateiart; `ausfuehren` ist nicht in der Brücke, der Code bleibt ungenutzt
   liegen, bis es eine Programm-Allowlist ohne Shell gibt, Web `docs/plans/2026-10-31-pc-befehle.md`). Vor jedem Release: `npm test`
   (`paket.test.js` prüft `build.files` von den Einstiegsdateien aus), danach `dist\win-unpacked` einmal starten; die Tests laufen
