@@ -5,7 +5,8 @@ const config: CapacitorConfig = {
   appName: 'SPACE Media Engine',
   webDir: 'www',
   server: {
-    url: 'https://app.space-media.ch',
+    /* Nur dieser TestFlight-Branch: fester Web-Stand des Redesigns auf Staging. Nie zur Review einreichen. */
+    url: 'https://sme-testflight-redesign.vercel.app',
     cleartext: false,
     androidScheme: 'https',
   },
