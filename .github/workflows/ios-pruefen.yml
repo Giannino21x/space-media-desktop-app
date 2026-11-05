@@ -31,7 +31,7 @@ jobs:
         working-directory: mobile
         shell: bash
         run: |
-          npm ci --no-audit --no-fund
+          npm ci --no-audit --no-fund --ignore-scripts
           npx cap sync ios
 
       - name: Bauen (Simulator, ohne Signatur)
