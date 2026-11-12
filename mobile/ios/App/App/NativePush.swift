@@ -30,6 +30,9 @@ final class NativePush: NSObject, WKScriptMessageHandler, UNUserNotificationCent
             forMainFrameOnly: true)
         webView.configuration.userContentController.addUserScript(flag)
         webView.configuration.userContentController.add(self, name: "push")
+        // Zahl am App-Symbol (12.11.2026): die Web-App meldet die ungelesenen Mitteilungen,
+        // sobald sie sich ändern (src/lib/abzeichen/flaechen.ts): {zahl: n}, 0 löscht
+        webView.configuration.userContentController.add(self, name: "ungelesen")
         // Capacitor setzt beim Start seinen eigenen Delegate — danach wieder unseren
         UNUserNotificationCenter.current().delegate = self
         NotificationCenter.default.addObserver(
@@ -43,6 +46,12 @@ final class NativePush: NSObject, WKScriptMessageHandler, UNUserNotificationCent
     // MARK: - Web -> Nativ
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "ungelesen" {
+            let body = message.body as? [String: Any]
+            let roh = (body?["zahl"] as? NSNumber)?.intValue ?? 0
+            Self.setzeAbzeichen(min(max(roh, 0), 9999))
+            return
+        }
         guard message.name == "push", let body = message.body as? [String: Any], let art = body["art"] as? String else { return }
         switch art {
         case "status":
@@ -66,6 +75,15 @@ final class NativePush: NSObject, WKScriptMessageHandler, UNUserNotificationCent
             meldeToken()
         default:
             break
+        }
+    }
+
+    /// Zahl am App-Symbol setzen (0 = keine). Ohne Erlaubnis für Mitteilungen zeigt iOS nichts an.
+    private static func setzeAbzeichen(_ zahl: Int) {
+        if #available(iOS 16.0, *) {
+            UNUserNotificationCenter.current().setBadgeCount(zahl) { _ in }
+        } else {
+            DispatchQueue.main.async { UIApplication.shared.applicationIconBadgeNumber = zahl }
         }
     }
 
@@ -111,13 +129,15 @@ final class NativePush: NSObject, WKScriptMessageHandler, UNUserNotificationCent
 
     // MARK: - Mitteilungen
 
-    /// Auch bei offener App als Banner zeigen
+    /// Auch bei offener App als Banner zeigen. `.badge`: sonst übergeht iOS die Zahl aus `aps.badge`,
+    /// solange die App vorne ist (der Server schickt sie seit 12.11.2026 mit jeder Mitteilung und
+    /// allein, wenn Mitteilungen gelesen werden; lib/notifications/apns.ts)
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        completionHandler([.banner, .list, .sound])
+        completionHandler([.banner, .list, .sound, .badge])
     }
 
     /// Tipp auf die Mitteilung: die Seite aus `pfad` öffnen
