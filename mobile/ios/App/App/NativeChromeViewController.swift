@@ -94,6 +94,10 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
     private let dateiNavigation = NativeDateiNavigation()
     private var kopfInhalt: NativeKopfleiste.Inhalt?
     private var kopfSichtbar = false
+    /// Startbild über dem WebView, bis die Seite ihr erstes Bild gezeichnet hat
+    private var startBild: UIImageView?
+    /// Spätestens dann weg, auch ohne Meldung der Seite (kein Netz, alter Web-Stand)
+    private let startBildHoechstens: TimeInterval = 6
 
     // MARK: - State
 
@@ -221,6 +225,8 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
         webView.configuration.userContentController.add(self, name: "nativeChrome")
         // Eigener Kanal: eine Meldung darf das Chrome nicht «bereit» schalten (Login-Seite)
         webView.configuration.userContentController.add(self, name: "meldung")
+        // Eigener Kanal: «nativeChrome» würde die native Leiste einschalten, auch auf der Login-Seite
+        webView.configuration.userContentController.add(self, name: "startBild")
         liveActivity.attach(to: webView)
         aufnahme.attach(to: webView, insel: liveActivity)
         NativePush.shared.attach(to: webView)
@@ -228,6 +234,7 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
 
         setupChrome()
         applyTheme()
+        startBildZeigen()
 
         // Links aus der Insel und dem Browser (spacemedia://oeffne, spacemedia://konto)
         NotificationCenter.default.addObserver(
@@ -241,8 +248,39 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
             self, selector: #selector(keyboardWillHide), name: UIResponder.keyboardWillHideNotification, object: nil)
     }
 
+    // MARK: - Startbild
+
+    /// Dasselbe Bild wie der Launch Screen: der Übergang von iOS zur App ist unsichtbar,
+    /// und statt der leeren WebView steht es da, bis die Web-App «gezeichnet» meldet
+    /// (`lib/mobile/start-bild.ts`). Fängt keine Berührungen ab.
+    private func startBildZeigen() {
+        guard startBild == nil, let bild = UIImage(named: "Splash") else { return }
+        let ansicht = UIImageView(image: bild)
+        ansicht.contentMode = .scaleAspectFill
+        ansicht.clipsToBounds = true
+        ansicht.isUserInteractionEnabled = false
+        ansicht.frame = view.bounds
+        ansicht.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(ansicht)
+        startBild = ansicht
+        DispatchQueue.main.asyncAfter(deadline: .now() + startBildHoechstens) { [weak self] in
+            self?.startBildAusblenden()
+        }
+    }
+
+    private func startBildAusblenden() {
+        guard let ansicht = startBild else { return }
+        startBild = nil
+        UIView.animate(withDuration: 0.2, delay: 0, options: [.curveEaseOut, .beginFromCurrentState], animations: {
+            ansicht.alpha = 0
+        }, completion: { _ in
+            ansicht.removeFromSuperview()
+        })
+    }
+
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        if let startBild { view.bringSubviewToFront(startBild) }
         scrimLayer.frame = scrimView.bounds
         applyChromeVisibility()
         layoutIndicator(animated: false)
@@ -939,6 +977,10 @@ class NativeChromeViewController: CAPBridgeViewController, WKScriptMessageHandle
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         if message.name == "meldung" {
             meldungEmpfangen(message.body)
+            return
+        }
+        if message.name == "startBild" {
+            startBildAusblenden()
             return
         }
         guard message.name == "nativeChrome", let body = message.body as? [String: Any] else { return }
