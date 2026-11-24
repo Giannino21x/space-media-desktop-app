@@ -92,15 +92,26 @@ window.addEventListener('DOMContentLoaded', () => {
   // Wait a bit for the app to render
   setTimeout(startObserving, 3000);
 
-  // Titlebar theme: the main process samples the pixels under the native
-  // window controls. Instead of polling every second it now resamples when
-  // something that can change the top-bar colour actually happens — theme /
-  // brand switch (data-theme / data-brand on <html>). Route changes are caught
-  // in main.js via 'did-navigate-in-page' — patching history.pushState here
-  // would only patch the isolated preload world, not the page.
-  const requestTitlebarSync = () => ipcRenderer.send('titlebar-resync');
-  new MutationObserver(requestTitlebarSync).observe(document.documentElement, {
+  // Titlebar theme: the web app sets data-theme (and meta theme-color) to the
+  // *target* at switch time — before the 1250 ms pour animation finishes.
+  // Send that target to the shell immediately so the overlay flips with the
+  // choice, not with a mid-animation pixel sample. data-hintergrund covers
+  // Studio/etc.; route changes stay in main.js via did-navigate-in-page.
+  const TITLEBAR_COLORS = { dark: '#04070d', 'liquid-glass': '#e9edf6' };
+  const pushTitlebarTheme = () => {
+    const theme = document.documentElement.dataset.theme === 'liquid-glass'
+      ? 'liquid-glass'
+      : 'dark';
+    const meta = document.querySelector('meta[name="theme-color"]');
+    const fromMeta = meta && meta.getAttribute('content');
+    const color = fromMeta && /^#[0-9a-fA-F]{6}$/.test(fromMeta.trim())
+      ? fromMeta.trim()
+      : TITLEBAR_COLORS[theme];
+    ipcRenderer.send('titlebar-theme', { theme, color });
+  };
+  new MutationObserver(pushTitlebarTheme).observe(document.documentElement, {
     attributes: true,
-    attributeFilter: ['data-theme', 'data-brand', 'class', 'style'],
+    attributeFilter: ['data-theme', 'data-hintergrund', 'data-brand'],
   });
+  pushTitlebarTheme();
 });

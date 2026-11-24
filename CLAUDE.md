@@ -16,9 +16,10 @@ Fensterverhalten, Icons, Notifications, Auto-Update oder Capacitor-Konfiguration
 
 ```
 main.js            → Electron Main: BrowserWindow (frameless), Auto-Updater, Taskbar-Badge-IPC,
-                     GPU-Flags, adaptive Windows-Titlebar (capturePage-Sampling event-getrieben: Theme-/Routenwechsel,
-                     Fokus, Load + 10-s-Sicherheitstick bei Fokus; wechselt erst nach 2 gleichen Samples)
-preload.js         → Drag-Region (body::after, 40 px), Badge-Observer (rAF-gedrosselt), Titlebar-Resync-IPC,
+                     GPU-Flags, Windows-Titlebar: Ziel-Theme per IPC (data-theme / theme-color) sofort,
+                     ein capturePage nach dem Theme-Guss (≈1250 ms) + bei Fokus/Load/Route; kein 10-s-Tick
+preload.js         → Drag-Region (body::after, 40 px), Badge-Observer (rAF-gedrosselt), Titlebar-Theme-IPC
+                     (data-theme / data-hintergrund / data-brand → titlebar-theme),
                      window.__electronRestart, window.spaceConnector («Eigenes Claude-Abo»)
 connector.js       → SPACE Connector im Hintergrund: Bundle von <App>/connector/space-connector.mjs laden, mit
                      Electrons Node (ELECTRON_RUN_AS_NODE) `pair`/`run` starten, beim Beenden stoppen;

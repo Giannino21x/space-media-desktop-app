@@ -119,18 +119,41 @@ function createWindow() {
     mainWindow = null;
   });
 
-  // Windows: adapt the window-control symbols (–, □, ×) to what's actually
-  // rendered under the titlebar — sample real pixels, DOM-independent.
-  //
-  // Sampling is event-driven, not polled: capturePage is a compositor
-  // readback, and doing it every second put a small hitch into an otherwise
-  // steady frame rate. The renderer (preload.js) asks for a resync when the
-  // theme/brand attribute or the route changes; focus and load do too. A slow
-  // 10 s safety tick (only while the window is focused) catches everything else.
+  // Windows titlebar overlay: follow the web app's *target* theme immediately.
+  // The page sets data-theme (and meta theme-color) at switch time; the pour
+  // animation (GUSS_MS = 1250) still paints the old colours for ~1.2 s, so
+  // capturePage mid-animation kept the wrong chrome. Preload sends the target
+  // over IPC; one optional sample after the animation ends refines gradient
+  // backgrounds (Studio). No 10 s poll.
   if (process.platform === 'win32') {
-    let applied = null; // last {r,g,b,symbolColor} actually set on the overlay
+    const TITLEBAR_BY_THEME = {
+      dark: { color: '#04070d', symbolColor: '#ffffff' },
+      'liquid-glass': { color: '#e9edf6', symbolColor: '#1f2937' },
+    };
+    const GUSS_MS = 1250;
+    let appliedKey = null;
+    let applied = null; // last sampled {r,g,b,symbolColor}
     let pendingCount = 0;
     let syncTimer = null;
+
+    const setOverlay = (color, symbolColor) => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      const key = `${color}|${symbolColor}`;
+      if (key === appliedKey) return;
+      appliedKey = key;
+      mainWindow.setTitleBarOverlay({ color, symbolColor, height: 40 });
+    };
+
+    const applyTitlebarTarget = (payload) => {
+      const theme = payload && payload.theme === 'liquid-glass' ? 'liquid-glass' : 'dark';
+      const fallback = TITLEBAR_BY_THEME[theme];
+      const raw = payload && typeof payload.color === 'string' ? payload.color.trim() : '';
+      const color = /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : fallback.color;
+      setOverlay(color, fallback.symbolColor);
+      // One sample after the pour finishes — not mid-animation.
+      scheduleSync(GUSS_MS + 50);
+    };
+
     const syncTitlebarTheme = async () => {
       if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible() || mainWindow.isMinimized()) return;
       try {
@@ -160,11 +183,7 @@ function createWindow() {
         pendingCount = 0;
         applied = { r, g, b, symbolColor };
         const toHex = (v) => Math.round(v).toString(16).padStart(2, '0');
-        mainWindow.setTitleBarOverlay({
-          color: `#${toHex(r)}${toHex(g)}${toHex(b)}`,
-          symbolColor,
-          height: 40,
-        });
+        setOverlay(`#${toHex(r)}${toHex(g)}${toHex(b)}`, symbolColor);
       } catch (_) {
         // capturePage can fail transiently (e.g. during navigation) — ignore
       }
@@ -179,8 +198,7 @@ function createWindow() {
     mainWindow.webContents.on('did-finish-load', () => scheduleSync(1000));
     mainWindow.webContents.on('did-navigate-in-page', () => scheduleSync(400));
     mainWindow.on('focus', () => scheduleSync(50));
-    ipcMain.on('titlebar-resync', () => scheduleSync(300));
-    setInterval(() => { if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused()) scheduleSync(0); }, 10000);
+    ipcMain.on('titlebar-theme', (_event, payload) => applyTitlebarTarget(payload));
   }
 }
 
