@@ -70,7 +70,7 @@ function createLive(d) {
   const log = d.log || (() => {});
   const KOPF = { 'x-space-insel': '1' };
 
-  function sitzung(id, { onTeil } = {}) {
+  function sitzung(id, { onTeil, onWeg } = {}) {
     let zustand = 'wartet'; // wartet | verbindet | offen | festgehalten | fertig | aufgegeben | beendet
     let schlange = [];
     let schlangeBytes = 0;
@@ -79,7 +79,13 @@ function createLive(d) {
     let socket = null;
     let schlussText = null;
     let verbindenUhr = null;
+    // commits the service made on its own before ours (long takes): kept, they lead the final text
+    let zwischen = '';
+    // the pill's «all sound sent» (pille:pcm-ende) — it may come after pille:audio; whoever waits gets it
+    let endeDa = false;
+    const endeWarter = new Set();
     const warter = new Set(); // resolvers waiting in schluss()
+    const mit = (text) => `${zwischen} ${text}`.trim();
 
     const melden = () => { for (const w of warter) w(); };
 
@@ -90,6 +96,7 @@ function createLive(d) {
       schlange = []; schlangeBytes = 0;
       zu();
       melden();
+      if (onWeg) onWeg();
     }
 
     function zu() {
@@ -127,14 +134,20 @@ function createLive(d) {
         for (const pcm of wartend) schicken(pcm);
         log(`live ${id}: offen`);
       } else if (m.message_type === 'partial_transcript' && typeof m.text === 'string') {
-        if ((zustand === 'offen' || zustand === 'festgehalten') && onTeil) onTeil(m.text.slice(0, 12_000));
+        if ((zustand === 'offen' || zustand === 'festgehalten') && onTeil) onTeil(mit(m.text).slice(0, 12_000));
       } else if (m.message_type === 'committed_transcript' && typeof m.text === 'string') {
-        if (zustand !== 'festgehalten') return; // only the commit we asked for ends the take
-        schlussText = m.text.slice(0, 12_000);
+        if (zustand === 'offen') {
+          // the service committed on its own (not asked): keep it, it is the start of the final text
+          zwischen = mit(m.text).slice(0, 12_000);
+          if (onTeil) onTeil(zwischen);
+          return;
+        }
+        if (zustand !== 'festgehalten') return;
+        schlussText = mit(m.text).slice(0, 12_000);
         zustand = 'fertig';
         melden();
       } else if (m.message_type === 'insufficient_audio_activity') {
-        if (zustand === 'festgehalten') { schlussText = ''; zustand = 'fertig'; melden(); }
+        if (zustand === 'festgehalten') { schlussText = zwischen; zustand = 'fertig'; melden(); }
       } else if (FEHLER_ARTEN.test(m.message_type)) {
         aufgeben(m.message_type);
       }
@@ -178,6 +191,21 @@ function createLive(d) {
         socket.onmessage = (e) => nachricht(e.data);
         socket.onerror = () => aufgeben('Socket-Fehler');
         socket.onclose = () => { if (zustand !== 'fertig' && zustand !== 'beendet') aufgeben('Socket zu'); };
+      },
+
+      /** The pill sent its last sound (pille:pcm-ende). */
+      pcmEnde() {
+        endeDa = true;
+        for (const w of endeWarter) w();
+      },
+      /** Wait (at most `ms`) for the pill's last sound — pille:audio can arrive before pille:pcm-ende. */
+      warteAufEnde(ms) {
+        if (endeDa || zustand !== 'offen') return Promise.resolve();
+        return new Promise((fertig) => {
+          const w = () => { clearTimeout(uhr); endeWarter.delete(w); fertig(); };
+          const uhr = setTimeout(w, ms);
+          endeWarter.add(w);
+        });
       },
 
       /** 'senden': ask for the final text. Not open yet → give up at once (no waiting: today's way starts now). */

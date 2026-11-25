@@ -74,10 +74,7 @@
     const rects = [];
     if (st.look === 'ruhe') rects.push({ x: (FENSTER.b - 96) / 2, y: FENSTER.h - 26, width: 96, height: 26 });
     else rects.push({ x: (FENSTER.b - w) / 2 - 6, y: FENSTER.h - h - 6, width: w + 12, height: h + 6 });
-    if (liveZeile.sichtbar()) {
-      const r = $('live-zeile').getBoundingClientRect();
-      rects.push({ x: r.left - 6, y: r.top - 6, width: r.width + 12, height: r.height + 12 });
-    }
+    // the live line is not a hit area: it takes no clicks (pointer-events none), what lies below stays clickable
     if (blase.classList.contains('an')) {
       const r = blase.getBoundingClientRect();
       rects.push({ x: r.left - 6, y: r.top - 6, width: r.width + 12, height: r.height + 12 });
@@ -211,10 +208,13 @@
       a.pcmCtx = ctx;
     } catch { a.pcmCtx = null; } // no live text — the recording still works
   }
-  /** All sound of the take is out (one more 64-ms piece after the stop, so the last syllable is in): main commits. */
+  /**
+   * All sound of the take is out: one more 64-ms piece after the stop (the last syllable), then «all sound sent».
+   * Resolves after that — only then the PCM context closes and the recording goes to main (pille:audio).
+   */
   function pcmBeenden(a) {
-    if (!a.live || a.pcmEnde) return;
-    setTimeout(() => { a.pcmEnde = true; if (api.pcmEnde) api.pcmEnde(a.id); }, a.pcmCtx ? 90 : 0);
+    if (!a.live || a.pcmEnde) return Promise.resolve();
+    return new Promise((fertig) => setTimeout(() => { a.pcmEnde = true; if (api.pcmEnde) api.pcmEnde(a.id); fertig(); }, a.pcmCtx ? 90 : 0));
   }
 
   function aufnahmeVerwerfen() {
@@ -238,10 +238,11 @@
       if (!befehl.still) K.spielen('stups');
       return;
     }
-    pcmBeenden(a);
+    const pcmFertig = pcmBeenden(a);
     const dauer = performance.now() - a.start;
     const recorder = a.recorder;
     recorder.onstop = async () => {
+      await pcmFertig;
       aufraeumen(a);
       if (st.aufnahme === a) st.aufnahme = null;
       // too short, or silent (only when the level could be measured at all)
@@ -271,7 +272,10 @@
   }
 
   api.onPilleStart(({ id, zweck, live }) => aufnahmeStarten(id, zweck, live));
-  if (api.onPilleLive) api.onPilleLive(({ id, text }) => { if (st.aufnahme && st.aufnahme.id === id || st.look === 'denkt') liveZeile.zeigen(text); });
+  if (api.onPilleLive) api.onPilleLive(({ id, text, weg }) => {
+    if (weg) { liveZeile.leeren(); return; }
+    if ((st.aufnahme && st.aufnahme.id === id) || st.look === 'denkt') liveZeile.zeigen(text);
+  });
   api.onPilleFreihand(() => {
     if (st.aufnahme) st.aufnahme.freihand = true;
     look('freihand');

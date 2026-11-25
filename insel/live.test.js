@@ -82,7 +82,6 @@ test('ganzer Weg: Ton wartet bis zum Socket, Zwischentext, Commit, Schlusstext, 
   assert.equal(sock.gesendet.length, 3);
   assert.equal(sock.gesendet[0].message_type, 'input_audio_chunk');
   sock.sag({ message_type: 'partial_transcript', text: 'Ich schicke' });
-  sock.sag({ message_type: 'committed_transcript', text: 'zu früh' }); // not asked for: ignored
   sock.sag({ message_type: 'partial_transcript', text: 'Ich schicke dir' });
   assert.deepEqual(teile, ['Ich schicke', 'Ich schicke dir']);
   s.festhalten();
@@ -242,4 +241,44 @@ test('echter WebSocket gegen die Attrappe: Zwischentext wächst, Schlusstext nac
       }
     } finally { prozess.kill(); }
   }
+});
+
+test('Commits des Dienstes vor unserem (lange Diktate) bleiben vorn im Schlusstext und in der Zeile', async () => {
+  const { live, offen } = aufbau();
+  const teile = [];
+  const s = live.sitzung('z1', { onTeil: (t) => teile.push(t) });
+  await s.verbinden();
+  offen[0].start();
+  offen[0].sag({ message_type: 'partial_transcript', text: 'Erster Teil' });
+  offen[0].sag({ message_type: 'committed_transcript', text: 'Erster Teil.' });
+  offen[0].sag({ message_type: 'partial_transcript', text: 'zweiter' });
+  assert.deepEqual(teile, ['Erster Teil', 'Erster Teil.', 'Erster Teil. zweiter']);
+  s.festhalten();
+  const p = s.schluss(800);
+  offen[0].sag({ message_type: 'committed_transcript', text: 'zweiter Teil.' });
+  assert.equal(await p, 'Erster Teil. zweiter Teil.');
+});
+
+test('audio vor pcm-ende: warteAufEnde wartet auf den letzten Ton, höchstens die Frist; aufgeben meldet onWeg', async () => {
+  const { live, offen } = aufbau();
+  let weg = 0;
+  const s = live.sitzung('z2', { onWeg: () => weg++ });
+  await s.verbinden();
+  offen[0].start();
+  const t0 = Date.now();
+  const w = s.warteAufEnde(500);
+  setTimeout(() => { s.pcm(pcm(2048)); s.pcmEnde(); }, 30);
+  await w;
+  assert.ok(Date.now() - t0 < 300);
+  assert.equal(offen[0].gesendet.length, 1, 'das letzte Stück kam noch vor dem Commit');
+  const t1 = Date.now();
+  await live.sitzung('z3').warteAufEnde(80); // not open: no waiting
+  assert.ok(Date.now() - t1 < 40);
+  const s2 = live.sitzung('z4');
+  await s2.verbinden(); offen[1].start();
+  const t2 = Date.now();
+  await s2.warteAufEnde(80);
+  assert.ok(Date.now() - t2 >= 70, 'Frist');
+  offen[0].sag({ message_type: 'quota_exceeded' });
+  assert.equal(weg, 1);
 });

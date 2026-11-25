@@ -411,7 +411,7 @@ function createPet(d) {
     /** The level meter of the pill window (mean + the nine bands). */
     /** Live text: the line next to the listening pill (live-zeile.js in pet-ui.js). */
     live(text) {
-      if (fenster && !fenster.isDestroyed() && diktat.zustand !== 'aus') d.senden(fenster, 'pet:live', { text: String(text || '').slice(0, 200) });
+      if (fenster && !fenster.isDestroyed()) d.senden(fenster, 'pet:live', { text: String(text || '').slice(0, 200) });
     },
     pegel(mittel, baender) {
       if (fenster && !fenster.isDestroyed() && diktat.zustand !== 'aus') d.senden(fenster, 'pet:pegel', { mittel, baender });

@@ -20,10 +20,12 @@ test('der Token kommt nur im Zweig «gehalten» (ein Kürzel kostet nie etwas)',
 });
 
 test('Verwerfen, Abbrechen und eine leere Aufnahme beenden die Live-Sitzung (Socket zu, finish)', () => {
-  assert.ok(zweig("case 'abbrechen':", 'break;').includes('aufnahme.live.beenden()'));
-  assert.ok(zweig("kanal('pille:leer'", '});').includes('aufnahme.live.beenden()'));
+  assert.ok(zweig("case 'abbrechen':", 'break;').includes('liveEnde(aufnahme.id)'));
+  assert.ok(zweig("kanal('pille:leer'", '});').includes('liveEnde(aufnahme.id)'));
   const audio = zweig("kanal('pille:audio'", "kanal('pille:leer'");
-  assert.ok(audio.includes('liveSitzung.beenden()'));
+  assert.ok(audio.includes('liveEnde(input.id)'));
+  assert.ok(audio.indexOf('warteAufEnde(') < audio.indexOf('festhalten()'), 'erst der letzte Ton, dann der Commit');
+  assert.ok(audio.includes("input.peak === null || input.peak === undefined ? NaN"), 'kein Pegel ist nicht still');
 });
 
 test('Rückfall: ohne Schlusstext geht die Aufnahme wie heute an transkribieren, nie zweimal eingefügt', () => {

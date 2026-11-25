@@ -24,7 +24,13 @@
       for (let i = 0; i < 40 && Math.ceil(mess.measureText(z).width) + rand > platz(); i++) {
         const rest = z.replace(/^… /, '');
         const leer = rest.indexOf(' ');
-        if (leer < 0) break;
+        if (leer < 0) {
+          // one word wider than the room: cut it from the front, keep its end (where the new letters come)
+          let wort = rest;
+          while (wort.length > 4 && Math.ceil(mess.measureText(`…${wort}`).width) + rand > platz()) wort = wort.slice(1);
+          z = `…${wort}`;
+          break;
+        }
         z = `… ${rest.slice(leer + 1)}`;
       }
       if (z === gezeigt) return;

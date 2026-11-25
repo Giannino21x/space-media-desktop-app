@@ -292,7 +292,11 @@
     else pilleLook('aus');
   });
 
-  if (api.onPetLive) api.onPetLive((d) => { if (d && z.diktat !== 'aus') liveZeile.zeigen(d.text); });
+  if (api.onPetLive) api.onPetLive((d) => {
+    if (!d) return;
+    if (!d.text) { liveZeile.leeren(); return; } // the live way gave up mid-take
+    if (z.diktat !== 'aus') liveZeile.zeigen(d.text);
+  });
   api.onPetPegel((p) => {
     if (!p) return;
     kopf.pegel(Math.min(1, Math.max(0, Number(p.mittel) || 0)));
