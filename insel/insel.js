@@ -21,7 +21,7 @@ const fs = require('fs');
 const path = require('path');
 const { BrowserWindow, screen, ipcMain, clipboard, session } = require('electron');
 const {
-  diktatTaste, inselRahmen, pillenRahmen, imRechteck, inselLage, multipart, diktatFehler, aufraeumen, einstellungPruefen, tasteVon, LETZTES_MS, letztesDiktatGueltig,
+  diktatTaste, inselRahmen, pillenRahmen, imRechteck, inselLage, multipart, diktatFehler, aufraeumen, einstellungPruefen, tasteVon, LETZTES_MS, letztesDiktatGueltig, inselZiehen, inselAnteil,
 } = require('./regeln');
 const { diktatWeg } = require('../lokal-regeln');
 const { createPet } = require('./pet');
@@ -45,6 +45,8 @@ const STANDARD = {
   pet: true, petName: '', petLage: null, petVersteckt: 0, petZaehler: null,
   // lokalDiktat: dictation through the model on this PC (lokal.js) as soon as it is there — tray «Diktat auf diesem PC»
   lokalDiktat: true,
+  // where the island sits along the top edge (S5): share of the screen width, 0.5 = centre
+  inselX: 0.5,
 };
 /** What the app's settings (Einstellungen → Bot → Insel) may read and change — never the internal flags. */
 // v4 (Desktop 1.0.13): lokalDiktat (dictation through the model on this PC) plus the read-only lokalBereit.
@@ -89,6 +91,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
   let pollTimer = null;
   let letzterZeiger = { x: -1e9, y: -1e9 }; // never NaN: NaN compares false and nothing would ever be sent
   let linksGedrueckt = false;   // left mouse button (global hook)
+  let ziehen = null;            // S5: { zeigerX, fensterX, gezogen } while the compact island is held
 
   // pill state
   let pillenFlaechen = [];
@@ -175,8 +178,8 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     });
   }
 
-  function panelRahmen() { return inselRahmen(anzeige().bounds, PANEL.breite, PANEL.hoehe); }
-  function streifenRahmen() { return inselRahmen(anzeige().bounds, STREIFEN.breite, STREIFEN.hoehe); }
+  function panelRahmen() { return inselRahmen(anzeige().bounds, PANEL.breite, PANEL.hoehe, einstellungen.inselX); }
+  function streifenRahmen() { return inselRahmen(anzeige().bounds, STREIFEN.breite, STREIFEN.hoehe, einstellungen.inselX); }
 
   function inselAnlegen() {
     if (insel && !insel.isDestroyed()) return;
@@ -303,6 +306,21 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
       durchklickSetzen(!drin);
       if (drin && !imStreifen && !linksGedrueckt) senden(insel, 'insel:wecken', null);
       imStreifen = drin;
+      return;
+    }
+    // dragging the compact island along the top edge (S5): the main process moves the window in this tick
+    if (ziehen) {
+      const x = inselZiehen(ziehen, p, anzeige().bounds, b.width);
+      if (x !== null) {
+        ziehen.gezogen = true;
+        if (x !== b.x) insel.setPosition(x, b.y);
+      }
+      if (!linksGedrueckt) {
+        const war = ziehen;
+        ziehen = null;
+        if (war.gezogen) aendern({ inselX: inselAnteil(insel.getBounds().x, anzeige().bounds, b.width) });
+        senden(insel, 'insel:ziehen-ende', { gezogen: war.gezogen });
+      }
       return;
     }
     const lx = p.x - b.x;
@@ -679,6 +697,13 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     flaechen = Array.isArray(rects)
       ? rects.slice(0, 8).filter((r) => r && [r.x, r.y, r.width, r.height].every(Number.isFinite))
       : [];
+  });
+  /** S5: a press on the compact island — a drag if it moves more than ZIEH_SCHWELLE, else a click (the page opens it). */
+  kanal('insel:ziehen', 'insel', () => {
+    if (!insel || insel.isDestroyed() || eingeklappt) return false;
+    ziehen = { zeigerX: screen.getCursorScreenPoint().x, fensterX: insel.getBounds().x, gezogen: false };
+    // the poll ends it when the hook reports the release (a quick click ends at once: then the page opens the island)
+    return true;
   });
   kanal('insel:ansicht', 'insel', (_e, neu) => {
     const vorher = ansicht;

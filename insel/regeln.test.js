@@ -330,3 +330,31 @@ test('the last dictation can be pasted again for 10 minutes', () => {
   assert.equal(letztesDiktatGueltig({ text: '', zeit: 0 }, 1), false);
   assert.equal(letztesDiktatGueltig(null, 1), false);
 });
+
+// ---- S5: drag the island along the top edge ----
+const { ZIEH_SCHWELLE, inselZiehen, inselAnteil } = require('./regeln');
+
+test('the island sits where it was dragged, on screen', () => {
+  const b = { x: 0, y: 0, width: 4096, height: 1152 };
+  assert.deepEqual(inselRahmen(b, 720, 320), { x: 1688, y: 0, width: 720, height: 320 });
+  assert.equal(inselRahmen(b, 720, 320, 0.5).x, 1688);
+  assert.equal(inselRahmen(b, 720, 320, 0).x, 0);
+  assert.equal(inselRahmen(b, 720, 320, 1).x, 4096 - 720);
+  assert.equal(inselRahmen(b, 720, 320, 0.25).x, 1024 - 360);
+  // the strip and the panel share the centre
+  const panel = inselRahmen(b, 720, 320, 0.3);
+  const streifen = inselRahmen(b, 300, 10, 0.3);
+  assert.equal(panel.x + 360, streifen.x + 150);
+});
+
+test('a press that moves less than the threshold is a click; more is a drag, clamped', () => {
+  const b = { x: 0, y: 0, width: 1920, height: 1080 };
+  const start = { zeigerX: 1000, fensterX: 600, gezogen: false };
+  assert.equal(inselZiehen(start, { x: 1000 + ZIEH_SCHWELLE - 1 }, b, 720), null);
+  assert.equal(inselZiehen(start, { x: 1100 }, b, 720), 700);
+  assert.equal(inselZiehen(start, { x: -5000 }, b, 720), 0);
+  assert.equal(inselZiehen(start, { x: 9000 }, b, 720), 1200);
+  assert.equal(inselZiehen({ ...start, gezogen: true }, { x: 1002 }, b, 720), 602);
+  assert.ok(Math.abs(inselAnteil(600, b, 720) - (960 / 1920)) < 1e-9);
+  assert.equal(inselRahmen(b, 720, 320, inselAnteil(123, b, 720)).x, 123);
+});

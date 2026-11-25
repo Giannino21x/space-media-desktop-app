@@ -1323,9 +1323,12 @@
   }
   document.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
-    if (st.modus === 'versteckt' || (st.modus === 'kompakt' && !e.target.closest('.offen'))) {
+    if (st.modus === 'versteckt') { e.preventDefault(); aufklappen(); return; }
+    if (st.modus === 'kompakt' && !e.target.closest('.offen')) {
       e.preventDefault();
-      aufklappen();
+      // S5: held and moved = drag along the top edge (main moves the window); released in place = open
+      if (api.ziehen && api.onZiehenEnde) api.ziehen().then((ok) => { if (!ok) aufklappen(); });
+      else aufklappen();
     }
   });
   document.querySelector('.kompakt').addEventListener('keydown', (e) => {
@@ -1416,6 +1419,7 @@
   if (api.onWecken) api.onWecken(wecken);
   if (api.onAufklappen) api.onAufklappen(aufklappen);
   if (api.onBlatt) api.onBlatt(blattOeffnen);
+  if (api.onZiehenEnde) api.onZiehenEnde((d) => { if (!d || !d.gezogen) aufklappen(); });
   api.onDiktat(diktatNeu);
   api.onPegel((p) => { gesichtKlein.pegel(p); gesichtGross.pegel(p); });
 

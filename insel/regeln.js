@@ -119,9 +119,12 @@ function diktatTaste() {
 // ---- where the windows sit ----
 
 /** The island window: top centre of a display, flush with the screen edge (no notch on a PC). */
-function inselRahmen(bounds, breite, hoehe) {
+// anteil: where the island's centre sits along the top edge (0 = left, 1 = right; dragged in S5), clamped on screen
+function inselRahmen(bounds, breite, hoehe, anteil) {
+  const a = Number.isFinite(anteil) ? Math.min(1, Math.max(0, anteil)) : 0.5;
+  const x = bounds.x + a * bounds.width - breite / 2;
   return {
-    x: Math.round(bounds.x + (bounds.width - breite) / 2),
+    x: Math.round(Math.min(bounds.x + bounds.width - breite, Math.max(bounds.x, x))),
     y: bounds.y,
     width: breite,
     height: hoehe,
@@ -442,6 +445,20 @@ function letztesDiktatGueltig(gemerkt, jetzt) {
   return !!(gemerkt && typeof gemerkt.text === 'string' && gemerkt.text && jetzt - gemerkt.zeit < LETZTES_MS);
 }
 
+// ---- dragging the island along the top edge (S5) ----
+const ZIEH_SCHWELLE = 6;
+/** The window's x while dragging: start + movement, clamped on screen; null below the threshold (then it is a click). */
+function inselZiehen(start, zeiger, bounds, breite) {
+  const dx = zeiger.x - start.zeigerX;
+  if (!start.gezogen && Math.abs(dx) < ZIEH_SCHWELLE) return null;
+  return Math.round(Math.min(bounds.x + bounds.width - breite, Math.max(bounds.x, start.fensterX + dx)));
+}
+/** The share (0–1) along the screen width that inselRahmen puts the island's centre at. */
+function inselAnteil(fensterX, bounds, breite) {
+  if (!bounds.width) return 0.5;
+  return Math.min(1, Math.max(0, (fensterX + breite / 2 - bounds.x) / bounds.width));
+}
+
 /** A multipart/form-data body with one file field (net.fetch takes a Buffer, not FormData). */
 function multipart(feld, dateiname, mime, bytes) {
   const grenze = `----spaceinsel${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
@@ -464,7 +481,7 @@ function diktatFehler(status, antwort) {
 
 return {
   HALTEN_MIN_MS, DOPPEL_MS, MAX_AUFNAHME_MS,
-  diktatTaste, inselRahmen, pillenRahmen, imRechteck, weckStreifen, inselLage, BOT_FARBEN, multipart, diktatFehler, aufraeumen, TASTEN, einstellungPruefen, tasteVon, LETZTES_MS, letztesDiktatGueltig,
+  diktatTaste, inselRahmen, pillenRahmen, imRechteck, weckStreifen, inselLage, BOT_FARBEN, multipart, diktatFehler, aufraeumen, TASTEN, einstellungPruefen, tasteVon, LETZTES_MS, letztesDiktatGueltig, ZIEH_SCHWELLE, inselZiehen, inselAnteil,
   // the pet
   DOESEN_MS, SCHLAFEN_MS, REAKTION_PAUSE_MS, WURF_MS, LEVEL_STUFEN, ECKE_RAND, TASKLEISTE_DIP,
   petRahmen, petLage, petArbeitsbereich, inEcke, petVersteckBis, petVersteckt, petWachheit, petReaktion,
