@@ -8,6 +8,8 @@
 </head>
 <body>
   <div class="blase" id="blase" role="tooltip"></div>
+  <!-- live text while speaking (one line, the end of what was heard); aria-hidden: the final text is what counts -->
+  <div class="live-zeile" id="live-zeile" aria-hidden="true"><span class="lz-stabil" id="lz-stabil"></span><span class="lz-neu" id="lz-neu"></span></div>
   <div class="kapsel" id="kapsel" data-look="ruhe">
     <canvas class="p-gesicht" id="p-gesicht" aria-hidden="true"></canvas>
     <div class="p-inhalt" data-look="werkzeug">
@@ -27,6 +29,8 @@
   <script src="klang.js"></script>
   <script src="../../lokal-wav.js"></script>
   <script src="gesicht.js"></script>
+  <script src="../regeln.js"></script>
+  <script src="live-zeile.js"></script>
   <script src="pille-ui.js"></script>
 </body>
 </html>

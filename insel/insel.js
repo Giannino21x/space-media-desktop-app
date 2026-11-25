@@ -21,10 +21,11 @@ const fs = require('fs');
 const path = require('path');
 const { BrowserWindow, screen, ipcMain, clipboard, session, nativeTheme } = require('electron');
 const {
-  diktatTaste, inselRahmen, pillenRahmen, imRechteck, inselLage, multipart, formular, notizErgebnis, diktatFehler, aufraeumen, einstellungPruefen, tasteVon, LETZTES_MS, letztesDiktatGueltig, inselZiehen, inselAnteil, inselAufbau, inselAnteilFuer, groesseFaktor, aussehenWirksam, lageFuerInsel, freigabenAbfragen,
+  diktatTaste, inselRahmen, pillenRahmen, imRechteck, inselLage, multipart, formular, notizErgebnis, liveWeg, liveErgebnis, liveZeile, LIVE_SCHLUSS_MS, diktatFehler, aufraeumen, einstellungPruefen, tasteVon, LETZTES_MS, letztesDiktatGueltig, inselZiehen, inselAnteil, inselAufbau, inselAnteilFuer, groesseFaktor, aussehenWirksam, lageFuerInsel, freigabenAbfragen,
 } = require('./regeln');
 const { diktatWeg } = require('../lokal-regeln');
 const { createPet } = require('./pet');
+const { createLive } = require('./live');
 
 // 400 high since S7: the sheet «Anpassen» has up to five rows plus the group switch (transparent, click-through outside)
 const PANEL = { breite: 720, hoehe: 400 };
@@ -62,7 +63,7 @@ const fuerApp = (e, lokalBereit) => ({
   lokalBereit: !!lokalBereit,
 });
 
-function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, navigieren, dateiZumChat, log, testText, demo, beiLage, beiEinstellungen, appFokussiert, lokalKi }) {
+function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, navigieren, dateiZumChat, log, testText, demo, beiLage, beiEinstellungen, appFokussiert, lokalKi, liveTest }) {
   const datei = path.join(userDataDir, 'insel.json');
   let einstellungen = { ...STANDARD };
   try { einstellungen = { ...STANDARD, ...JSON.parse(fs.readFileSync(datei, 'utf8')) }; } catch { /* first start */ }
@@ -406,6 +407,30 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
   // What runs and waits: every 20 s, every 6 s while the island is open.
   const STAMM_MS = 5 * 60 * 1000;
   let stamm = null; // { profil, team, zeit }
+
+  // Live text (live.js). Unpackaged only, SPACE_INSEL_LIVE_TEST=ws://127.0.0.1:<port> replaces token and address with a
+  // local socket double (scripts/live-attrappe.mjs) — the real service is never asked in tests.
+  const liveApi = liveTest
+    ? async (pfad) => (pfad.endsWith('/token')
+      ? { ok: true, status: 200, daten: { token: 'test', sessionId: '00000000-0000-4000-8000-000000000000', websocketUrl: liveTest, languageCode: 'de', woerter: [] } }
+      : { ok: true, status: 204, daten: null })
+    : (pfad, opts) => api(pfad, opts);
+  const live = createLive({ api: liveApi, WebSocketImpl: globalThis.WebSocket, testErlaubt: !!liveTest, log });
+  /** Does this take go live? The server's realtime flag (5-min-old status: only the first door — the token route asks the
+   *  KI-Option again), «Diktat auf diesem PC» off, a dictation (never a note). */
+  const liveFuer = (zweck) => liveWeg({
+    // inselLive: the server's own answer for the island (only «Standard», Scribe live set up); an older server without
+    // the field → never live
+    realtime: liveTest ? true : !!(stamm && stamm.sprache && stamm.sprache.inselLive === true),
+    lokalDiktat: einstellungen.lokalDiktat !== false,
+    zweck,
+  }) === 'scribe' && typeof globalThis.WebSocket === 'function';
+  function liveTeil(id, text) {
+    if (!aufnahme || aufnahme.id !== id) return;
+    const zeile = liveZeile(text);
+    senden(pille, 'pille:live', { id, text: zeile });
+    pet.live(zeile);
+  }
   let lageLaeuft = false;
   async function lageHolen() {
     if (beendet || lageLaeuft) return;
@@ -498,9 +523,10 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     log(`diktat: ${aktion}`);
     switch (aktion) {
       case 'aufnahmeStart':
-        aufnahme = { id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, zweck: naechsterZweck || 'diktat' };
+        aufnahme = { id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, zweck: naechsterZweck || 'diktat', live: null };
         naechsterZweck = null;
-        senden(pille, 'pille:start', { id: aufnahme.id, zweck: aufnahme.zweck });
+        if (liveFuer(aufnahme.zweck)) { const id2 = aufnahme.id; aufnahme.live = live.sitzung(id2, { onTeil: (t) => liveTeil(id2, t) }); }
+        senden(pille, 'pille:start', { id: aufnahme.id, zweck: aufnahme.zweck, live: !!aufnahme.live });
         senden(insel, 'insel:diktat', { zustand: 'hoert' });
         pet.diktat('hoert');
         taktStarten();
@@ -509,7 +535,12 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
         senden(pille, 'pille:freihand', { id });
         pet.diktat('freihand');
         break;
+      case 'gehalten':
+        // a real dictation now (held ≥ 0.28 s, or hands-free): only now the token — a shortcut tap never costs
+        if (aufnahme && aufnahme.live) aufnahme.live.verbinden();
+        break;
       case 'senden':
+        // the commit comes when the pill has sent its last sound (pille:pcm-ende), at the latest in pille:audio
         senden(pille, 'pille:stopp', { id, senden: true });
         break;
       case 'abbrechen':
@@ -517,6 +548,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
         senden(pille, 'pille:stopp', { id, senden: false, still: aktion === 'verwerfen' });
         senden(insel, 'insel:diktat', { zustand: 'aus' });
         pet.diktat('aus');
+        if (aufnahme && aufnahme.live) aufnahme.live.beenden();
         aufnahme = null;
         pilleNachNotiz(400);
         break;
@@ -987,6 +1019,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
   kanal('pille:audio', 'pille', async (_e, input) => {
     if (!aufnahme || !input || input.id !== aufnahme.id) return { ok: false };
     const zweck = aufnahme.zweck;
+    const liveSitzung = aufnahme.live;
     aufnahme = null;
     if (zweck === 'notiz') return notizAblegenMelden(Buffer.from(input.daten), String(input.mime || 'audio/webm'));
     const lauf = { id: input.id, abgebrochen: false };
@@ -995,7 +1028,18 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     pet.diktat('denkt');
     try {
       // filler words out (regeln.js aufraeumen) — for both ways, the app's service and the model on this PC
-      const text = aufraeumen(await transkribieren(Buffer.from(input.daten), String(input.mime || 'audio/webm')));
+      // Live: the final text from the socket (at most LIVE_SCHLUSS_MS after the commit); anything else → today's way with
+      // the recording from this PC (liveErgebnis). The live session always ends here (finish with the seconds sent).
+      let roh = null;
+      if (liveSitzung) {
+        if (liveSitzung.zustand === 'offen') liveSitzung.festhalten();
+        const ergebnis = liveErgebnis({ text: await liveSitzung.schluss(LIVE_SCHLUSS_MS), peak: Number(input.peak) });
+        liveSitzung.beenden();
+        if (ergebnis) roh = ergebnis.text;
+        log(`diktat: ${ergebnis ? 'live' : 'live → heutiger Weg'}`);
+      }
+      if (roh === null) roh = await transkribieren(Buffer.from(input.daten), String(input.mime || 'audio/webm'));
+      const text = aufraeumen(roh);
       if (transkription === lauf) transkription = null;
       if (!text || lauf.abgebrochen) {
         senden(insel, 'insel:diktat', { zustand: 'aus' });
@@ -1021,6 +1065,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
   });
   kanal('pille:leer', 'pille', (_e, input) => {
     if (aufnahme && input && input.id === aufnahme.id) {
+      if (aufnahme.live) aufnahme.live.beenden();
       aufnahme = null;
       // the key back to rest: with the key «Aus» nothing else would ever end the hands-free state of a note
       taste.zuruecksetzen();
@@ -1032,6 +1077,17 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
   kanal('pille:nochmals', 'pille', () => nochmalsEinfuegen());
   kanal('insel:nochmals', 'insel', () => nochmalsEinfuegen());
   kanal('insel:notiz', 'insel', () => notizStarten());
+  // Live text: PCM pieces and «all sound sent» from the pill, in order (ipcMain.on, not handle). Same sender check.
+  const pcmKanal = (_e, input) => {
+    if (!vonPille(_e) || !aufnahme || !aufnahme.live || !input || input.id !== aufnahme.id) return;
+    if (input.daten instanceof ArrayBuffer || ArrayBuffer.isView(input.daten)) aufnahme.live.pcm(new Uint8Array(input.daten.buffer || input.daten, input.daten.byteOffset || 0, input.daten.byteLength));
+  };
+  const pcmEndeKanal = (_e, input) => {
+    if (!vonPille(_e) || !aufnahme || !aufnahme.live || !input || input.id !== aufnahme.id) return;
+    if (aufnahme.live.zustand === 'offen') aufnahme.live.festhalten();
+  };
+  ipcMain.on('pille:pcm', pcmKanal);
+  ipcMain.on('pille:pcm-ende', pcmEndeKanal);
 
   function einstellungenSenden() {
     senden(insel, 'insel:einstellungen', fuerFenster());
@@ -1173,6 +1229,9 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
       stoppen();
       pet.shutdown();
       for (const k of kanaele) ipcMain.removeHandler(k);
+      ipcMain.removeListener('pille:pcm', pcmKanal);
+      ipcMain.removeListener('pille:pcm-ende', pcmEndeKanal);
+      if (aufnahme && aufnahme.live) aufnahme.live.beenden();
     },
   };
 }

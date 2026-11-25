@@ -27,6 +27,10 @@
   const punktEls = Array.from(punkte.children);
 
   const gesicht = window.SpaceGesicht.erstellen($('p-gesicht'), { groesse: 22, rahmen: 'eng' });
+  // the live line (live-zeile.js, shared with the pet's pill)
+  const liveZeile = window.SpaceLiveZeile.erstellen({ zeile: $('live-zeile'), stabil: $('lz-stabil'), neu: $('lz-neu'),
+    schrift: '500 13px "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif', rand: 28,
+    beiAenderung: (an) => { document.body.classList.toggle('live', an); requestAnimationFrame(flaechenMelden); } });
 
   const st = {
     look: 'ruhe',
@@ -55,6 +59,7 @@
       kapsel.style.width = '';
     }
     if (neu === 'ruhe') { gesicht.stoppen(); blaseZeigen(null); } else gesicht.starten();
+    if (neu !== 'live' && neu !== 'freihand' && neu !== 'denkt') liveZeile.leeren();
     gesicht.hoert(neu === 'live' || neu === 'freihand');
     gesicht.zustand(neu === 'live' || neu === 'freihand' ? 'hoert' : neu === 'denkt' ? 'arbeitet' : opts && opts.art === 'fehler' ? 'fehler' : 'bereit');
     if (neu === 'live' || neu === 'freihand' || neu === 'denkt') laufStarten();
@@ -69,6 +74,10 @@
     const rects = [];
     if (st.look === 'ruhe') rects.push({ x: (FENSTER.b - 96) / 2, y: FENSTER.h - 26, width: 96, height: 26 });
     else rects.push({ x: (FENSTER.b - w) / 2 - 6, y: FENSTER.h - h - 6, width: w + 12, height: h + 6 });
+    if (liveZeile.sichtbar()) {
+      const r = $('live-zeile').getBoundingClientRect();
+      rects.push({ x: r.left - 6, y: r.top - 6, width: r.width + 12, height: r.height + 12 });
+    }
     if (blase.classList.contains('an')) {
       const r = blase.getBoundingClientRect();
       rects.push({ x: r.left - 6, y: r.top - 6, width: r.width + 12, height: r.height + 12 });
@@ -141,9 +150,10 @@
     return navigator.mediaDevices.getUserMedia({ audio: TON });
   }
 
-  async function aufnahmeStarten(id, zweck) {
+  async function aufnahmeStarten(id, zweck, live) {
     if (st.aufnahme) aufnahmeVerwerfen();
-    const a = { id, zweck: zweck === 'notiz' ? 'notiz' : 'diktat', chunks: [], start: 0, peak: 0, messungen: 0, stopp: null, freihand: false, stream: null, recorder: null, ctx: null, analyser: null };
+    liveZeile.leeren();
+    const a = { id, zweck: zweck === 'notiz' ? 'notiz' : 'diktat', live: !!live, chunks: [], start: 0, peak: 0, messungen: 0, stopp: null, freihand: false, stream: null, recorder: null, ctx: null, analyser: null, pcmCtx: null, pcmEnde: false };
     st.aufnahme = a;
     // a shortcut tap (Ctrl+C) must not flash the pill: show it only when the take lasts
     uhr('zeigen', 150, () => { if (st.aufnahme === a && !a.stopp) { look(a.freihand ? 'freihand' : 'live'); K.spielen('diktatStart'); } });
@@ -162,6 +172,7 @@
         a.analyser.smoothingTimeConstant = 0;
         quelle.connect(a.analyser);
       } catch { a.analyser = null; } // no level meter — the recording still works
+      if (a.live) pcmStarten(a, stream);
       a.recorder.start(250);
       a.start = performance.now();
       if (a.stopp) aufnahmeStoppen(a.stopp);
@@ -177,6 +188,33 @@
   function aufraeumen(a) {
     if (a.stream) a.stream.getTracks().forEach((t) => t.stop());
     if (a.ctx) a.ctx.close().catch(() => {});
+    if (a.pcmCtx) { a.pcmCtx.close().catch(() => {}); a.pcmCtx = null; }
+  }
+
+  // Live text: 16 kHz mono PCM (Int16) to main, piece by piece (64 ms), from the first sound on. The recording above
+  // runs as always and stays on this PC until the text is safely there: whatever the live way does, nothing is lost.
+  // ScriptProcessorNode: an AudioWorklet module cannot be loaded from a file:// page (opaque origin).
+  function pcmStarten(a, stream) {
+    try {
+      const ctx = new AudioContext({ sampleRate: 16000 });
+      const quelle = ctx.createMediaStreamSource(stream);
+      const knoten = ctx.createScriptProcessor(1024, 1, 1);
+      knoten.onaudioprocess = (e) => {
+        if (a.pcmEnde) return;
+        const f = e.inputBuffer.getChannelData(0);
+        const out = new Int16Array(f.length);
+        for (let i = 0; i < f.length; i++) { const v = Math.max(-1, Math.min(1, f[i])); out[i] = v < 0 ? v * 0x8000 : v * 0x7fff; }
+        api.pcm(a.id, out.buffer);
+      };
+      quelle.connect(knoten);
+      knoten.connect(ctx.destination); // a ScriptProcessor only runs when connected; it writes silence
+      a.pcmCtx = ctx;
+    } catch { a.pcmCtx = null; } // no live text — the recording still works
+  }
+  /** All sound of the take is out (one more 64-ms piece after the stop, so the last syllable is in): main commits. */
+  function pcmBeenden(a) {
+    if (!a.live || a.pcmEnde) return;
+    setTimeout(() => { a.pcmEnde = true; if (api.pcmEnde) api.pcmEnde(a.id); }, a.pcmCtx ? 90 : 0);
   }
 
   function aufnahmeVerwerfen() {
@@ -200,6 +238,7 @@
       if (!befehl.still) K.spielen('stups');
       return;
     }
+    pcmBeenden(a);
     const dauer = performance.now() - a.start;
     const recorder = a.recorder;
     recorder.onstop = async () => {
@@ -216,7 +255,7 @@
       if (lokalWav && window.spaceWav && a.zweck !== 'notiz') {
         try { daten = (await window.spaceWav.aufnahmeZuWav(daten)).buffer; mime = 'audio/wav'; } catch { /* as recorded */ }
       }
-      const r = await api.audio(a.id, mime, daten);
+      const r = await api.audio(a.id, mime, daten, a.messungen > 3 ? a.peak : null);
       if (r && r.ok) {
         if (r.notiz) meldung(r.art === 'fehler' ? r.meldung : 'Notiz gespeichert', r.art === 'fehler' ? 'fehler' : 'info', r.art === 'fehler' ? 4000 : 2200);
         else if (r.kopiert) meldung('Kopiert · Strg+V zum Einfügen', 'info', 1800);
@@ -231,7 +270,8 @@
     try { recorder.stop(); } catch { recorder.onstop(); }
   }
 
-  api.onPilleStart(({ id, zweck }) => aufnahmeStarten(id, zweck));
+  api.onPilleStart(({ id, zweck, live }) => aufnahmeStarten(id, zweck, live));
+  if (api.onPilleLive) api.onPilleLive(({ id, text }) => { if (st.aufnahme && st.aufnahme.id === id || st.look === 'denkt') liveZeile.zeigen(text); });
   api.onPilleFreihand(() => {
     if (st.aufnahme) st.aufnahme.freihand = true;
     look('freihand');
@@ -331,8 +371,8 @@
     const log = (n) => (...a) => { console.log('[pille demo]', n, JSON.stringify(a).slice(0, 160)); return Promise.resolve({ ok: true }); };
     return {
       pillenFlaechen: log('flaechen'), pegel: () => Promise.resolve(), taste: log('taste'), audio: log('audio'), leer: log('leer'), oeffnen: log('oeffnen'), meldung: log('meldung'),
-      onPilleZeiger: leer, onPilleStart: leer, onPilleFreihand: leer, onPilleStopp: leer, onEinstellungen: leer, onLage: leer,
+      onPilleZeiger: leer, onPilleStart: leer, onPilleFreihand: leer, onPilleStopp: leer, onPilleLive: leer, onEinstellungen: leer, onLage: leer,
     };
   }
-  if (!window.spaceInsel) window.pilleDemo = { look, meldung, st };
+  if (!window.spaceInsel) window.pilleDemo = { look, meldung, st, live: (text) => liveZeile.zeigen(text) };
 })();

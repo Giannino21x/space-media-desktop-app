@@ -21,7 +21,7 @@ function fakeElectron(gesendet) {
   return {
     BrowserWindow: Fenster,
     screen: { getPrimaryDisplay: () => display, getCursorScreenPoint: () => ({ x: 0, y: 0 }), on: () => {} },
-    ipcMain: { handle: (k, f) => { kanaele[k] = f; }, removeHandler: () => {}, on: () => {} },
+    ipcMain: { handle: (k, f) => { kanaele[k] = f; }, removeHandler: () => {}, on: () => {}, removeListener: () => {} },
     clipboard: { readText: () => '', writeText: () => {}, read: () => '', write: () => {} },
     session: { fromPartition: () => ({ setPermissionRequestHandler: () => {}, setPermissionCheckHandler: () => {}, fetch: async () => ({ ok: false, status: 401, json: async () => ({}) }) }) },
     nativeTheme: { shouldUseDarkColors: true, on: () => {}, removeListener: () => {} },

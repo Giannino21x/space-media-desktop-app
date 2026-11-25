@@ -671,6 +671,8 @@ app.on('ready', () => {
       },
       testText: app.isPackaged ? null : process.env.SPACE_INSEL_TEST_TEXT || null,
       demo: !app.isPackaged && process.env.SPACE_INSEL_DEMO === '1',
+      // live text against a local socket double (unpackaged only, ws://127.0.0.1 only — live.js checks the address)
+      liveTest: !app.isPackaged && /^ws:\/\/127\.0\.0\.1:\d+\//.test(process.env.SPACE_INSEL_LIVE_TEST || '') ? process.env.SPACE_INSEL_LIVE_TEST : null,
     });
     // After the first paint of the app window, so the island never competes with it.
     setTimeout(() => insel.starten(), versteckterStart ? 1500 : 2500);

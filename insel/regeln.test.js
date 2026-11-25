@@ -21,7 +21,7 @@ test('a short tap alone is thrown away after the double-tap window', () => {
 test('two quick taps → hands-free, one more tap sends', () => {
   const t = diktatTaste();
   const r = ab(t, [['diktatRunter', 0], ['diktatHoch', 80], ['diktatRunter', 200], ['diktatHoch', 260], ['andere', 900], ['diktatRunter', 5000], ['diktatHoch', 5080]]);
-  assert.deepEqual(r, [['aufnahmeStart'], [], ['freihand'], [], [], ['senden'], []]);
+  assert.deepEqual(r, [['aufnahmeStart'], [], ['freihand', 'gehalten'], [], [], ['senden'], []]);
   assert.equal(t.zustand, 'ruhe');
 });
 
@@ -33,13 +33,13 @@ test('right Ctrl as part of a shortcut is dropped silently', () => {
 test('Esc cancels while holding and hands-free', () => {
   const t = diktatTaste();
   assert.deepEqual(ab(t, [['diktatRunter', 0], ['esc', 1500]]), [['aufnahmeStart'], ['abbrechen']]);
-  assert.deepEqual(ab(t, [['diktatRunter', 0], ['diktatHoch', 50], ['diktatRunter', 150], ['esc', 3000]]), [['aufnahmeStart'], [], ['freihand'], ['abbrechen']]);
+  assert.deepEqual(ab(t, [['diktatRunter', 0], ['diktatHoch', 50], ['diktatRunter', 150], ['esc', 3000]]), [['aufnahmeStart'], [], ['freihand', 'gehalten'], ['abbrechen']]);
   assert.deepEqual(ab(t, [['esc', 10]]), [[]]);
 });
 
 test('a recording never runs forever', () => {
   const t = diktatTaste();
-  assert.deepEqual(ab(t, [['diktatRunter', 0], ['takt', MAX_AUFNAHME_MS]]), [['aufnahmeStart'], ['senden']]);
+  assert.deepEqual(ab(t, [['diktatRunter', 0], ['takt', MAX_AUFNAHME_MS]]), [['aufnahmeStart'], ['gehalten', 'senden']]);
   // still holding the key: its release must not start anything
   assert.deepEqual(ab(t, [['diktatHoch', MAX_AUFNAHME_MS + 10]]), [[]]);
   assert.equal(t.zustand, 'ruhe');
@@ -100,7 +100,7 @@ test('dictation errors in German', () => {
 
 test('the pill buttons: dictate hands-free, finish', () => {
   const t = diktatTaste();
-  assert.deepEqual(t.freihand(0), ['aufnahmeStart', 'freihand']);
+  assert.deepEqual(t.freihand(0), ['aufnahmeStart', 'freihand', 'gehalten']);
   assert.deepEqual(t.freihand(10), []);
   assert.deepEqual(t.ereignis({ art: 'andere', zeit: 500 }), []);
   assert.deepEqual(t.fertig(), ['senden']);
@@ -501,5 +501,66 @@ test('a dragged spot counts only on the set-up it was dragged on; elsewhere the 
     assert.equal(weg.art, 'fehler');
     assert.match(weg.text, /Sitzungen/);
     assert.equal(notizErgebnis('m1', undefined).art, 'fehler');
+  });
+}
+
+// ---- Live-Text (Plan live-text, Stufe 1) ----
+{
+  const { diktatTaste: taste, liveWeg, liveZeile, liveStabil, liveErgebnis, HALTEN_MIN_MS: H } = require('./regeln');
+  test('gehalten: erst nach 0,28 s Halten, einmal; ein Kürzel-Tipp bekommt es nie', () => {
+    const k = taste();
+    assert.deepEqual(k.ereignis({ art: 'diktatRunter', zeit: 0 }), ['aufnahmeStart']);
+    assert.deepEqual(k.ereignis({ art: 'takt', zeit: H - 1 }), []);
+    assert.deepEqual(k.ereignis({ art: 'takt', zeit: H }), ['gehalten']);
+    assert.deepEqual(k.ereignis({ art: 'takt', zeit: H + 100 }), []);
+    assert.deepEqual(k.ereignis({ art: 'diktatHoch', zeit: H + 200 }), ['senden']);
+    const kuerzel = taste();
+    kuerzel.ereignis({ art: 'diktatRunter', zeit: 0 });
+    assert.deepEqual(kuerzel.ereignis({ art: 'takt', zeit: 100 }), []);
+    assert.deepEqual(kuerzel.ereignis({ art: 'andere', zeit: 150 }), ['verwerfen']);
+    assert.deepEqual(kuerzel.ereignis({ art: 'takt', zeit: 400 }), []);
+  });
+  test('gehalten: zweimal tippen (freihändig) gibt es einmal, die nächste Aufnahme wieder', () => {
+    const k = taste();
+    k.ereignis({ art: 'diktatRunter', zeit: 0 }); k.ereignis({ art: 'diktatHoch', zeit: 60 });
+    assert.deepEqual(k.ereignis({ art: 'diktatRunter', zeit: 150 }), ['freihand', 'gehalten']);
+    assert.deepEqual(k.ereignis({ art: 'takt', zeit: 2000 }), []);
+    assert.deepEqual(k.ereignis({ art: 'diktatRunter', zeit: 3000 }), ['senden']);
+    k.ereignis({ art: 'diktatHoch', zeit: 3050 });
+    k.ereignis({ art: 'diktatRunter', zeit: 5000 });
+    assert.deepEqual(k.ereignis({ art: 'takt', zeit: 5000 + H }), ['gehalten']);
+  });
+  test('liveWeg: nur mit realtime vom Server, «auf diesem PC» aus, nie für eine Notiz', () => {
+    assert.equal(liveWeg({ realtime: true, lokalDiktat: false }), 'scribe');
+    assert.equal(liveWeg({ realtime: true, lokalDiktat: false, zweck: 'diktat' }), 'scribe');
+    assert.equal(liveWeg({ realtime: true, lokalDiktat: true }), null);
+    assert.equal(liveWeg({ realtime: true }), null, 'lokalDiktat fehlt = Standard an');
+    assert.equal(liveWeg({ realtime: false, lokalDiktat: false }), null);
+    assert.equal(liveWeg({ realtime: 'true', lokalDiktat: false }), null);
+    assert.equal(liveWeg({ realtime: true, lokalDiktat: false, zweck: 'notiz' }), null);
+    assert.equal(liveWeg(), null);
+  });
+  test('liveZeile: Ende des Texts, an einem Wort geschnitten, höchstens 64 Zeichen', () => {
+    assert.equal(liveZeile('  Hallo   Welt '), 'Hallo Welt');
+    const lang = 'Ich schicke dir die Offerte heute noch und rufe dich morgen früh an wegen dem Termin';
+    const z = liveZeile(lang);
+    assert.ok(z.length <= 64, z);
+    assert.ok(z.startsWith('… '));
+    assert.ok(lang.endsWith(z.slice(2)));
+    assert.ok(lang.includes(` ${z.slice(2)}`), 'beginnt an einer Wortgrenze');
+    assert.equal(liveZeile(''), '');
+  });
+  test('liveStabil: gemeinsamer Anfang bis zur Wortgrenze bleibt, nur das Ende ist neu', () => {
+    assert.deepEqual(liveStabil('Ich schicke', 'Ich schicke dir'), { stabil: 'Ich schicke', neu: ' dir' });
+    assert.deepEqual(liveStabil('Ich schick', 'Ich schicke dir'), { stabil: 'Ich ', neu: 'schicke dir' });
+    assert.deepEqual(liveStabil('', 'Hallo'), { stabil: '', neu: 'Hallo' });
+    assert.deepEqual(liveStabil('Hallo', 'Hallo'), { stabil: 'Hallo', neu: '' });
+  });
+  test('liveErgebnis: Schlusstext nimmt, leer nur bei stiller Aufnahme, sonst der heutige Weg', () => {
+    assert.deepEqual(liveErgebnis({ text: ' Offerte heute ', peak: 0.2 }), { text: 'Offerte heute' });
+    assert.deepEqual(liveErgebnis({ text: '', peak: 0.001 }), { text: '' });
+    assert.equal(liveErgebnis({ text: '', peak: 0.2 }), null);
+    assert.equal(liveErgebnis({ text: null, peak: 0.2 }), null);
+    assert.equal(liveErgebnis({ peak: 0.001 }), null, 'kein Schlusstext = heutiger Weg');
   });
 }

@@ -26,8 +26,13 @@ function diktatTaste() {
   let seit = 0;
   let tippBis = 0;
   let aufnahmeSeit = 0;
+  let gehalten = false; // 'gehalten' given for this take (live text: only now a token is fetched)
 
-  /** One input event → the actions for insel.js: aufnahmeStart | zeigen | senden | verwerfen | abbrechen. */
+  /**
+   * One input event → the actions for insel.js: aufnahmeStart | freihand | gehalten | senden | verwerfen | abbrechen.
+   * 'gehalten' comes once per take, as soon as it is a real dictation: the key held ≥ HALTEN_MIN_MS (from `takt`), or
+   * hands-free started. A shortcut tap (Ctrl+C) never gets it — live text fetches its token only on 'gehalten'.
+   */
   function ereignis(e) {
     const t = e.zeit;
     switch (e.art) {
@@ -36,11 +41,14 @@ function diktatTaste() {
           zustand = 'gedrueckt';
           seit = t;
           aufnahmeSeit = t;
+          gehalten = false;
           return ['aufnahmeStart'];
         }
         if (zustand === 'tipp') {
           zustand = 'freihand';
-          return ['freihand'];
+          if (gehalten) return ['freihand'];
+          gehalten = true;
+          return ['freihand', 'gehalten'];
         }
         if (zustand === 'freihand') {
           zustand = 'ende';
@@ -81,11 +89,13 @@ function diktatTaste() {
           zustand = 'ruhe';
           return ['verwerfen'];
         }
+        const aus = [];
+        if (zustand === 'gedrueckt' && !gehalten && t - seit >= HALTEN_MIN_MS) { gehalten = true; aus.push('gehalten'); }
         if ((zustand === 'gedrueckt' || zustand === 'freihand') && t - aufnahmeSeit >= MAX_AUFNAHME_MS) {
           zustand = zustand === 'gedrueckt' ? 'ende' : 'ruhe';
-          return ['senden'];
+          aus.push('senden');
         }
-        return [];
+        return aus;
       }
       default:
         return [];
@@ -97,7 +107,8 @@ function diktatTaste() {
     if (zustand !== 'ruhe') return [];
     zustand = 'freihand';
     aufnahmeSeit = t;
-    return ['aufnahmeStart', 'freihand'];
+    gehalten = true;
+    return ['aufnahmeStart', 'freihand', 'gehalten'];
   }
 
   /** The pill's ✓: finish now (the key is not held). */
@@ -571,6 +582,68 @@ function notizErgebnis(id, fertig) {
   return { id, text: 'Notiz gespeichert, aber noch nicht verarbeitet. Bitte in SME unter Sitzungen öffnen.', art: 'fehler' };
 }
 
+// ---- live text while dictating (Plan docs/plans/2026-11-25-live-text.md, Stufe 1) ----
+
+/**
+ * Which live way a dictation takes: 'scribe' only when the server says so (`/api/voice/status` realtime — the server
+ * gives it only for «Standard») and «Diktat auf diesem PC» is off (who chose «on this PC» does not want the sound in
+ * the cloud, even while the model is missing). A note («Notiz an mich») never goes live. Else null = today's way.
+ * The server checks again on every token (403 for every other KI-Option); this is only the first door. Rein.
+ */
+function liveWeg({ realtime, lokalDiktat, zweck } = {}) {
+  if (realtime !== true) return null;
+  if (lokalDiktat !== false) return null;
+  if (zweck && zweck !== 'diktat') return null;
+  return 'scribe';
+}
+
+/** How long the island waits for the final text after the commit before it takes today's way (measured 0.2 s). */
+const LIVE_SCHLUSS_MS = 800;
+/** At most this much sound waits in main for the socket (16 kHz PCM, 32 KB/s); then the live way gives up. */
+const LIVE_SCHLANGE_BYTES = 10 * 32000;
+/** The live line shows at most this many characters (one line in the pill). */
+const LIVE_ZEICHEN = 64;
+
+/**
+ * The line the pill shows while the person speaks: the end of what was heard, cut at a word so the line never starts
+ * in the middle of a word, with «…» in front when something was cut. Whitespace collapsed. Rein.
+ */
+function liveZeile(text, max = LIVE_ZEICHEN) {
+  const t = String(text || '').replace(/\s+/g, ' ').trim();
+  if (t.length <= max) return t;
+  const ende = t.slice(t.length - (max - 2));
+  const leer = ende.indexOf(' ');
+  return `… ${leer >= 0 && leer < ende.length - 1 ? ende.slice(leer + 1) : ende}`;
+}
+
+/**
+ * How a new partial text relates to the shown one, so the pill keeps the stable start still and only lets the new
+ * end fade in (no jumping): the longest common start, cut back to a word boundary. Rein.
+ */
+function liveStabil(alt, neu) {
+  const a = String(alt || '');
+  const b = String(neu || '');
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  if (i < b.length && i > 0 && b[i - 1] !== ' ' && b[i] !== ' ') {
+    const w = b.lastIndexOf(' ', i - 1);
+    i = w >= 0 ? w + 1 : 0;
+  }
+  return { stabil: b.slice(0, i), neu: b.slice(i) };
+}
+
+/**
+ * After the commit: which text goes in. The live final text when it came and is not empty; an empty final text only
+ * when the take was silent (peak < 0.004, like the pill's own rule). Else null → today's way (/api/voice/transcribe
+ * or the model on this PC) with the recording that stayed on this PC. Rein.
+ */
+function liveErgebnis({ text, peak } = {}) {
+  const t = typeof text === 'string' ? text.trim() : '';
+  if (t) return { text: t };
+  if (typeof text === 'string' && Number.isFinite(peak) && peak < 0.004) return { text: '' };
+  return null;
+}
+
 /** A multipart/form-data body with several fields: { name, wert } or { name, datei, mime, bytes } (Notiz an mich). */
 function formular(felder) {
   const grenze = `----spaceinsel${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
@@ -600,7 +673,7 @@ function diktatFehler(status, antwort) {
 
 return {
   HALTEN_MIN_MS, DOPPEL_MS, MAX_AUFNAHME_MS,
-  diktatTaste, inselRahmen, pillenRahmen, imRechteck, weckStreifen, inselLage, terminFuerInsel, fertigFuerInsel, TERMIN_VORLAUF_MIN, BOT_FARBEN, multipart, formular, notizErgebnis, diktatFehler, aufraeumen, TASTEN, einstellungPruefen, tasteVon, LETZTES_MS, letztesDiktatGueltig, ZIEH_SCHWELLE, inselZiehen, inselAnteil, inselAufbau, inselAnteilFuer,
+  diktatTaste, inselRahmen, pillenRahmen, imRechteck, weckStreifen, inselLage, terminFuerInsel, fertigFuerInsel, TERMIN_VORLAUF_MIN, BOT_FARBEN, multipart, formular, notizErgebnis, liveWeg, liveZeile, liveStabil, liveErgebnis, LIVE_SCHLUSS_MS, LIVE_SCHLANGE_BYTES, LIVE_ZEICHEN, diktatFehler, aufraeumen, TASTEN, einstellungPruefen, tasteVon, LETZTES_MS, letztesDiktatGueltig, ZIEH_SCHWELLE, inselZiehen, inselAnteil, inselAufbau, inselAnteilFuer,
   GROESSEN, groesseFaktor, AUSSEHEN, aussehenWirksam, lageFuerInsel, freigabenAbfragen, mikrofonPruefen,
   // the pet
   DOESEN_MS, SCHLAFEN_MS, REAKTION_PAUSE_MS, WURF_MS, LEVEL_STUFEN, ECKE_RAND, TASKLEISTE_DIP,

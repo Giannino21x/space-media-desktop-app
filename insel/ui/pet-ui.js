@@ -68,6 +68,10 @@
 
   // ---- the dictation pill ----
 
+  // live text above the pill (live-zeile.js, shared with the pill window)
+  const liveZeile = window.SpaceLiveZeile.erstellen({ zeile: $('live-zeile'), stabil: $('lz-stabil'), neu: $('lz-neu'),
+    schrift: '500 13px "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif', rand: 28, beiAenderung: () => layout() });
+
   function pilleLook(look, extra) {
     const e = extra || {};
     pille.dataset.look = look;
@@ -80,6 +84,7 @@
     uhr('meldung', null);
     if (look === 'meldung') uhr('meldung', MELDUNG_MS[e.art] || MELDUNG_MS.info, () => { if (pille.dataset.look === 'meldung') pilleLook('aus'); });
     if (look === 'aus') { z.ziel.fill(0); }
+    if (look === 'aus' || look === 'meldung') liveZeile.leeren();
     punkteStarten();
     layout();
     flaechenMelden();
@@ -131,6 +136,11 @@
     const platz = window.screenX + links >= window.screen.availLeft;
     tipp.style.left = `${Math.round(platz ? links : Math.min(W - tb - 4, Math.max(4, figur.x + figur.width / 2 - tb / 2)))}px`;
     tipp.style.top = `${Math.round(platz ? figur.y + figur.height / 2 - 14 : Math.max(4, figur.y - 36))}px`;
+    // the live line: right edge on the pill's, above it, never wider than the room left of the figure
+    const lz = $('live-zeile');
+    lz.style.right = pille.style.right;
+    lz.style.top = `${Math.round(figur.y + figur.height / 2 - 17 - 36)}px`;
+    lz.style.maxWidth = `${Math.max(120, Math.round(figur.x - 14))}px`;
     menue.style.right = `${Math.round(W - figur.x + 8)}px`;
     menue.style.bottom = `${MENUE_UNTEN}px`;
   }
@@ -282,6 +292,7 @@
     else pilleLook('aus');
   });
 
+  if (api.onPetLive) api.onPetLive((d) => { if (d && z.diktat !== 'aus') liveZeile.zeigen(d.text); });
   api.onPetPegel((p) => {
     if (!p) return;
     kopf.pegel(Math.min(1, Math.max(0, Number(p.mittel) || 0)));
@@ -315,5 +326,5 @@
       onPetZustand: leer, onPetDiktat: leer, onPetPegel: leer, onPetZeiger: leer, onPetBlick: leer, onPetEcke: leer, onPetAussenKlick: leer, onPetReaktion: leer, onPetWurf: leer, onPetFokusWeg: leer,
     };
   }
-  if (!window.spaceInsel) window.petDemo = { z, kopf, pilleLook, stups, menueOeffnen };
+  if (!window.spaceInsel) window.petDemo = { z, kopf, pilleLook, stups, menueOeffnen, live: (t) => liveZeile.zeigen(t) };
 })();
