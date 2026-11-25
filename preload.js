@@ -14,6 +14,50 @@ if (process.platform === 'win32') {
   });
 }
 
+// Sound of the page (Giannino, 25.11.2026): notifications come as a silent toast, and main.js mutes the page while the
+// window is not in front (ton.js) — except while a recording holds the microphone, which the page reports here.
+// Runs in the page's world before its scripts. Self-contained: ton.test.js runs it against a fake page.
+// <seite-still>
+function seiteStill(w) {
+  w = w || window;
+  const still = (opts) => Object.assign({}, opts || {}, { silent: true });
+  if (typeof w.Notification === 'function') {
+    w.Notification = new Proxy(w.Notification, {
+      construct: (Ziel, args, neu) => Reflect.construct(Ziel, [args[0], still(args[1])], neu),
+    });
+  }
+  const reg = w.ServiceWorkerRegistration && w.ServiceWorkerRegistration.prototype;
+  if (reg && typeof reg.showNotification === 'function') {
+    const zeigen = reg.showNotification;
+    reg.showNotification = function (titel, opts) { return zeigen.call(this, titel, still(opts)); };
+  }
+  const md = w.navigator && w.navigator.mediaDevices;
+  if (md && typeof md.getUserMedia === 'function') {
+    const offen = new Set();
+    // the event's name carries the state: a detail object does not cross from the page's world to the preload's
+    const melden = () => w.dispatchEvent(new w.Event(offen.size ? 'space-aufnahme-an' : 'space-aufnahme-aus'));
+    const holen = md.getUserMedia.bind(md);
+    md.getUserMedia = async (vorgabe) => {
+      const strom = await holen(vorgabe);
+      for (const spur of strom.getAudioTracks()) {
+        if (spur.readyState === 'ended') continue;
+        offen.add(spur);
+        const weg = () => { if (offen.delete(spur)) melden(); };
+        spur.addEventListener('ended', weg);
+        const stoppen = spur.stop.bind(spur);
+        spur.stop = () => { stoppen(); weg(); };
+      }
+      melden();
+      return strom;
+    };
+  }
+}
+// </seite-still>
+contextBridge.executeInMainWorld({ func: seiteStill });
+window.addEventListener('space-aufnahme-an', () => ipcRenderer.send('seite-aufnahme', true));
+window.addEventListener('space-aufnahme-aus', () => ipcRenderer.send('seite-aufnahme', false));
+
+
 // Expose restart function for auto-updater banner. With contextIsolation the
 // preload's `window` is not the page's `window`, so the banner (injected via
 // executeJavaScript into the main world) can only see it through contextBridge.
