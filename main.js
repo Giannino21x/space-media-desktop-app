@@ -222,12 +222,15 @@ function hintergrundHinweis() {
 
 // ---- «Nach Update suchen» (tray) ----
 let updateBereit = null; // the version electron-updater has downloaded (update-downloaded)
+let updateToast = null;   // kept alive: Windows may collect a local Notification, then its click does nothing
 function updateMeldung(art, neu) {
   if (!Notification.isSupported()) return;
   const { titel, text } = updateText({ art, version: app.getVersion(), neu });
   const n = new Notification({ title: titel, body: text, icon: path.join(__dirname, 'assets', 'icon.png'), silent: true });
   // a downloaded update: the click restarts and installs (like the banner in the window)
   if (art === 'bereit') n.on('click', () => { beenden = true; setImmediate(() => autoUpdater.quitAndInstall(false, true)); });
+  n.on('close', () => { if (updateToast === n) updateToast = null; });
+  updateToast = n;
   n.show();
 }
 async function updateSuchen() {
@@ -562,7 +565,7 @@ autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = true;
 
 autoUpdater.on('update-downloaded', (info) => {
-  updateBereit = info && info.version ? info.version : true;
+  updateBereit = info && info.version ? info.version : 'neue';
   // Silently install on next quit, or notify user
   if (mainWindow) {
     mainWindow.webContents.executeJavaScript(`
