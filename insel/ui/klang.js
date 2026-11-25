@@ -1,5 +1,11 @@
 // Sounds of the island — synthesised on the fly with Web Audio (no sound files): short, soft, low volume.
 // Classic script → window.SpaceKlang.spielen(name); SpaceKlang.an = false mutes.
+//
+// Only as the answer to a click or key of the person on the island (open it, poke the face, approve, send a mail,
+// dictation key). Never for what happens without them: a run that finished, a new approval, the pointer touching the
+// strip at the top edge, a hover on the face, the island folding by itself (25.11.2026, Giannino: the sound «der immer
+// kam, auch wenn die App nicht offen war»; the island runs while the app window sits in the tray). The face, the glow
+// and the card show those. Guard: insel/ruhig.test.js.
 
 (function () {
   let ctx = null;
