@@ -117,9 +117,8 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
   (Pflicht für beide Stores). Details in `DEPLOY_TO_SPACE_MEDIA.md`.
 - `dist/`, `downloads/` und `node_modules/` gehören nicht in Commits.
 - **Insel (insel/, seit 27.10.2026, nur Windows):** zwei transparente, nie fokussierte Fenster (`focusable: false`,
-  `type: 'toolbar'`, `alwaysOnTop 'screen-saver'`). Insel oben Mitte: versteckt ein 240×6-Streifen, der die Maus nimmt
-  (Windows hält Fenster ≥ ~38 px hoch → der Streifen hängt über den Rand, nur 6 px sichtbar; `streifenSetzen`), sichtbar ein
-  720×320-Panel; Durchklicken entscheidet der 16-ms-Cursor-Poll im Main im selben Takt (nie im Renderer per IPC — verliert
+  `type: 'toolbar'`, `alwaysOnTop 'screen-saver'`). Insel oben (Mitte, seit 25.11.2026 seitlich ziehbar, `inselX`): versteckt ein 300×10-Streifen,
+  der die Maus nimmt (Windows hält Fenster ≥ ~38 px hoch; `streifenSetzen`), sichtbar ein 720×400-Panel (× Grösse); Durchklicken entscheidet der 16-ms-Cursor-Poll im Main im selben Takt (nie im Renderer per IPC — verliert
   Klicks), Rand 14 px; solange die linke Taste im Panel gedrückt ist, nimmt es die Maus (sonst findet ein Explorer-Drag kein
   Ziel). Pille unten Mitte über der Taskleiste (520×170, Ruhe 44×8). Diktat: `uiohook-napi` (N-API-Prebuilds, deshalb
   `npmRebuild: false` — electron-builder kennt die ABI von Electron 44 nicht), rechte Strg halten ≥ 0,28 s / zweimal tippen
@@ -130,11 +129,23 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
   5 Min., `/api/runs/laufend` alle 20 s (offen 6 s), `/api/approvals` nur bei offenen Freigaben. Abgelegte Datei → «Im Chat
   fragen» legt sie in main.js bereit, das App-Fenster holt sie einmal über `window.spaceInselDatei.nehmen()` (Web:
   `desktopDateiNehmen` in `lib/insel/ablage.ts`, Ereignis `insel:datei`). Infobereich: Gesicht (`assets/tray.ico`, bernstein
-  `tray-wartet.ico` bei Freigaben), Menü «Insel oben anzeigen» / «Diktieren mit Strg rechts». Einstellungen in
+  `tray-wartet.ico` bei Freigaben, aus `freigabenZahl`), Menü «Insel oben anzeigen» / «SPACE Pet anzeigen» / «Mit Windows starten». Einstellungen in
   `<userData>/insel.json` (pro Rechner); die App ändert sie unter Einstellungen → Bot → Insel über `window.spaceInselApp`
-  v3 (`einstellungen()`, `setzen()`, `beobachten()` — `an`, `diktat`, `toene`, `hoverOeffnen`, seit v3 `pet` (bool, `setzen('pet', true)`
-  holt ein verstecktes Pet zurück) und `petName` (String, `setzen('petName', 'Pixel')`); Web: `lib/insel/desktop.ts`),
-  Änderungen auf der Insel oder im Infobereich meldet main.js dem App-Fenster sofort.
+  v5 (`einstellungen()`, `setzen()`, `beobachten()` — `an`, `diktat`, `toene`, `hoverOeffnen` (seit 1.0.16 ohne Wirkung, nur noch
+  angenommen), seit v3 `pet` (bool, `setzen('pet', true)` holt ein verstecktes Pet zurück) und `petName` (String), v4 `lokalDiktat`,
+  v5 `taste` ('strgRechts' | 'aus', gespeichert als `diktat`); Web: `lib/insel/desktop.ts`), Änderungen auf der Insel oder im
+  Infobereich meldet main.js dem App-Fenster sofort. Jede Änderung (Blatt, Infobereich, App) geht durch `einstellungPruefen`
+  in `regeln.js`.
+- **Blatt «Anpassen» an der Insel (seit 25.11.2026, Plan `docs/plans/2026-11-25-insel-diktat.md`):** Rechtsklick auf Insel oder
+  Pille, «Einstellungen…» im Pet-Menü. Zwei Gruppen: «Diktat» (Letztes Diktat einfügen — 10 Min. nur im Speicher, nur der
+  Titel; Taste Strg rechts · Aus; Mikrofon Standard oder Gerät; Eigene Wörter = Firmen-Wörterbuch, nur ansehen und
+  dazufügen; Diktat auf diesem PC) und «Insel» (Grösse klein/normal/gross per CSS-`zoom` nur in insel.html und nur bei
+  offenem Panel — `setZoomFactor` gälte für alle Insel-Fenster derselben Session; Aussehen wie SME/hell/dunkel: preload meldet
+  `data-theme` der App-Seite per `app:aussehen`, nur `dark`/`liquid-glass`, sonst Windows; Farben nur über Tokens
+  `rgb(var(--ueber) / a)`; Zeigt Pet · Laufende Arbeit · Freigaben — gefiltert nur die Kopie für die Fenster,
+  `lageFuerInsel`). Jede Zeile wirkt sofort, «Standard» nur an abweichenden Einstellungen. «Beim Darüberfahren öffnen» ist
+  weg (Entscheid Chief 25.11.2026). Füllwörter («äh», «ähm», «öhm», «hm») fallen aus jedem Diktat (`aufraeumen`, 1:1 wie
+  `src/lib/voice/fuellwoerter.ts` im Web-Repo — beide zusammen ändern).
 - **SPACE Pet (insel/pet.js, seit 30.10.2026, nur Windows, Standard an; seit 05.11.2026 der Kopf der Insel, Giannino: «so ein
   kopf von der insel … ähnlich wie bei aqua, nicht das jetzige pet»):** nur der Helm mit den LED-Augen unten rechts über der
   Taskleiste, kein ganzer Körper — kompakt wie der «Droplet» von Aqua Voice (aquavoice.com/pet), Helm, Farben und Bewegung sind
