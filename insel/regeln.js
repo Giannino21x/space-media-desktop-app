@@ -431,6 +431,8 @@ function einstellungPruefen(schluessel, wert) {
   if (schluessel === 'taste') return TASTEN.includes(wert) ? { diktat: wert !== 'aus' } : null;
   if (schluessel === 'inselGroesse') return Object.prototype.hasOwnProperty.call(GROESSEN, wert) ? { inselGroesse: wert } : null;
   if (schluessel === 'inselAussehen') return AUSSEHEN.includes(wert) ? { inselAussehen: wert } : null;
+  // «Zurück in die Mitte»: only null may come from a window; the dragged spot is set by main's drag alone
+  if (schluessel === 'inselLage') return wert === null ? { inselLage: null } : null;
   if (schluessel === 'mikrofon') { const m = mikrofonPruefen(wert); return m === undefined ? null : { mikrofon: m }; }
   if (!SCHALTER_EINSTELLUNGEN.includes(schluessel)) return null;
   const patch = { [schluessel]: !!wert };
@@ -455,6 +457,19 @@ function inselZiehen(start, zeiger, bounds, breite) {
   const dx = zeiger.x - start.zeigerX;
   if (!start.gezogen && Math.abs(dx) < ZIEH_SCHWELLE) return null;
   return Math.round(Math.min(bounds.x + bounds.width - breite, Math.max(bounds.x, start.fensterX + dx)));
+}
+/**
+ * The screen set-up the island sits on (primary display: size in DIP and scaling). A dragged spot belongs to one set-up;
+ * on another monitor or resolution the island is back in the middle.
+ */
+function inselAufbau(display) {
+  const b = (display && display.bounds) || {};
+  return `${b.width}x${b.height}@${display && display.scaleFactor}`;
+}
+/** Where the island's centre sits (0–1 of the width): the dragged spot of this set-up, else the middle. */
+function inselAnteilFuer(lage, aufbau) {
+  if (!lage || lage.aufbau !== aufbau || !Number.isFinite(lage.x) || lage.x < 0 || lage.x > 1) return 0.5;
+  return lage.x;
 }
 /** The share (0–1) along the screen width that inselRahmen puts the island's centre at. */
 function inselAnteil(fensterX, bounds, breite) {
@@ -522,7 +537,7 @@ function diktatFehler(status, antwort) {
 
 return {
   HALTEN_MIN_MS, DOPPEL_MS, MAX_AUFNAHME_MS,
-  diktatTaste, inselRahmen, pillenRahmen, imRechteck, weckStreifen, inselLage, BOT_FARBEN, multipart, diktatFehler, aufraeumen, TASTEN, einstellungPruefen, tasteVon, LETZTES_MS, letztesDiktatGueltig, ZIEH_SCHWELLE, inselZiehen, inselAnteil,
+  diktatTaste, inselRahmen, pillenRahmen, imRechteck, weckStreifen, inselLage, BOT_FARBEN, multipart, diktatFehler, aufraeumen, TASTEN, einstellungPruefen, tasteVon, LETZTES_MS, letztesDiktatGueltig, ZIEH_SCHWELLE, inselZiehen, inselAnteil, inselAufbau, inselAnteilFuer,
   GROESSEN, groesseFaktor, AUSSEHEN, aussehenWirksam, lageFuerInsel, freigabenAbfragen, mikrofonPruefen,
   // the pet
   DOESEN_MS, SCHLAFEN_MS, REAKTION_PAUSE_MS, WURF_MS, LEVEL_STUFEN, ECKE_RAND, TASKLEISTE_DIP,

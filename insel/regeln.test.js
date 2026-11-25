@@ -406,3 +406,46 @@ test('microphone: a device with id and name, or the default; Windows pseudo devi
   assert.equal(einstellungPruefen('inselGroesse', 'toString'), null);
   assert.deepEqual(einstellungPruefen('zeigtFreigaben', false), { zeigtFreigaben: false });
 });
+
+// ---- the island's place: the middle of its screen unless dragged on this very set-up (Fund 25.11.2026, 5120×1440) ----
+const { inselAufbau, inselAnteilFuer } = require('./regeln');
+
+test('default: the middle of the screen, any resolution and scaling (bounds are DIP)', () => {
+  const bildschirme = [
+    { name: '5120×1440 @125 %', bounds: { x: 0, y: 0, width: 4096, height: 1152 }, scaleFactor: 1.25 },
+    { name: '5120×1440 @100 %', bounds: { x: 0, y: 0, width: 5120, height: 1440 }, scaleFactor: 1 },
+    { name: '2560×1440 @100 %', bounds: { x: 0, y: 0, width: 2560, height: 1440 }, scaleFactor: 1 },
+    { name: '1920×1080 @100 %', bounds: { x: 0, y: 0, width: 1920, height: 1080 }, scaleFactor: 1 },
+    { name: '1920×1080 @150 %', bounds: { x: 0, y: 0, width: 1280, height: 720 }, scaleFactor: 1.5 },
+    { name: 'second screen right of the first', bounds: { x: 1920, y: 0, width: 2560, height: 1440 }, scaleFactor: 1 },
+    { name: 'screen left of the first (negative x)', bounds: { x: -2560, y: 0, width: 2560, height: 1440 }, scaleFactor: 1 },
+  ];
+  for (const d of bildschirme) {
+    const a = inselAnteilFuer(null, inselAufbau(d));
+    for (const breite of [720, 864, 612, 300]) {
+      const r = inselRahmen(d.bounds, breite, 400, a);
+      assert.equal(r.x + breite / 2, d.bounds.x + d.bounds.width / 2, `${d.name}, ${breite}`);
+      assert.equal(r.y, d.bounds.y);
+    }
+  }
+});
+
+test('a dragged spot counts only on the set-up it was dragged on; elsewhere the middle', () => {
+  const breit = { bounds: { x: 0, y: 0, width: 4096, height: 1152 }, scaleFactor: 1.25 };
+  const lage = { aufbau: inselAufbau(breit), x: 0.25 };
+  assert.equal(inselAnteilFuer(lage, inselAufbau(breit)), 0.25);
+  assert.equal(inselRahmen(breit.bounds, 720, 400, inselAnteilFuer(lage, inselAufbau(breit))).x, 1024 - 360);
+  // other monitor, other resolution, other scaling: back in the middle
+  for (const d of [
+    { bounds: { x: 0, y: 0, width: 2560, height: 1440 }, scaleFactor: 1 },
+    { bounds: { x: 0, y: 0, width: 4096, height: 1152 }, scaleFactor: 1 },
+    { bounds: { x: 0, y: 0, width: 3413, height: 960 }, scaleFactor: 1.5 },
+  ]) assert.equal(inselAnteilFuer(lage, inselAufbau(d)), 0.5);
+  // nonsense stored values: the middle
+  for (const kaputt of [{ aufbau: lage.aufbau, x: -0.2 }, { aufbau: lage.aufbau, x: 1.5 }, { aufbau: lage.aufbau, x: 'links' }, { x: 0.3 }, 0.04]) {
+    assert.equal(inselAnteilFuer(kaputt, lage.aufbau), 0.5);
+  }
+  // «Zurück in die Mitte» is the only value a window may set
+  assert.deepEqual(einstellungPruefen('inselLage', null), { inselLage: null });
+  assert.equal(einstellungPruefen('inselLage', { aufbau: lage.aufbau, x: 0.1 }), null);
+});

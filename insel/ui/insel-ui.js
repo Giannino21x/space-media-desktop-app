@@ -307,7 +307,11 @@
   function fokusAn(feld) {
     if (!fokus) { fokus = true; api.fokus(true); }
     st.gepinnt = true;
-    setTimeout(() => feld && feld.focus({ preventScroll: true }), 120);
+    // the sheet may have been redrawn meanwhile: the Wörter field is found again, not the old element
+    setTimeout(() => {
+      const ziel = feld && feld.isConnected ? feld : feld && feld.classList.contains('z-feld') ? document.querySelector('.z-feld') : null;
+      if (ziel) ziel.focus({ preventScroll: true });
+    }, 120);
   }
   function fokusAus() {
     if (!fokus) return;
@@ -805,7 +809,7 @@
   /** Rows of the current group (for the panel's height). */
   function blattZeilen() {
     const e = st.einstellungen;
-    if (blattSt.gruppe === 'insel') return 3;
+    if (blattSt.gruppe === 'insel') return 3 + (e.inselVerschoben ? 1 : 0);
     if (blattSt.mikrofonOffen) return 1 + Math.min(5, (blattSt.mikrofone || []).length + 1) * 0.68;
     return 3 + (e.letztesDiktat ? 1 : 0) + (e.lokalBereit ? 1 : 0);
   }
@@ -879,6 +883,12 @@
         { wert: 'hell', inhalt: 'Hell', label: 'Hell' },
         { wert: 'dunkel', inhalt: 'Dunkel', label: 'Dunkel' },
       ], aussehen, (w) => setzen('inselAussehen', w)), aussehen !== 'app' ? () => setzen('inselAussehen', 'app') : null));
+      // where it sits: dragged along the top edge (this screen set-up) or the middle
+      if (e.inselVerschoben) {
+        const mitte = knopf('Zurück in die Mitte', '', () => setzen('inselLage', null));
+        mitte.classList.add('z-knopf');
+        liste.append(zeile('Lage', 'Von dir an den Rand gezogen', mitte, null));
+      }
       const petAn = e.petAktiv !== undefined ? !!e.petAktiv : !!e.pet;
       const zeigt = document.createElement('div');
       zeigt.className = 'e-chips';

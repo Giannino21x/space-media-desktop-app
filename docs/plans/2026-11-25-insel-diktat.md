@@ -154,6 +154,12 @@ S3-Web, S4, S5 und S6 brauchen das Blatt nicht. S2 und S3-Desktop brauchen S1.
   `getPrimaryDisplay()`). Lage `inselX` (Anteil 0–1) in `insel.json`; der versteckte Streifen folgt.
 - Tests: `inselRahmen` mit Anteil (rein).
 
+- Nachtrag 25.11.2026 (Fund Chief, Bildschirm 5120×1440): Standard ist immer die Mitte des Bildschirms der Insel
+  (Hauptbildschirm, DIP, jede Skalierung). Die gezogene Lage gilt nur für den Bildschirm-Aufbau, auf dem gezogen wurde
+  (`inselLage: { aufbau: 'BxH@Skalierung', x }`); anderer Monitor oder andere Auflösung → Mitte. Im Blatt (Gruppe «Insel»)
+  «Zurück in die Mitte», nur wenn verschoben. Tests mit 5120×1440 (100/125 %), 2560×1440, 1920×1080 (100/150 %), zweitem
+  Bildschirm rechts und links.
+
 ### S6 — Messen (vor jeder Änderung am Mikrofon)
 - «Taste bis Pegel» und «Loslassen bis Text» mit eigenem Profil, nur wenn Giannino nicht am Rechner ist, Freigabe Chief.
   Über 200 ms bis Pegel → eigener Vorschlag (nie ein dauernd offenes Mikrofon).

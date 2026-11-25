@@ -117,7 +117,7 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
   (Pflicht für beide Stores). Details in `DEPLOY_TO_SPACE_MEDIA.md`.
 - `dist/`, `downloads/` und `node_modules/` gehören nicht in Commits.
 - **Insel (insel/, seit 27.10.2026, nur Windows):** zwei transparente, nie fokussierte Fenster (`focusable: false`,
-  `type: 'toolbar'`, `alwaysOnTop 'screen-saver'`). Insel oben (Mitte, seit 25.11.2026 seitlich ziehbar, `inselX`): versteckt ein 300×10-Streifen,
+  `type: 'toolbar'`, `alwaysOnTop 'screen-saver'`). Insel oben (Mitte, seit 25.11.2026 seitlich ziehbar, `inselLage` je Bildschirm-Aufbau, sonst Mitte): versteckt ein 300×10-Streifen,
   der die Maus nimmt (Windows hält Fenster ≥ ~38 px hoch; `streifenSetzen`), sichtbar ein 720×400-Panel (× Grösse); Durchklicken entscheidet der 16-ms-Cursor-Poll im Main im selben Takt (nie im Renderer per IPC — verliert
   Klicks), Rand 14 px; solange die linke Taste im Panel gedrückt ist, nimmt es die Maus (sonst findet ein Explorer-Drag kein
   Ziel). Pille unten Mitte über der Taskleiste (520×170, Ruhe 44×8). Diktat: `uiohook-napi` (N-API-Prebuilds, deshalb
