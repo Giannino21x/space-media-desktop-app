@@ -489,3 +489,17 @@ test('a dragged spot counts only on the set-up it was dragged on; elsewhere the 
     assert.ok(text.endsWith(`--${grenze}--${CRLF}`));
   });
 }
+
+{
+  const { notizErgebnis } = require('./regeln');
+  test('notizErgebnis: gespeichert, Text später, oder noch nicht verarbeitet — nie verloren', () => {
+    assert.equal(notizErgebnis('m1', { ok: true, status: 200, daten: { ok: true } }).art, 'info');
+    assert.match(notizErgebnis('m1', { ok: true, status: 200, daten: { ok: true } }).text, /To-dos/);
+    assert.match(notizErgebnis('m1', { ok: true, status: 200, daten: { warning: 'x' } }).text, /später/);
+    assert.match(notizErgebnis('m1', { ok: false, status: 409, daten: null }).text, /später/);
+    const weg = notizErgebnis('m1', { ok: false, status: 0, daten: null });
+    assert.equal(weg.art, 'fehler');
+    assert.match(weg.text, /Sitzungen/);
+    assert.equal(notizErgebnis('m1', undefined).art, 'fehler');
+  });
+}

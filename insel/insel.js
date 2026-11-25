@@ -21,7 +21,7 @@ const fs = require('fs');
 const path = require('path');
 const { BrowserWindow, screen, ipcMain, clipboard, session, nativeTheme } = require('electron');
 const {
-  diktatTaste, inselRahmen, pillenRahmen, imRechteck, inselLage, multipart, formular, diktatFehler, aufraeumen, einstellungPruefen, tasteVon, LETZTES_MS, letztesDiktatGueltig, inselZiehen, inselAnteil, inselAufbau, inselAnteilFuer, groesseFaktor, aussehenWirksam, lageFuerInsel, freigabenAbfragen,
+  diktatTaste, inselRahmen, pillenRahmen, imRechteck, inselLage, multipart, formular, notizErgebnis, diktatFehler, aufraeumen, einstellungPruefen, tasteVon, LETZTES_MS, letztesDiktatGueltig, inselZiehen, inselAnteil, inselAufbau, inselAnteilFuer, groesseFaktor, aussehenWirksam, lageFuerInsel, freigabenAbfragen,
 } = require('./regeln');
 const { diktatWeg } = require('../lokal-regeln');
 const { createPet } = require('./pet');
@@ -416,9 +416,15 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
         const team = profil.ok ? await api('/api/team') : { ok: false };
         // which service turns dictation into text (the person's KI-Option on the server) — shown in the island's settings
         const sprache = profil.ok ? await api('/api/voice/status') : { ok: false };
-        // the appointment to record and the last finished meeting (Plan «Treffen vor Ort», Teil 1 und 3)
-        const jetzt = profil.ok ? await api('/api/m2/steno/jetzt') : { ok: false };
-        stamm = profil.ok ? { profil: profil.daten, team: team.ok ? team.daten : null, sprache: sprache.ok ? sprache.daten : null, jetzt: jetzt.ok ? jetzt.daten : null, zeit: Date.now() } : null;
+        const vorher = stamm && stamm.jetzt;
+        stamm = profil.ok ? { profil: profil.daten, team: team.ok ? team.daten : null, sprache: sprache.ok ? sprache.daten : null, jetzt: vorher || null, zeit: Date.now() } : null;
+        // the appointment to record and the last finished meeting (Plan «Treffen vor Ort», Teil 1 und 3): in the
+        // background — the route asks the calendar (up to 30 s) and must not hold up runs and approvals; the next
+        // round (6 s open, 20 s closed) shows it
+        if (stamm) {
+          const s = stamm;
+          api('/api/m2/steno/jetzt').then((r) => { if (stamm === s) s.jetzt = r.ok ? r.daten : null; }).catch(() => {});
+        }
       }
       if (!stamm) {
         lage = inselLage();
@@ -512,13 +518,19 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
         senden(insel, 'insel:diktat', { zustand: 'aus' });
         pet.diktat('aus');
         aufnahme = null;
+        pilleNachNotiz(400);
         break;
       default:
     }
   }
 
+  // A «Notiz an mich» runs on the same state machine as hands-free dictation, also when the dictation key is off:
+  // ✓, ✕, Esc and the 6-minute limit must end it.
+  const notizLaeuft = () => !!(aufnahme && aufnahme.zweck === 'notiz');
+  const tasteAn = () => einstellungen.diktat || notizLaeuft();
+
   function tasteEreignis(art) {
-    if (!einstellungen.diktat) return;
+    if (!tasteAn()) return;
     for (const a of taste.ereignis({ art, zeit: Date.now() })) diktatAktion(a);
   }
 
@@ -663,8 +675,10 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
 
   /** Eine «Notiz an mich» in der App anlegen (POST /api/meetings, …/audio/upload, …/audio/finalize). Wirft mit deutschem Satz. */
   async function notizAblegen(bytes, mime) {
-    const t = stamm && stamm.jetzt && stamm.jetzt.termin;
-    const termin = t && typeof t.id === 'string' && Date.parse(t.beginn) <= Date.now() && Date.parse(t.ende) > Date.now() ? t : null;
+    // the appointment the note belongs to: running, or ended in the last 2 hours, recorded or not — the same rule as
+    // the app (notizTermin in src/lib/m2/jetzt.ts); the route works it out, the island checks the times again
+    const t = stamm && stamm.jetzt && stamm.jetzt.notizTermin;
+    const termin = t && typeof t.id === 'string' && Date.parse(t.beginn) <= Date.now() && Date.now() - Date.parse(t.ende) <= 2 * 3_600_000 ? t : null;
     const anlegen = await api('/api/meetings', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -675,7 +689,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
         capture_mode: 'diktat',
         source_event_id: termin ? termin.id : null,
       }),
-    });
+    }).catch(() => ({ ok: false, status: 0, daten: null }));
     const id = anlegen.ok && anlegen.daten && anlegen.daten.meeting && anlegen.daten.meeting.id;
     if (!id) throw new Error(anlegen.status === 401 ? 'Bitte zuerst in SME anmelden.' : 'Die Notiz liess sich nicht anlegen.');
     const endung = mime.includes('ogg') ? 'ogg' : mime.includes('mp4') ? 'm4a' : mime.includes('wav') ? 'wav' : 'webm';
@@ -687,32 +701,45 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
       ]);
       const hoch = await api(`/api/meetings/${id}/audio/upload`, { method: 'POST', headers: { 'content-type': typ }, body: koerper });
       if (!hoch.ok) throw new Error('hochladen');
-      const fertig = await api(`/api/meetings/${id}/audio/finalize`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ mime_type: mime, ext: endung, total_chunks: 1, trigger_transcription: true }),
-      });
-      if (!fertig.ok) throw new Error('abschliessen');
     } catch {
-      // the empty note goes again
+      // nothing of the recording reached the server: the empty note goes again
       await api(`/api/meetings/${id}`, { method: 'DELETE' }).catch(() => {});
       throw new Error('Die Notiz liess sich nicht ablegen. Bitte nochmals versuchen.');
     }
-    return id;
+    // The sound is on the server now. A failed or timed-out finish never deletes it (the finish may have run anyway;
+    // 409 = it is running right now): the note stays in «Sitzungen».
+    const fertig = await api(`/api/meetings/${id}/audio/finalize`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ mime_type: mime, ext: endung, total_chunks: 1, trigger_transcription: true }),
+    }).catch(() => ({ ok: false, status: 0, daten: null }));
+    return notizErgebnis(id, fertig);
   }
 
+  let notizAblage = null; // { } while a note goes to the app — no second note meanwhile
   async function notizAblegenMelden(bytes, mime) {
+    const lauf = {};
+    notizAblage = lauf;
     senden(insel, 'insel:diktat', { zustand: 'denkt' });
     pet.diktat('denkt');
+    // a dictation that started meanwhile owns the display: then the note says nothing
+    const frei = () => !aufnahme && !transkription;
     try {
-      await notizAblegen(bytes, mime);
-      senden(insel, 'insel:diktat', { zustand: 'aus' });
-      pet.diktat('meldung', { text: 'Notiz gespeichert · die Zusagen kommen in deine To-dos', art: 'info' });
-      return { ok: true, notiz: true };
+      const r = await notizAblegen(bytes, mime);
+      if (frei()) {
+        senden(insel, 'insel:diktat', { zustand: 'aus' });
+        pet.diktat('meldung', { text: r.text, art: r.art });
+      }
+      return { ok: true, notiz: true, meldung: r.text, art: r.art };
     } catch (err) {
-      senden(insel, 'insel:diktat', { zustand: 'aus' });
-      pet.diktat('fehler', { text: err.message });
+      if (frei()) {
+        senden(insel, 'insel:diktat', { zustand: 'aus' });
+        pet.diktat('fehler', { text: err.message });
+      }
       return { ok: false, meldung: err.message };
+    } finally {
+      if (notizAblage === lauf) notizAblage = null;
+      pilleNachNotiz(2500);
     }
   }
 
@@ -913,14 +940,29 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
    * App abgelegt wird (Plan «Treffen vor Ort», Teil 4). Geht auch, wenn die Diktat-Taste aus ist.
    */
   function notizStarten() {
-    if (aufnahme || transkription) return;
+    if (aufnahme || transkription || notizAblage) return;
     naechsterZweck = 'notiz';
-    for (const a of taste.freihand(Date.now())) diktatAktion(a);
+    try {
+      for (const a of taste.freihand(Date.now())) diktatAktion(a);
+    } finally {
+      naechsterZweck = null; // never left over for the next normal dictation
+    }
+    if (notizLaeuft()) pilleZeigen();
+  }
+  /** The pill is hidden when the dictation key is off; a note shows it while it records. */
+  function pilleZeigen() {
+    if (pille && !pille.isDestroyed() && !pille.isVisible()) pille.showInactive();
+  }
+  function pilleNachNotiz(ms) {
+    setTimeout(() => {
+      if (einstellungen.diktat || aufnahme || notizAblage) return;
+      if (pille && !pille.isDestroyed()) pille.hide();
+    }, ms);
   }
 
   function pillenTaste(was) {
     if (was === 'notiz') { notizStarten(); return; }
-    if (!einstellungen.diktat) return;
+    if (!tasteAn()) return;
     let aktionen = [];
     if (was === 'freihand') aktionen = taste.freihand(Date.now());
     else if (was === 'fertig') aktionen = taste.fertig();
@@ -975,6 +1017,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     if (aufnahme && input && input.id === aufnahme.id) aufnahme = null;
     senden(insel, 'insel:diktat', { zustand: 'aus' });
     pet.diktat('aus');
+    pilleNachNotiz(2500);
   });
   kanal('pille:nochmals', 'pille', () => nochmalsEinfuegen());
   kanal('insel:nochmals', 'insel', () => nochmalsEinfuegen());
@@ -998,7 +1041,8 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     einstellungen = { ...einstellungen, ...patch };
     speichern();
     const keys = Object.keys(patch);
-    if (keys.includes('diktat') && vorher.diktat !== einstellungen.diktat) {
+    // a «Notiz an mich» does not depend on the dictation key: switching the key leaves a running note alone
+    if (keys.includes('diktat') && vorher.diktat !== einstellungen.diktat && !notizLaeuft()) {
       const wert = einstellungen.diktat;
       if (!wert && aufnahme) diktatAktion('abbrechen');
       if (!wert && transkription) transkription.abgebrochen = true;

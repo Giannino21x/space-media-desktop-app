@@ -559,6 +559,18 @@ function multipart(feld, dateiname, mime, bytes) {
   return { typ: `multipart/form-data; boundary=${grenze}`, koerper: Buffer.concat([kopf, Buffer.from(bytes), fuss]) };
 }
 
+/**
+ * What the island says after a «Notiz an mich» reached the server (POST …/audio/finalize answered with `fertig`).
+ * The sound is stored in every case: a warning (transcription did not start) or 409 (a finish is running) means the
+ * text comes later; anything else (timeout, 5xx) leaves it unprocessed in «Sitzungen». Rein.
+ */
+function notizErgebnis(id, fertig) {
+  const f = fertig || {};
+  if (f.ok && !(f.daten && f.daten.warning)) return { id, text: 'Notiz gespeichert · die Zusagen kommen in deine To-dos', art: 'info' };
+  if (f.ok || f.status === 409) return { id, text: 'Notiz gespeichert · der Text kommt etwas später', art: 'info' };
+  return { id, text: 'Notiz gespeichert, aber noch nicht verarbeitet. Bitte in SME unter Sitzungen öffnen.', art: 'fehler' };
+}
+
 /** A multipart/form-data body with several fields: { name, wert } or { name, datei, mime, bytes } (Notiz an mich). */
 function formular(felder) {
   const grenze = `----spaceinsel${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
@@ -588,7 +600,7 @@ function diktatFehler(status, antwort) {
 
 return {
   HALTEN_MIN_MS, DOPPEL_MS, MAX_AUFNAHME_MS,
-  diktatTaste, inselRahmen, pillenRahmen, imRechteck, weckStreifen, inselLage, terminFuerInsel, fertigFuerInsel, TERMIN_VORLAUF_MIN, BOT_FARBEN, multipart, formular, diktatFehler, aufraeumen, TASTEN, einstellungPruefen, tasteVon, LETZTES_MS, letztesDiktatGueltig, ZIEH_SCHWELLE, inselZiehen, inselAnteil, inselAufbau, inselAnteilFuer,
+  diktatTaste, inselRahmen, pillenRahmen, imRechteck, weckStreifen, inselLage, terminFuerInsel, fertigFuerInsel, TERMIN_VORLAUF_MIN, BOT_FARBEN, multipart, formular, notizErgebnis, diktatFehler, aufraeumen, TASTEN, einstellungPruefen, tasteVon, LETZTES_MS, letztesDiktatGueltig, ZIEH_SCHWELLE, inselZiehen, inselAnteil, inselAufbau, inselAnteilFuer,
   GROESSEN, groesseFaktor, AUSSEHEN, aussehenWirksam, lageFuerInsel, freigabenAbfragen, mikrofonPruefen,
   // the pet
   DOESEN_MS, SCHLAFEN_MS, REAKTION_PAUSE_MS, WURF_MS, LEVEL_STUFEN, ECKE_RAND, TASKLEISTE_DIP,

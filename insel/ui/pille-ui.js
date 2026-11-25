@@ -218,7 +218,7 @@
       }
       const r = await api.audio(a.id, mime, daten);
       if (r && r.ok) {
-        if (r.notiz) meldung('Notiz gespeichert', 'info', 2200);
+        if (r.notiz) meldung(r.art === 'fehler' ? r.meldung : 'Notiz gespeichert', r.art === 'fehler' ? 'fehler' : 'info', r.art === 'fehler' ? 4000 : 2200);
         else if (r.kopiert) meldung('Kopiert · Strg+V zum Einfügen', 'info', 1800);
         else { gesicht.fertig(); look(st.hover ? 'werkzeug' : 'ruhe'); }
       } else if (r && r.still) {

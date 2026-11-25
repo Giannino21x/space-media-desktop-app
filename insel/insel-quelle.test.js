@@ -36,5 +36,27 @@ test('Notiz an mich: der Ton wird abgelegt, nie eingefügt; startet auch ohne Di
   assert.ok(notiz > 0, 'Notiz-Zweig fehlt');
   assert.ok(notiz < audio.indexOf('einfuegen('), 'die Notiz muss vor dem Einfügen abbiegen');
   const taste = quelle.slice(quelle.indexOf('function pillenTaste('));
-  assert.ok(taste.indexOf("if (was === 'notiz')") < taste.indexOf('if (!einstellungen.diktat) return;'));
+  assert.ok(taste.indexOf("if (was === 'notiz')") < taste.indexOf('if (!tasteAn()) return;'));
+});
+
+test('Notiz an mich bei Taste «Aus»: ✓, ✕, Esc und die 6-Minuten-Grenze beenden sie (Prüfer F, Blocker)', () => {
+  const quelle = fs.readFileSync(path.join(__dirname, 'insel.js'), 'utf8');
+  assert.match(quelle, /const tasteAn = \(\) => einstellungen\.diktat \|\| notizLaeuft\(\);/);
+  const ereignis = quelle.slice(quelle.indexOf('function tasteEreignis('), quelle.indexOf('function taktStarten('));
+  assert.ok(ereignis.includes('if (!tasteAn()) return;'), 'tasteEreignis muss eine laufende Notiz durchlassen');
+  assert.ok(!ereignis.includes('if (!einstellungen.diktat) return;'));
+});
+
+test('Notiz an mich: der Zweck bleibt nie für das nächste Diktat liegen (Prüfer F)', () => {
+  const quelle = fs.readFileSync(path.join(__dirname, 'insel.js'), 'utf8');
+  const start = quelle.slice(quelle.indexOf('function notizStarten('), quelle.indexOf('function pilleZeigen('));
+  assert.match(start, /finally \{\s*naechsterZweck = null;/);
+});
+
+test('Notiz an mich: nach dem Hochladen wird nie mehr gelöscht (Prüfer F)', () => {
+  const quelle = fs.readFileSync(path.join(__dirname, 'insel.js'), 'utf8');
+  const ablegen = quelle.slice(quelle.indexOf('async function notizAblegen('), quelle.indexOf('async function notizAblegenMelden('));
+  const loeschen = ablegen.indexOf("method: 'DELETE'");
+  assert.ok(loeschen > 0 && loeschen < ablegen.indexOf('/audio/finalize'), 'DELETE nur vor dem Abschliessen');
+  assert.equal(ablegen.split("method: 'DELETE'").length, 2);
 });
