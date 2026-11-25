@@ -12,7 +12,7 @@ Vorgaben von Chief:
 - Die Aufnahme bei gesperrtem iPhone ist die riskanteste Stelle.
 - Der Plan «Live-Text» (`docs/plans/2026-11-25-live-text.md`, APPROVED) geht hier ein.
 
-Status: geprüft in drei Runden; nach Runde 3 laut Prüfer APPROVED (Log unten). Wartet auf Entscheid Chief. Die Prüfung macht ein frischer Claude-Prüfer (claudex-loop, Codex erst ab 28.11.), Log unten. Kein Code.
+Status: geprüft in drei Runden; nach Runde 3 laut Prüfer APPROVED (Log unten). Wartet auf Entscheid Chief. Prüfer: frischer Claude (claudex-loop, Codex erst ab 28.11.). Kein Code.
 
 ## Was das Reel zeigt (nur beobachtet)
 
