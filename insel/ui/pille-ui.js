@@ -311,14 +311,16 @@
   };
   api.onEinstellungen(einstellungenNeu);
   // ask once we listen: what main sent at load may have come before (insel:hallo) — else no WAV for the model on this PC
-  if (api.hallo) api.hallo().then((d) => { if (d && d.einstellungen) einstellungenNeu(d.einstellungen); }).catch(() => {});
-  if (api.onLage) api.onLage((lage) => {
+  const lageNeu = (lage) => {
     const steno = !!(lage && lage.steno);
     gesicht.figur(steno ? 'steno' : 'space');
     const name = steno ? 'Steno' : 'SPACE Bot';
     $('p-oeffnen').dataset.tipp = `${name} öffnen`;
     $('p-oeffnen').setAttribute('aria-label', `${name} öffnen`);
-  });
+  };
+  if (api.onLage) api.onLage(lageNeu);
+  // ask once we listen: what main sent at load may have come before (insel:hallo) — else no WAV for the model on this PC
+  if (api.hallo) api.hallo().then((d) => { if (d && d.einstellungen) einstellungenNeu(d.einstellungen); if (d && d.lage) lageNeu(d.lage); }).catch(() => {});
   // right-click on the pill opens the sheet «Diktat» at the island
   document.addEventListener('contextmenu', (e) => { e.preventDefault(); if (api.blatt) api.blatt(); });
   look('ruhe');

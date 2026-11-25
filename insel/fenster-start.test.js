@@ -38,11 +38,12 @@ test('island and pill get their settings on load, with lokalBereit from the mode
     return laden.call(this, anfrage, ...rest);
   };
   let host = null;
+  let dir = null;
   try {
     delete require.cache[require.resolve('./insel')];
     delete require.cache[require.resolve('./pet')];
     const { createInselHost } = require('./insel');
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'insel-test-'));
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'insel-test-'));
     fs.writeFileSync(path.join(dir, 'insel.json'), JSON.stringify({ an: true, diktat: true, pet: false, lokalDiktat: true }));
     host = createInselHost({
       appUrl: 'https://app.example', appPartition: 'persist:x', userDataDir: dir, isDev: false,
@@ -65,8 +66,11 @@ test('island and pill get their settings on load, with lokalBereit from the mode
     const antwort = await kanaele['insel:hallo']({ sender: pille.webContents });
     assert.equal(antwort.einstellungen.lokalBereit, true);
     assert.ok(Array.isArray(antwort.lage.laufend));
+    // a foreign sender (another window) gets nothing
+    await assert.rejects(() => kanaele['insel:hallo']({ sender: {} }), /Nicht erlaubt/);
   } finally {
     if (host) host.shutdown();
+    if (typeof dir === 'string') fs.rmSync(dir, { recursive: true, force: true });
     Module._load = laden;
   }
 });
