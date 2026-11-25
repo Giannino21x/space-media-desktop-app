@@ -1,6 +1,7 @@
 const { app, BrowserWindow, shell, Menu, ipcMain, dialog, net, Tray, Notification } = require('electron');
 const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
+const { updateText, istNeuer } = require('./update-text');
 const os = require('os');
 const path = require('path');
 const { anmeldeAdresse, connectorOrigin, createConnectorHost } = require('./connector');
@@ -219,6 +220,28 @@ function hintergrundHinweis() {
   n.show();
 }
 
+// ---- «Nach Update suchen» (tray) ----
+let updateBereit = null; // the version electron-updater has downloaded (update-downloaded)
+function updateMeldung(art, neu) {
+  if (!Notification.isSupported()) return;
+  const { titel, text } = updateText({ art, version: app.getVersion(), neu });
+  const n = new Notification({ title: titel, body: text, icon: path.join(__dirname, 'assets', 'icon.png'), silent: true });
+  // a downloaded update: the click restarts and installs (like the banner in the window)
+  if (art === 'bereit') n.on('click', () => { beenden = true; setImmediate(() => autoUpdater.quitAndInstall(false, true)); });
+  n.show();
+}
+async function updateSuchen() {
+  if (!app.isPackaged) { updateMeldung('entwicklung'); return; }
+  if (updateBereit) { updateMeldung('bereit', updateBereit); return; }
+  try {
+    const ergebnis = await autoUpdater.checkForUpdates();
+    if (istNeuer(ergebnis, app.getVersion())) updateMeldung(updateBereit ? 'bereit' : 'laedt', ergebnis.updateInfo.version);
+    else updateMeldung('aktuell');
+  } catch {
+    updateMeldung('fehler');
+  }
+}
+
 /** Start with Windows (hidden, in the tray). */
 function mitWindowsStarten(an) {
   if (!hintergrund || !app.isPackaged) return;
@@ -240,6 +263,8 @@ function trayMenue() {
       { label: 'SPACE Pet anzeigen', type: 'checkbox', checked: insel.pet, enabled: insel.an, click: (item) => insel.petSchalten(item.checked) },
     ] : []),
     { type: 'separator' },
+    // Giannino 25.11.2026: «Nach Update suchen» with the version, one click checks and says the result in a sentence
+    { label: `Nach Update suchen (Version ${app.getVersion()})`, click: () => { updateSuchen(); } },
     { label: 'Beenden', click: () => { beenden = true; app.quit(); } },
   ]));
 }
@@ -537,6 +562,7 @@ autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = true;
 
 autoUpdater.on('update-downloaded', (info) => {
+  updateBereit = info && info.version ? info.version : true;
   // Silently install on next quit, or notify user
   if (mainWindow) {
     mainWindow.webContents.executeJavaScript(`
