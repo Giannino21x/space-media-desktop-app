@@ -237,3 +237,39 @@ test('pet: an auto-hidden taskbar (work area = display) costs 48 DIP at the bott
   assert.deepEqual(petArbeitsbereich({ x: 0, y: 0, width: 1920, height: 1080 }, { x: 0, y: 0, width: 1920, height: 1080 }), { x: 0, y: 0, width: 1920, height: 1080 - TASKLEISTE_DIP });
   assert.deepEqual(petArbeitsbereich(WA, null), WA);
 });
+
+// ---- S4: filler words out, nothing else ----
+const { aufraeumen } = require('./regeln');
+
+test('filler words go, with the comma that sets them off', () => {
+  const faelle = [
+    ['Ich, äh, komme morgen.', 'Ich komme morgen.'],
+    ['Äh, ich komme.', 'Ich komme.'],
+    ['Ich komme äh morgen.', 'Ich komme morgen.'],
+    ['Ich komme, äh.', 'Ich komme.'],
+    ['Ähm ähm, ja.', 'Ja.'],
+    ['Gut. Äh, wir starten.', 'Gut. Wir starten.'],
+    ['Ich weiss äh... nicht.', 'Ich weiss nicht.'],
+    ['Ich hab ähm 3 Stück.', 'Ich hab 3 Stück.'],
+    ['Das kostet, hm, etwa 200 Franken.', 'Das kostet etwa 200 Franken.'],
+    ['Öhm also gut.', 'Also gut.'],
+    ['Hm.', ''],
+  ];
+  for (const [rein, raus] of faelle) assert.equal(aufraeumen(rein), raus, rein);
+});
+
+test('a text without a filler comes back character for character', () => {
+  const gleich = [
+    'Kunden, die die Rechnung bezahlt haben, bekommen eine Quittung.',
+    'Ich weiss, dass das das Beste ist.',
+    'Herr Hmmm kommt um zehn.',
+    'Mhm, genau so.',
+    'Ohm ist die Einheit.',
+    'z. B. ca. drei Stück',
+    '  zwei  Leerzeichen  ',
+    'Ähnlich wie Hamburg und Hämmer.',
+    '',
+  ];
+  for (const t of gleich) assert.equal(aufraeumen(t), t, t);
+  assert.equal(aufraeumen(null), null);
+});

@@ -2,7 +2,7 @@
 
 Anlass: Giannino, 25.11.2026 — «so einfach wie möglich bedienbar und mehr customizable, auch in der Insel selber».
 Analyse: `docs/reviews/2026-11-25-insel-diktat/analyse.md`. Auftrag von Chief: Teil 2 (Zielbild).
-Status: geprüft (APPROVED Runde 3) (Claude-Prüfer statt Codex, Log `docs/plans/2026-11-25-insel-diktat-review-log.md`).
+Status: S1–S6 geprüft (APPROVED Runde 3) und von Chief freigegeben; S7 neu (Entscheid Chief 25.11.), Prüfung S7 Runde 1 REVISE eingearbeitet (Claude-Prüfer statt Codex, Log `docs/plans/2026-11-25-insel-diktat-review-log.md`).
 Wartet auf Freigabe der Scheiben durch Chief. Kein Release ohne Go.
 
 ## Ziel und Abnahme
@@ -48,12 +48,17 @@ Insel oben anzeigen, SPACE Pet anzeigen, Beenden; Sprache bleibt in der App. Üb
 | Diktat auf diesem PC | an (nur sichtbar, wenn das Modell da ist) | gibt es schon |
 | Fuss: Dienst-Zeile + «Insel ausblenden» | — | bleibt Link, kein Schalter |
 
+Mit S7 (Entscheid Chief, «mehr anpassbar»): +5 Einstellungen (Grösse, Aussehen, Läufe zeigen, Freigaben zeigen, Mikrofon) →
+13; davon im Blatt (zwei Gruppen, je mit Standard) Taste, Mikrofon, PC, Grösse, Aussehen, Pet, Läufe, Freigaben; Töne,
+Pet-Name, Mit Windows starten, Sprache und Insel an bleiben, wo sie sind. Bedienelemente im Blatt 10 + Umschalter +
+«Insel ausblenden».
+
 Ausserhalb des Blatts: Töne (Knopf im Insel-Kopf wie heute, nicht doppelt im Blatt), Pet-Name (Pet-Menü), Mit Windows
 starten und Insel oben anzeigen (Infobereich), Sprache (App: sie gilt auch für Sitzungen und ändert beim Kurz-Diktat
 heute nichts, weil Schweizerdeutsch und Hochdeutsch beide `de` senden — `src/lib/voice/sprache.ts`).
 
 Gestrichen:
-- «Beim Darüberfahren öffnen»: zweiter Weg zum selben Ziel; ein Klick öffnet die Insel. Wer es an hatte, hat es danach aus.
+- «Beim Darüberfahren öffnen» (Entscheid Chief: streichen): zweiter Weg zum selben Ziel; ein Klick öffnet die Insel. Wer es an hatte, hat es danach aus.
   Die Hülle nimmt `hoverOeffnen` von der App weiter an (ohne Wirkung), bis die App-Seite nachgezogen ist.
 - Schalter «Diktat an»: geht in «Taste: Aus» auf.
 - Infobereich: «Diktieren mit Strg rechts», «Diktat auf diesem PC» — nur noch im Blatt. «SPACE Pet anzeigen» bleibt im
@@ -66,12 +71,14 @@ Gestrichen:
 - Doppelwörter entfernen (Befund 2): zerstört richtiges Deutsch («die die»).
 - Sprache an der Insel (Befund 4): ändert beim Diktat nichts und würde Sitzungen still umstellen.
 - Wort löschen an der Insel (Befund 7): ein × löscht für die ganze Firma; Löschen bleibt in der App.
-- Nicht gebaut (siehe Analyse): Mikrofon-Wahl, Live-Text, Korrigieren und Senden per Stimme, Glätten mit Modell, Grösse
-  der Insel, hell/dunkel, Lage pro Bildschirm.
+- Nicht gebaut: Live-Text, Korrigieren und Senden per Stimme, Glätten mit Modell, Lage pro Bildschirm. (Mikrofon, Grösse
+  und Aussehen kommen mit S7 — Korrektur Chief: Giannino will «mehr customizable, auch in der Insel selber».)
 
 ## Scheiben (je einzeln veröffentlichbar)
 
-Reihenfolge nach Nutzen und Abhängigkeit: **S3-Web → S4 → S1 → S2 → S3-Desktop → S5**, S6 wenn Chief das Messen freigibt.
+Reihenfolge nach Nutzen und Abhängigkeit: **S3-Web → S4 → S1 → S2 → S3-Desktop → S5 → S7**; S6 (Messen) freigegeben, nur
+wenn Giannino > 5 Min. weg ist, sonst weggelassen und im Bericht gesagt. S3-Web: kein echter Dienst-Lauf (Entscheid Chief),
+nur Double.
 S3-Web, S4, S5 und S6 brauchen das Blatt nicht. S2 und S3-Desktop brauchen S1.
 
 ### S3-Web — Wörterbuch wirkt beim Diktat (nur Web, 0 Klicks)
@@ -150,6 +157,58 @@ S3-Web, S4, S5 und S6 brauchen das Blatt nicht. S2 und S3-Desktop brauchen S1.
 ### S6 — Messen (vor jeder Änderung am Mikrofon)
 - «Taste bis Pegel» und «Loslassen bis Text» mit eigenem Profil, nur wenn Giannino nicht am Rechner ist, Freigabe Chief.
   Über 200 ms bis Pegel → eigener Vorschlag (nie ein dauernd offenes Mikrofon).
+
+### S7 — Anpassen an der Insel (nur Desktop, braucht S1; Entscheid Chief 25.11.2026, Prüfung Runde 1 eingearbeitet)
+
+Im selben Blatt zwei Gruppen, je eine Ansicht: Umschalter «Diktat | Insel» im Kopf des Blatts (das Panel ist 320 px hoch,
+9 Zeilen + Titel passen nicht übereinander; ein nie fokussiertes Fenster scrollen ist ungeprüft). «Diktat»: Letztes Diktat,
+Taste, Mikrofon, Wörter, Diktat auf diesem PC. «Insel»: Grösse, Aussehen, Zeigt (Pet · Laufende Arbeit · Freigaben).
+Bedienelemente: 10 (Letztes Diktat 1, Taste 1, Mikrofon 1, Wörter-Feld 1, PC 1, Grösse 1, Aussehen 1, Zeigt 3) + Umschalter
++ «Insel ausblenden». «Standard» nur an Einstellungen (Taste, Mikrofon, PC, Grösse, Aussehen, Zeigt), nicht an «Letztes
+Diktat» (Handlung) und «Wörter» (Inhalt). Die Zeile «SPACE Pet» aus S1 geht in «Zeigt» auf; gespeichert bleibt der Schlüssel
+`pet` (die App ruft `setzen('pet')` seit v3).
+
+- **Grösse** (`inselGroesse: 'klein' | 'normal' | 'gross'`, Standard normal; Faktor 0,85 / 1 / 1,2): NICHT über
+  `setZoomFactor` — Chromium zoomt je Host, und Insel, Pille, Pet und Wurf laden alle `file://` in der Session `insel`.
+  Stattdessen CSS-Faktor nur in `insel.html` (`--groesse` auf `<html>`, `zoom`), Fenster PANEL × Faktor (`Math.round`).
+  Main rechnet die Trefferflächen beim Eintreffen (`insel.js` `kanal('insel:flaechen')`) einmal in Fenster-px um
+  (`flaecheSkalieren` rein in `regeln.js`); damit stimmen Poll, `ZIEH_RAND` und Aussen-Klick. `insel:zeiger` wird durch den
+  Faktor geteilt. Der Weck-Streifen bleibt unskaliert (300×10). Nach jedem Laden und nach `render-process-gone` setzt die Seite
+  den Faktor aus den Einstellungen neu. Arbeitsbereich < 1280 px: «gross» wird «normal». Sichtprüfung: `getBoundingClientRect`
+  mit CSS-`zoom` im Demo-Modus bestätigen, bevor main umrechnet.
+- **Aussehen** (`inselAussehen: 'app' | 'hell' | 'dunkel'`, Standard app): Quelle ist das Theme-Attribut der App-Seite, nicht
+  die gemessene Titelleiste (die misst nur 40×28 px, nicht bei verstecktem Fenster). `preload.js` beobachtet das Attribut
+  schon (löst `titlebar-resync` aus) und meldet es neu per IPC `app:aussehen` (nur App-Origin); main speichert den letzten
+  Wert in `insel.json` (`appAussehen`). Noch kein Wert (Start im Hintergrund): `nativeTheme.shouldUseDarkColors`. Main
+  schickt `insel:aussehen` an Insel, Pille und Pet; die Seiten setzen `data-aussehen` auf `<html>`; hell = zweiter Satz
+  Farb-Tokens in `insel.css`, `pille.css`, `pet.css` (Kontrast ≥ 4,5:1 nachgerechnet). Der Helm bleibt gleich.
+- **Zeigt** (`pet` wie heute, `zeigtLaeufe`, `zeigtFreigaben`, Standard alle an): gefiltert wird nur die Kopie für die
+  Insel-Fenster, nach `beiLage` (`lageFuerInsel(l, zeigt)` rein in `regeln.js`); der Infobereich nimmt weiter die volle
+  Lage (`freigabenZahl`) — das bernsteinfarbene Symbol bleibt bei Freigaben immer. Abfragen: `/api/runs/laufend` läuft
+  immer (billig, trägt die Zahl der Freigaben); `/api/approvals` nur, wenn `zeigtFreigaben` an ist und Freigaben offen sind
+  (`lageAbfragen(zeigt, zahl)` rein, Test). Freigaben aus → keine Karte, die Insel klappt bei einer Freigabe nicht auf.
+- **Mikrofon** (`mikrofon: null` = Standard des Systems, sonst `{ id, name }`): Liste aus `enumerateDevices()` im
+  Insel-Fenster; Pseudo-Geräte `default` und `communications` gehen in «Standard» auf; ohne Namen (keine Erlaubnis) «Mikrofon
+  1, 2 …». Die Pille nimmt `deviceId: { exact: id }`; fehlt die ID, sucht sie das Gerät über den Namen und speichert die neue
+  ID (IDs sind je Session gesalzen); `OverconstrainedError` → einmal ohne `deviceId` (Standard), die Zeile zeigt «Headset
+  (nicht verbunden)». `devicechange` aktualisiert. Kein Probe-Pegel im Blatt. Namen bleiben lokal in `insel.json`.
+  `enumerateDevices` öffnet kein Mikrofon (`ruhig.test.js` unberührt). S6 misst den Start mit gewähltem Gerät mit.
+- Brücke `spaceInselApp`: `fuerApp` macht heute alles zu Boolean (`insel.js` `fuerApp`); die neuen Text-Schlüssel bekommen
+  eine eigene, nur lesbare Ausgabe.
+- Tests: `regeln.test.js` (Werte prüfen, `flaecheSkalieren`, Klemmen, `lageFuerInsel`, `lageAbfragen`), `ruhig.test.js` grün,
+  Sichtprüfung beider Aussehen und aller Grössen im Demo-Modus. CLAUDE.md: Weck-Streifen 300×10 (dort steht noch 240×6).
+
+## Später entscheiden (nicht bauen, Entscheid Chief)
+
+**Live-Text beim Sprechen.** Aufwand: Streaming-Transkription über einen Server-Token (WebSocket), Teiltext in der Pille,
+am Ende einfügen; rund 4–6 Tage Desktop + Web, plus Mundart-Prüfung. Kosten je Diktat (30 s): rund 0,1–0,3 Rappen bei
+AssemblyAI-/OpenAI-Streaming (Listenpreise aus dem Gedächtnis, vor Entscheid prüfen) — ähnlich wie heute, aber jede
+Sekunde Halten kostet, auch ohne Text. Diktat auf diesem PC: Live geht mit LFM3 nicht (kein Streaming-Hören).
+
+**Glätten mit Modell.** Aufwand: ein Modell-Lauf nach der Transkription (Kommas, Grossschreibung, Satzbau, ohne Inhalt zu
+ändern), Schalter «Glätten» im Blatt, Prompt-Test; rund 2 Tage Web + 1 Tag Desktop. Kosten je Diktat (~150 Wörter, ~1000
+Token rein, ~250 raus) mit Claude Haiku 5.5 ($0.10 / $0.50 pro Mio. Token): rund 0,02 Rappen; bei «Eigenes Claude-Abo»
+gratis. Dazu 0,5–1,5 s mehr Wartezeit nach dem Loslassen. Tests nur über Abo (Regel 21.11.).
 
 ## Gestaltung des Blatts
 

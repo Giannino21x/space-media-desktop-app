@@ -21,7 +21,7 @@ const fs = require('fs');
 const path = require('path');
 const { BrowserWindow, screen, ipcMain, clipboard, session } = require('electron');
 const {
-  diktatTaste, inselRahmen, pillenRahmen, imRechteck, inselLage, multipart, diktatFehler,
+  diktatTaste, inselRahmen, pillenRahmen, imRechteck, inselLage, multipart, diktatFehler, aufraeumen,
 } = require('./regeln');
 const { diktatWeg } = require('../lokal-regeln');
 const { createPet } = require('./pet');
@@ -769,7 +769,8 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     senden(insel, 'insel:diktat', { zustand: 'denkt' });
     pet.diktat('denkt');
     try {
-      const text = await transkribieren(Buffer.from(input.daten), String(input.mime || 'audio/webm'));
+      // filler words out (regeln.js aufraeumen) — for both ways, the app's service and the model on this PC
+      const text = aufraeumen(await transkribieren(Buffer.from(input.daten), String(input.mime || 'audio/webm')));
       if (transkription === lauf) transkription = null;
       if (!text || lauf.abgebrochen) {
         senden(insel, 'insel:diktat', { zustand: 'aus' });

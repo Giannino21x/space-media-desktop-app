@@ -351,6 +351,33 @@ function petFarbe(lage) {
 
 // ---- the upload to the app ----
 
+// ---- clean-up of a dictation: filler words only (Plan 2026-11-25-insel-diktat.md, S4) ----
+//
+// Removes a standalone «äh», «ähm», «öhm», «hm» (with the comma that sets it off); «mhm» stays, it often means «yes».
+// Nothing else: doubled words stay («die die» is correct German). A text without a filler comes back character for character.
+const FUELL_RE = /(^|[\s,;])\s*(äh|ähh|ähm|ähmm|öhm|hm|hmm)(?![\p{L}\p{N}])(?:\s*(?:\.\.\.|…))?(?:\s*,)?/giu;
+const GROSS = '\u0001'; // marks «the removed filler was capitalised: capitalise the next word»
+const GROSS_RE = /\u0001(\s*)(\p{L})/gu;
+function aufraeumen(text) {
+  if (typeof text !== 'string' || !text) return text;
+  let entfernt = false;
+  const roh = text.replace(FUELL_RE, (_m, vor, wort) => {
+    entfernt = true;
+    const gross = wort[0] !== wort[0].toLowerCase();
+    return (vor === '' || /\s/.test(vor) ? vor : ' ') + (gross ? GROSS : '');
+  });
+  if (!entfernt) return text;
+  const sauber = roh
+    .replace(GROSS_RE, (_m, ws, b) => ws + b.toUpperCase())
+    .split(GROSS).join('')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]+([.,;:!?…])/g, '$1')
+    .replace(/^[\s,;]+/, '')
+    .trim();
+  // only punctuation left («Hm.»): nothing was said
+  return /[\p{L}\p{N}]/u.test(sauber) ? sauber : '';
+}
+
 /** A multipart/form-data body with one file field (net.fetch takes a Buffer, not FormData). */
 function multipart(feld, dateiname, mime, bytes) {
   const grenze = `----spaceinsel${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
@@ -373,7 +400,7 @@ function diktatFehler(status, antwort) {
 
 return {
   HALTEN_MIN_MS, DOPPEL_MS, MAX_AUFNAHME_MS,
-  diktatTaste, inselRahmen, pillenRahmen, imRechteck, weckStreifen, inselLage, BOT_FARBEN, multipart, diktatFehler,
+  diktatTaste, inselRahmen, pillenRahmen, imRechteck, weckStreifen, inselLage, BOT_FARBEN, multipart, diktatFehler, aufraeumen,
   // the pet
   DOESEN_MS, SCHLAFEN_MS, REAKTION_PAUSE_MS, WURF_MS, LEVEL_STUFEN, ECKE_RAND, TASKLEISTE_DIP,
   petRahmen, petLage, petArbeitsbereich, inEcke, petVersteckBis, petVersteckt, petWachheit, petReaktion,

@@ -41,3 +41,19 @@ REVISE, 6 Befunde (4 mittel, 2 tief), alle angenommen:
 APPROVED (Plan-SHA256 beginnt mit ede0d12e458ed851). Zwei tiefe Hinweise, beide übernommen ohne neue Runde (nur Klarstellung, keine
 neue Regel): Migration auch `diktat === true` + `taste === 'aus'` → `strgRechts`; «Aus» heisst gar kein Diktat, auch die
 Knöpfe. Danach SHA256 624749dcf38b2447 (beginnend). Codex prüft das Bündel nach dem 28.11.2026, 10:06, nochmals.
+
+## S7 (Entscheid Chief 25.11.2026), frischer Prüfer, Runde 1 — REVISE
+
+9 Befunde, alle angenommen: (1 hoch) `setZoomFactor` gilt je Host für alle Insel-Fenster → CSS-Faktor nur in insel.html,
+Flächen in main umrechnen; (2 hoch) Infobereich-Symbol braucht die Freigaben-Liste → nur die Kopie für die Insel filtern,
+`/api/runs/laufend` immer; (3) Blatt passt nicht in 320 px → Umschalter «Diktat | Insel»; (4) «wie die App» ohne Quelle →
+Theme-Attribut über preload/IPC, gespeichert, sonst nativeTheme; (5) `insel:zeiger` durch Faktor teilen; (6) Streifen
+unskaliert, CLAUDE.md 300×10; (7) Mikrofon: Pseudo-Geräte, Name-Abgleich, OverconstrainedError; (8) «Standard» nur an
+Einstellungen; (9) `pet` bleibt Schlüssel, eigene Ausgabe für Text-Werte. Runde 2 vor dem Bau von S7.
+
+## S3-Web Code (Commit d9511a282), frischer Prüfer — REVISE
+
+7 Befunde, alle angenommen (879a52c74): Echo strenger (beginnt mit Einleitung oder ganze Liste), Einleitung nur am Anfang,
+Wörter nur auf Whisper-Wegen mit 700 ms und Abbruch, 400 Zeichen + Priorität (von Hand, neueste), Cache räumt auf und
+merkt leere Listen nur 30 s, Sprach-Tests ohne Datenbank, Wächter-Ausnahme bleibt je Datei (der Wächter kennt nichts
+Feineres). Zusätzlich: S4 (Füllwörter) auch im Web, weil Chief S4 als «wirkt ohne Desktop-Release» meldet.
