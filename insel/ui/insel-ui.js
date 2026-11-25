@@ -567,6 +567,17 @@
       titel.textContent = 'Melde dich in SME an, dann bin ich hier oben für dich da.';
       knoepfe.append(knopf('SME öffnen', 'haupt', () => api.oeffnen('/'), 'oeffnen'));
       karte.dataset.wash = '';
+    } else if (l.termin) {
+      // Plan «Treffen vor Ort», Teil 1: ein Termin vor Ort läuft oder beginnt gleich — die ganze Sitzung aufnehmen
+      // (die App fragt die Einwilligung), oder danach eine Notiz an mich
+      name.textContent = l.steno ? 'Steno' : (standard && standard.name) || 'SPACE Bot';
+      rolle.textContent = l.termin.kicker;
+      zeit.textContent = '';
+      titel.className = 'titel';
+      titel.textContent = l.termin.titel;
+      knoepfe.append(knopf('Aufnehmen', 'haupt', () => api.oeffnen(`/sitzungen/new?event_id=${encodeURIComponent(l.termin.id)}`), 'oeffnen'));
+      if (api.notiz) knoepfe.append(knopf('Notiz an mich', 'leise', () => api.notiz()));
+      karte.dataset.wash = 'blau';
     } else if (l.laufend.length) {
       const h = l.laufend[0];
       name.textContent = h.bot || (standard && standard.name) || 'SPACE Bot';
@@ -578,6 +589,19 @@
       else knoepfe.append(knopf('Ansehen', '', () => api.oeffnen('/aktivitaet'), 'oeffnen'));
       if (l.laufend.length > 1) knoepfe.append(knopf(`+${l.laufend.length - 1} weitere`, 'leise', () => api.oeffnen('/aktivitaet')));
       karte.dataset.wash = 'blau';
+    } else if (l.fertigSitzung) {
+      // Plan «Treffen vor Ort», Teil 3: die zuletzt fertige Sitzung mit «Entschieden» und «Als Nächstes»
+      const f = l.fertigSitzung;
+      name.textContent = l.steno ? 'Steno' : (standard && standard.name) || 'SPACE Bot';
+      rolle.textContent = `${f.art} bereit`;
+      zeit.textContent = '';
+      titel.className = 'titel fertig-sitzung';
+      titel.innerHTML = `<span class="fs-titel">${escape(f.titel)}</span>`
+        + (f.entschieden ? `<span class="fs-zeile">Entschieden: ${escape(f.entschieden)}</span>` : '')
+        + (f.alsNaechstes ? `<span class="fs-zeile">Als Nächstes: ${escape(f.alsNaechstes)}</span>` : '');
+      knoepfe.append(knopf('Öffnen', 'haupt', () => api.oeffnen(`/sitzungen/${encodeURIComponent(f.id)}`), 'oeffnen'));
+      if (api.notiz) knoepfe.append(knopf('Notiz an mich', 'leise', () => api.notiz()));
+      karte.dataset.wash = '';
     } else {
       name.textContent = (standard && standard.name) || (l.steno ? 'Steno' : 'SPACE Bot');
       rolle.textContent = 'bereit';
@@ -587,6 +611,7 @@
         ? 'Halte <span class="taste">Strg</span> rechts, sprich, lass los.'
         : 'Frag mich etwas oder leg eine Datei ab.';
       knoepfe.append(knopf(l.steno ? 'Steno öffnen' : 'SME öffnen', '', () => api.oeffnen(l.steno ? '/sitzungen' : '/chat'), 'oeffnen'));
+      if (api.notiz) knoepfe.append(knopf('Notiz an mich', 'leise', () => api.notiz()));
       karte.dataset.wash = '';
     }
 
@@ -1576,7 +1601,7 @@
     return {
       flaechen: log('flaechen'), ansicht: log('ansicht'), fokus: log('fokus'), neuLaden: log('neuLaden'), oeffnen: log('oeffnen'),
       fragen: log('fragen'), freigabe: log('freigabe'), dateiZumChat: log('dateiZumChat'), mail: log('mail'), einstellung: log('einstellung'),
-      woerter: () => Promise.resolve({ ok: true, woerter: ['Huber Treuhand', 'Tremola', 'Gotthard Logistik', 'Brunner-Zehnder', 'Seeblick AG'] }), wort: log('wort'), inselNochmals: log('nochmals'),
+      woerter: () => Promise.resolve({ ok: true, woerter: ['Huber Treuhand', 'Tremola', 'Gotthard Logistik', 'Brunner-Zehnder', 'Seeblick AG'] }), wort: log('wort'), inselNochmals: log('nochmals'), notiz: log('notiz'),
       onLage: leer, onEinstellungen: leer, onZeiger: leer, onAussenKlick: leer, onAnzeige: leer, onDiktat: leer, onPegel: leer,
     };
   }

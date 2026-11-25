@@ -158,7 +158,37 @@ function weckStreifen(fenster, breite, hoehe) {
  * From the app's answers (GET /api/runs/laufend, /api/approvals, /api/team, /api/profile) to the island's state.
  * Never throws on odd input — a missing answer just means «nothing to show».
  */
-function inselLage({ laufend, freigaben, team, profil, sprache } = {}) {
+/** Ab wie vielen Minuten vor Beginn die Insel einen Termin zum Aufnehmen zeigt (Plan «Treffen vor Ort», Teil 1) */
+const TERMIN_VORLAUF_MIN = 10
+
+/**
+ * Der Termin, den die Insel zum Aufnehmen anbietet, aus GET /api/m2/steno/jetzt: nur einer vor Ort (ohne Meeting-Link:
+ * ein Online-Meeting nimmt Steno als Gast auf), der läuft oder in höchstens 10 Minuten beginnt. Die Minuten rechnet
+ * die Insel selbst (die Antwort ist bis 5 Minuten alt). Rein.
+ */
+function terminFuerInsel(termin, jetztMs) {
+  if (!termin || typeof termin.id !== 'string' || !termin.id || termin.meetLink) return null;
+  const beginn = Date.parse(termin.beginn);
+  const ende = Date.parse(termin.ende);
+  if (!Number.isFinite(beginn) || !Number.isFinite(ende) || ende <= jetztMs) return null;
+  const titel = String(termin.titel || 'Termin').slice(0, 120);
+  if (beginn <= jetztMs) {
+    const bis = new Date(ende);
+    return { id: termin.id, titel, kicker: `läuft · bis ${String(bis.getHours()).padStart(2, '0')}:${String(bis.getMinutes()).padStart(2, '0')}` };
+  }
+  const min = Math.ceil((beginn - jetztMs) / 60_000);
+  if (min > TERMIN_VORLAUF_MIN) return null;
+  return { id: termin.id, titel, kicker: `in ${min} Min.` };
+}
+
+/** Die zuletzt fertige Sitzung aus GET /api/m2/steno/jetzt, für die Insel (Titel und die zwei Zeilen). Rein. */
+function fertigFuerInsel(f) {
+  if (!f || typeof f.id !== 'string' || !f.id) return null;
+  const zeile = (v) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 120) : null);
+  return { id: f.id, titel: String(f.titel || 'Sitzung').slice(0, 120), art: String(f.art || 'Protokoll'), entschieden: zeile(f.entschieden), alsNaechstes: zeile(f.alsNaechstes) };
+}
+
+function inselLage({ laufend, freigaben, team, profil, sprache, jetzt, jetztMs = Date.now() } = {}) {
   const laeufe = Array.isArray(laufend && laufend.laufend) ? laufend.laufend : [];
   const fertig = Array.isArray(laufend && laufend.fertig) ? laufend.fertig : [];
   const karten = Array.isArray(freigaben && freigaben.approvals) ? freigaben.approvals : [];
@@ -186,6 +216,9 @@ function inselLage({ laufend, freigaben, team, profil, sprache } = {}) {
       bot: a.bot_id || null,
     })),
     team: bots.slice(0, 8).map((b) => ({ id: String(b.id), name: String(b.name || 'Bot'), farbe: String(b.color || 'sky'), standard: !!b.isDefault })),
+    // Plan «Treffen vor Ort»: der Termin zum Aufnehmen und die zuletzt fertige Sitzung (GET /api/m2/steno/jetzt)
+    termin: terminFuerInsel(jetzt && jetzt.termin, jetztMs),
+    fertigSitzung: fertigFuerInsel(jetzt && jetzt.letzteFertig),
   };
 }
 
@@ -526,6 +559,24 @@ function multipart(feld, dateiname, mime, bytes) {
   return { typ: `multipart/form-data; boundary=${grenze}`, koerper: Buffer.concat([kopf, Buffer.from(bytes), fuss]) };
 }
 
+/** A multipart/form-data body with several fields: { name, wert } or { name, datei, mime, bytes } (Notiz an mich). */
+function formular(felder) {
+  const grenze = `----spaceinsel${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
+  const teile = [];
+  for (const f of felder) {
+    const name = String(f.name).replace(/"/g, '');
+    if (f.datei !== undefined) {
+      teile.push(Buffer.from(`--${grenze}\r\nContent-Disposition: form-data; name="${name}"; filename="${String(f.datei).replace(/"/g, '')}"\r\nContent-Type: ${f.mime}\r\n\r\n`));
+      teile.push(Buffer.from(f.bytes));
+      teile.push(Buffer.from('\r\n'));
+    } else {
+      teile.push(Buffer.from(`--${grenze}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${String(f.wert)}\r\n`));
+    }
+  }
+  teile.push(Buffer.from(`--${grenze}--\r\n`));
+  return { typ: `multipart/form-data; boundary=${grenze}`, koerper: Buffer.concat(teile) };
+}
+
 /** What a failed transcription tells the person (the app's German message when it has one). */
 function diktatFehler(status, antwort) {
   if (status === 401) return 'Bitte zuerst in SME anmelden.';
@@ -537,7 +588,7 @@ function diktatFehler(status, antwort) {
 
 return {
   HALTEN_MIN_MS, DOPPEL_MS, MAX_AUFNAHME_MS,
-  diktatTaste, inselRahmen, pillenRahmen, imRechteck, weckStreifen, inselLage, BOT_FARBEN, multipart, diktatFehler, aufraeumen, TASTEN, einstellungPruefen, tasteVon, LETZTES_MS, letztesDiktatGueltig, ZIEH_SCHWELLE, inselZiehen, inselAnteil, inselAufbau, inselAnteilFuer,
+  diktatTaste, inselRahmen, pillenRahmen, imRechteck, weckStreifen, inselLage, terminFuerInsel, fertigFuerInsel, TERMIN_VORLAUF_MIN, BOT_FARBEN, multipart, formular, diktatFehler, aufraeumen, TASTEN, einstellungPruefen, tasteVon, LETZTES_MS, letztesDiktatGueltig, ZIEH_SCHWELLE, inselZiehen, inselAnteil, inselAufbau, inselAnteilFuer,
   GROESSEN, groesseFaktor, AUSSEHEN, aussehenWirksam, lageFuerInsel, freigabenAbfragen, mikrofonPruefen,
   // the pet
   DOESEN_MS, SCHLAFEN_MS, REAKTION_PAUSE_MS, WURF_MS, LEVEL_STUFEN, ECKE_RAND, TASKLEISTE_DIP,

@@ -28,3 +28,13 @@ test('the app bridge passes taste as text, not as a switch (1.0.16 sent «Aus» 
   const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
   assert.match(main, /schluessel === 'taste' \? String\(/);
 });
+
+test('Notiz an mich: der Ton wird abgelegt, nie eingefügt; startet auch ohne Diktat-Taste', () => {
+  const quelle = fs.readFileSync(path.join(__dirname, 'insel.js'), 'utf8');
+  const audio = quelle.slice(quelle.indexOf("kanal('pille:audio'"), quelle.indexOf("kanal('pille:leer'"));
+  const notiz = audio.indexOf("if (zweck === 'notiz') return notizAblegenMelden(");
+  assert.ok(notiz > 0, 'Notiz-Zweig fehlt');
+  assert.ok(notiz < audio.indexOf('einfuegen('), 'die Notiz muss vor dem Einfügen abbiegen');
+  const taste = quelle.slice(quelle.indexOf('function pillenTaste('));
+  assert.ok(taste.indexOf("if (was === 'notiz')") < taste.indexOf('if (!einstellungen.diktat) return;'));
+});

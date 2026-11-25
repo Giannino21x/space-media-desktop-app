@@ -141,9 +141,9 @@
     return navigator.mediaDevices.getUserMedia({ audio: TON });
   }
 
-  async function aufnahmeStarten(id) {
+  async function aufnahmeStarten(id, zweck) {
     if (st.aufnahme) aufnahmeVerwerfen();
-    const a = { id, chunks: [], start: 0, peak: 0, messungen: 0, stopp: null, freihand: false, stream: null, recorder: null, ctx: null, analyser: null };
+    const a = { id, zweck: zweck === 'notiz' ? 'notiz' : 'diktat', chunks: [], start: 0, peak: 0, messungen: 0, stopp: null, freihand: false, stream: null, recorder: null, ctx: null, analyser: null };
     st.aufnahme = a;
     // a shortcut tap (Ctrl+C) must not flash the pill: show it only when the take lasts
     uhr('zeigen', 150, () => { if (st.aufnahme === a && !a.stopp) { look(a.freihand ? 'freihand' : 'live'); K.spielen('diktatStart'); } });
@@ -213,12 +213,13 @@
       // the model on this PC hears WAV only (lokal-wav.js); if decoding fails the take goes to the app as recorded
       let mime = blob.type;
       let daten = await blob.arrayBuffer();
-      if (lokalWav && window.spaceWav) {
+      if (lokalWav && window.spaceWav && a.zweck !== 'notiz') {
         try { daten = (await window.spaceWav.aufnahmeZuWav(daten)).buffer; mime = 'audio/wav'; } catch { /* as recorded */ }
       }
       const r = await api.audio(a.id, mime, daten);
       if (r && r.ok) {
-        if (r.kopiert) meldung('Kopiert · Strg+V zum Einfügen', 'info', 1800);
+        if (r.notiz) meldung('Notiz gespeichert', 'info', 2200);
+        else if (r.kopiert) meldung('Kopiert · Strg+V zum Einfügen', 'info', 1800);
         else { gesicht.fertig(); look(st.hover ? 'werkzeug' : 'ruhe'); }
       } else if (r && r.still) {
         look(st.hover ? 'werkzeug' : 'ruhe');
@@ -230,7 +231,7 @@
     try { recorder.stop(); } catch { recorder.onstop(); }
   }
 
-  api.onPilleStart(({ id }) => aufnahmeStarten(id));
+  api.onPilleStart(({ id, zweck }) => aufnahmeStarten(id, zweck));
   api.onPilleFreihand(() => {
     if (st.aufnahme) st.aufnahme.freihand = true;
     look('freihand');

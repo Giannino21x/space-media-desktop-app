@@ -449,3 +449,43 @@ test('a dragged spot counts only on the set-up it was dragged on; elsewhere the 
   assert.deepEqual(einstellungPruefen('inselLage', null), { inselLage: null });
   assert.equal(einstellungPruefen('inselLage', { aufbau: lage.aufbau, x: 0.1 }), null);
 });
+
+// ---- Plan «Treffen vor Ort»: Termin und fertige Sitzung an der Insel ----
+{
+  const { terminFuerInsel, fertigFuerInsel, inselLage: lage } = require('./regeln');
+  const JETZT = Date.parse('2026-11-25T14:00:00Z');
+  const t = (minA, minE, extra = {}) => ({ id: 'e1', titel: 'Kaffee mit Kunde', beginn: new Date(JETZT + minA * 60000).toISOString(), ende: new Date(JETZT + minE * 60000).toISOString(), meetLink: null, ...extra });
+  test('Termin an der Insel: in 10 Min. ja, in 11 nein, läuft ja, vorbei nein, online nie', () => {
+    assert.deepEqual(terminFuerInsel(t(10, 60), JETZT), { id: 'e1', titel: 'Kaffee mit Kunde', kicker: 'in 10 Min.' });
+    assert.equal(terminFuerInsel(t(11, 60), JETZT), null);
+    assert.match(terminFuerInsel(t(-5, 30), JETZT).kicker, /^läuft · bis \d\d:\d\d$/);
+    assert.equal(terminFuerInsel(t(-60, -1), JETZT), null);
+    assert.equal(terminFuerInsel(t(5, 60, { meetLink: 'https://meet.google.com/abc' }), JETZT), null);
+    assert.equal(terminFuerInsel(null, JETZT), null);
+  });
+  test('fertige Sitzung: Titel und zwei Zeilen, leere Zeilen null', () => {
+    assert.deepEqual(fertigFuerInsel({ id: 'm1', titel: 'Bausitzung', art: 'Protokoll', entschieden: 'Pilot im Januar', alsNaechstes: '' }),
+      { id: 'm1', titel: 'Bausitzung', art: 'Protokoll', entschieden: 'Pilot im Januar', alsNaechstes: null });
+    assert.equal(fertigFuerInsel(null), null);
+  });
+  test('inselLage trägt Termin und fertige Sitzung', () => {
+    const l = lage({ profil: {}, jetzt: { termin: t(3, 60), letzteFertig: { id: 'm1', titel: 'X' } }, jetztMs: JETZT });
+    assert.equal(l.termin.kicker, 'in 3 Min.');
+    assert.equal(l.fertigSitzung.id, 'm1');
+    assert.equal(lage({ profil: {} }).termin, null);
+  });
+}
+
+{
+  const { formular } = require('./regeln');
+  test('formular: Datei und Felder als multipart (Notiz an mich)', () => {
+    const { typ, koerper } = formular([{ name: 'chunk', datei: 'chunk-0.webm', mime: 'audio/webm', bytes: Buffer.from('TON') }, { name: 'index', wert: '0' }, { name: 'mimeType', wert: 'audio/webm' }]);
+    const grenze = typ.split('boundary=')[1];
+    const text = koerper.toString('latin1');
+    const CRLF = String.fromCharCode(13, 10);
+    assert.ok(text.includes(`name="chunk"; filename="chunk-0.webm"${CRLF}Content-Type: audio/webm${CRLF}${CRLF}TON${CRLF}`));
+    assert.ok(text.includes(`name="index"${CRLF}${CRLF}0${CRLF}`));
+    assert.ok(text.includes(`name="mimeType"${CRLF}${CRLF}audio/webm${CRLF}`));
+    assert.ok(text.endsWith(`--${grenze}--${CRLF}`));
+  });
+}

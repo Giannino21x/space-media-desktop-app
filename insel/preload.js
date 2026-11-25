@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('spaceInsel', {
   fokus: (an) => ipcRenderer.invoke('insel:fokus', an),
   neuLaden: () => ipcRenderer.invoke('insel:neu-laden'),
   oeffnen: (pfad) => ipcRenderer.invoke('insel:oeffnen', pfad),
+  notiz: () => ipcRenderer.invoke('insel:notiz'),
   fragen: (text, botId) => ipcRenderer.invoke('insel:fragen', { text, botId }),
   freigabe: (id, entscheid) => ipcRenderer.invoke('insel:freigabe', { id, entscheid }),
   dateiZumChat: (name, type, daten) => ipcRenderer.invoke('insel:datei-chat', { name, type, daten }),

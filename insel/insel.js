@@ -21,7 +21,7 @@ const fs = require('fs');
 const path = require('path');
 const { BrowserWindow, screen, ipcMain, clipboard, session, nativeTheme } = require('electron');
 const {
-  diktatTaste, inselRahmen, pillenRahmen, imRechteck, inselLage, multipart, diktatFehler, aufraeumen, einstellungPruefen, tasteVon, LETZTES_MS, letztesDiktatGueltig, inselZiehen, inselAnteil, inselAufbau, inselAnteilFuer, groesseFaktor, aussehenWirksam, lageFuerInsel, freigabenAbfragen,
+  diktatTaste, inselRahmen, pillenRahmen, imRechteck, inselLage, multipart, formular, diktatFehler, aufraeumen, einstellungPruefen, tasteVon, LETZTES_MS, letztesDiktatGueltig, inselZiehen, inselAnteil, inselAufbau, inselAnteilFuer, groesseFaktor, aussehenWirksam, lageFuerInsel, freigabenAbfragen,
 } = require('./regeln');
 const { diktatWeg } = require('../lokal-regeln');
 const { createPet } = require('./pet');
@@ -416,7 +416,9 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
         const team = profil.ok ? await api('/api/team') : { ok: false };
         // which service turns dictation into text (the person's KI-Option on the server) — shown in the island's settings
         const sprache = profil.ok ? await api('/api/voice/status') : { ok: false };
-        stamm = profil.ok ? { profil: profil.daten, team: team.ok ? team.daten : null, sprache: sprache.ok ? sprache.daten : null, zeit: Date.now() } : null;
+        // the appointment to record and the last finished meeting (Plan «Treffen vor Ort», Teil 1 und 3)
+        const jetzt = profil.ok ? await api('/api/m2/steno/jetzt') : { ok: false };
+        stamm = profil.ok ? { profil: profil.daten, team: team.ok ? team.daten : null, sprache: sprache.ok ? sprache.daten : null, jetzt: jetzt.ok ? jetzt.daten : null, zeit: Date.now() } : null;
       }
       if (!stamm) {
         lage = inselLage();
@@ -431,6 +433,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
           profil: stamm.profil,
           team: stamm.team,
           sprache: stamm.sprache,
+          jetzt: stamm.jetzt,
           laufend: laufend.ok ? laufend.daten : null,
           freigaben: freigaben.ok ? freigaben.daten : null,
         }) : inselLage();
@@ -457,7 +460,8 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
   const taste = diktatTaste();
   let hook = null;
   let taktTimer = null;
-  let aufnahme = null;          // { id } while the pill records
+  let aufnahme = null;          // { id, zweck } while the pill records; zweck 'diktat' (paste) or 'notiz' (Notiz an mich)
+  let naechsterZweck = null;    // set by «Notiz an mich» for the next take
   let rechtsGedrueckt = false;
   // the last dictation: in memory only, LETZTES_MS long (regeln.js), then gone — «Letztes Diktat einfügen»
   let letztesDiktat = null; // { text, zeit }
@@ -488,8 +492,9 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     log(`diktat: ${aktion}`);
     switch (aktion) {
       case 'aufnahmeStart':
-        aufnahme = { id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}` };
-        senden(pille, 'pille:start', { id: aufnahme.id });
+        aufnahme = { id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, zweck: naechsterZweck || 'diktat' };
+        naechsterZweck = null;
+        senden(pille, 'pille:start', { id: aufnahme.id, zweck: aufnahme.zweck });
         senden(insel, 'insel:diktat', { zustand: 'hoert' });
         pet.diktat('hoert');
         taktStarten();
@@ -654,6 +659,61 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     }, ZURUECK_MS);
     zurueckAusstehend = eintrag;
     return true;
+  }
+
+  /** Eine «Notiz an mich» in der App anlegen (POST /api/meetings, …/audio/upload, …/audio/finalize). Wirft mit deutschem Satz. */
+  async function notizAblegen(bytes, mime) {
+    const t = stamm && stamm.jetzt && stamm.jetzt.termin;
+    const termin = t && typeof t.id === 'string' && Date.parse(t.beginn) <= Date.now() && Date.parse(t.ende) > Date.now() ? t : null;
+    const anlegen = await api('/api/meetings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: termin ? `Notiz: ${String(termin.titel || 'Termin').slice(0, 280)}` : 'Notiz an mich',
+        meeting_date: new Date().toISOString(),
+        document_template: 'notiz',
+        capture_mode: 'diktat',
+        source_event_id: termin ? termin.id : null,
+      }),
+    });
+    const id = anlegen.ok && anlegen.daten && anlegen.daten.meeting && anlegen.daten.meeting.id;
+    if (!id) throw new Error(anlegen.status === 401 ? 'Bitte zuerst in SME anmelden.' : 'Die Notiz liess sich nicht anlegen.');
+    const endung = mime.includes('ogg') ? 'ogg' : mime.includes('mp4') ? 'm4a' : mime.includes('wav') ? 'wav' : 'webm';
+    try {
+      const { typ, koerper } = formular([
+        { name: 'chunk', datei: `chunk-0.${endung}`, mime, bytes },
+        { name: 'index', wert: '0' },
+        { name: 'mimeType', wert: mime },
+      ]);
+      const hoch = await api(`/api/meetings/${id}/audio/upload`, { method: 'POST', headers: { 'content-type': typ }, body: koerper });
+      if (!hoch.ok) throw new Error('hochladen');
+      const fertig = await api(`/api/meetings/${id}/audio/finalize`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ mime_type: mime, ext: endung, total_chunks: 1, trigger_transcription: true }),
+      });
+      if (!fertig.ok) throw new Error('abschliessen');
+    } catch {
+      // the empty note goes again
+      await api(`/api/meetings/${id}`, { method: 'DELETE' }).catch(() => {});
+      throw new Error('Die Notiz liess sich nicht ablegen. Bitte nochmals versuchen.');
+    }
+    return id;
+  }
+
+  async function notizAblegenMelden(bytes, mime) {
+    senden(insel, 'insel:diktat', { zustand: 'denkt' });
+    pet.diktat('denkt');
+    try {
+      await notizAblegen(bytes, mime);
+      senden(insel, 'insel:diktat', { zustand: 'aus' });
+      pet.diktat('meldung', { text: 'Notiz gespeichert · die Zusagen kommen in deine To-dos', art: 'info' });
+      return { ok: true, notiz: true };
+    } catch (err) {
+      senden(insel, 'insel:diktat', { zustand: 'aus' });
+      pet.diktat('fehler', { text: err.message });
+      return { ok: false, meldung: err.message };
+    }
   }
 
   async function transkribieren(bytes, mime) {
@@ -848,7 +908,18 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     pet.pegel(mittel, Array.isArray(baender) ? baender.slice(0, 16).map((v) => Number(v) || 0) : null);
   });
   /** Buttons on the pill (and the pet's pill): dictate (hands-free now), ✓ finish, ✕ cancel. */
+  /**
+   * «Notiz an mich» (Pet-Menü, Insel): eine freihändige Aufnahme, deren Text nicht eingefügt, sondern als Notiz in der
+   * App abgelegt wird (Plan «Treffen vor Ort», Teil 4). Geht auch, wenn die Diktat-Taste aus ist.
+   */
+  function notizStarten() {
+    if (aufnahme || transkription) return;
+    naechsterZweck = 'notiz';
+    for (const a of taste.freihand(Date.now())) diktatAktion(a);
+  }
+
   function pillenTaste(was) {
+    if (was === 'notiz') { notizStarten(); return; }
     if (!einstellungen.diktat) return;
     let aktionen = [];
     if (was === 'freihand') aktionen = taste.freihand(Date.now());
@@ -867,7 +938,9 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
   });
   kanal('pille:audio', 'pille', async (_e, input) => {
     if (!aufnahme || !input || input.id !== aufnahme.id) return { ok: false };
+    const zweck = aufnahme.zweck;
     aufnahme = null;
+    if (zweck === 'notiz') return notizAblegenMelden(Buffer.from(input.daten), String(input.mime || 'audio/webm'));
     const lauf = { id: input.id, abgebrochen: false };
     transkription = lauf;
     senden(insel, 'insel:diktat', { zustand: 'denkt' });
@@ -905,6 +978,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
   });
   kanal('pille:nochmals', 'pille', () => nochmalsEinfuegen());
   kanal('insel:nochmals', 'insel', () => nochmalsEinfuegen());
+  kanal('insel:notiz', 'insel', () => notizStarten());
 
   function einstellungenSenden() {
     senden(insel, 'insel:einstellungen', fuerFenster());

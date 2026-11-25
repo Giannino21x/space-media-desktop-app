@@ -215,6 +215,8 @@
     if (!knopf) return;
     const a = knopf.dataset.aktion;
     if (a === 'diktieren') { menueSchliessen(false); api.petTaste('freihand'); }
+    // «Notiz an mich»: aufnehmen, nicht einfügen — die Zusagen kommen in die To-dos (Plan «Treffen vor Ort», Teil 4)
+    else if (a === 'notiz') { menueSchliessen(false); api.petTaste('notiz'); }
     else if (a === 'nochmals') { menueSchliessen(false); if (api.petNochmals) api.petNochmals(); }
     else if (a === 'oeffnen') { menueSchliessen(false); api.petOeffnen('/'); }
     // the app's settings page, Bot tab: island switches, the pet, which service turns dictation into text

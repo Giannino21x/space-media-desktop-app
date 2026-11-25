@@ -663,3 +663,8 @@ html[data-streifen] .griff { opacity: 1; }
   .schimmer { animation: none; color: var(--ink-2); background: none; }
   .zone svg.rahmen rect { animation: none; }
 }
+
+/* Plan «Treffen vor Ort»: die zuletzt fertige Sitzung mit zwei Zeilen (je eine Zeile, abgeschnitten) */
+.titel.fertig-sitzung { display: flex; flex-direction: column; gap: 2px; }
+.titel.fertig-sitzung .fs-titel { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.titel.fertig-sitzung .fs-zeile { font-size: 0.86em; color: rgb(var(--ueber) / 0.72); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
