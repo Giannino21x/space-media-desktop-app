@@ -861,11 +861,14 @@
   function einstellungenZeichnen() {
     const e = st.einstellungen;
     const liste = $('e-liste');
+    // while the person types a word, a redraw (settings from main, the list loading) must not take the field away
+    const feld = document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('z-feld');
     liste.innerHTML = '';
     liste.append(gruppenZeile());
     if (blattSt.gruppe === 'insel') {
       const groesse = e.inselGroesse || 'normal';
-      liste.append(zeile('Grösse', 'Wie gross die Insel oben ist', segment('Grösse', [
+      const zuKlein = groesse === 'gross' && Number(e.groesse) === 1;
+      liste.append(zeile('Grösse', zuKlein ? 'Für «Gross» ist dieser Bildschirm zu klein' : 'Wie gross die Insel oben ist', segment('Grösse', [
         { wert: 'klein', inhalt: 'Klein', label: 'Klein' },
         { wert: 'normal', inhalt: 'Normal', label: 'Normal' },
         { wert: 'gross', inhalt: 'Gross', label: 'Gross' },
@@ -897,6 +900,7 @@
       // the last dictation once more (10 minutes, in memory only) — only the title, never the text (screen sharing)
       if (e.letztesDiktat) {
         const b = knopf('Einfügen', '', () => {
+          fokusAus(); // the Wörter field may hold the focus: Ctrl+V must go to the window in front
           modusSetzen('kompakt');
           zuPlanen();
           if (api.inselNochmals) api.inselNochmals();
@@ -933,6 +937,7 @@
     aus.title = 'Wieder einschalten: SME-Symbol unten rechts oder in SME unter Einstellungen → Bot';
     fuss.append(aus);
     liste.append(fuss);
+    if (feld) { const neu = liste.querySelector('.z-feld'); if (neu) { neu.focus({ preventScroll: true }); neu.setSelectionRange(neu.value.length, neu.value.length); } }
   }
   // ---- the company dictionary at the island (S3): see the first words, add one; deleting stays in SME (whole company)
   const woerterSt = { liste: null, meldung: '', entwurf: '', laedt: false };
@@ -1438,7 +1443,7 @@
     if (st.modus === 'kompakt' && !e.target.closest('.offen')) {
       e.preventDefault();
       // S5: held and moved = drag along the top edge (main moves the window); released in place = open
-      if (api.ziehen && api.onZiehenEnde) api.ziehen().then((ok) => { if (!ok) aufklappen(); });
+      if (api.ziehen && api.onZiehenEnde) { st.zieht = true; api.ziehen().then((ok) => { if (!ok) { st.zieht = false; aufklappen(); } }); }
       else aufklappen();
     }
   });
@@ -1533,7 +1538,8 @@
   if (api.onWecken) api.onWecken(wecken);
   if (api.onAufklappen) api.onAufklappen(aufklappen);
   if (api.onBlatt) api.onBlatt(blattOeffnen);
-  if (api.onZiehenEnde) api.onZiehenEnde((d) => { if (!d || !d.gezogen) aufklappen(); });
+  if (api.onZiehenEnde) api.onZiehenEnde((d) => { st.zieht = false; if (!d || !d.gezogen) aufklappen(); });
+  document.addEventListener('mouseup', (e) => { if (e.button === 0 && st.zieht && api.ziehenLos) api.ziehenLos(); });
   api.onDiktat(diktatNeu);
   api.onPegel((p) => { gesichtKlein.pegel(p); gesichtGross.pegel(p); });
 

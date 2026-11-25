@@ -214,6 +214,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     insel.webContents.on('render-process-gone', () => {
       const alt = insel;
       insel = null;
+      ziehen = null;
       inselZustandZurueck();
       try { if (alt && !alt.isDestroyed()) alt.destroy(); } catch { /* gone */ }
       if (!beendet) setTimeout(inselAnlegen, 1500);
@@ -262,6 +263,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
   function einklappen(an) {
     if (!insel || insel.isDestroyed() || eingeklappt === an) return;
     eingeklappt = an;
+    ziehen = null; // a drag never outlives a fold
     if (an) {
       pollStoppen();
       streifenSetzen();
@@ -336,8 +338,8 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     const ly = p.y - b.y;
     const ueberInsel = flaechen.some((f) => imRechteck({ x: lx, y: ly }, f, TREFFER_RAND));
     // left button held near the island: a file dragged from Explorer must find a drop target here
-    const ziehen = linksGedrueckt && flaechen.some((f) => imRechteck({ x: lx, y: ly }, f, ZIEH_RAND));
-    durchklickSetzen(!(ueberInsel || ziehen));
+    const haelt = linksGedrueckt && flaechen.some((f) => imRechteck({ x: lx, y: ly }, f, ZIEH_RAND));
+    durchklickSetzen(!(ueberInsel || haelt));
     if (Math.abs(p.x - letzterZeiger.x) >= 1 || Math.abs(p.y - letzterZeiger.y) >= 1) {
       letzterZeiger = p;
       senden(insel, 'insel:zeiger', { x: lx, y: ly, drin: ueberInsel });
@@ -466,6 +468,8 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
    *  goes to the window in front; a short wait lets the sheet fold first. */
   async function nochmalsEinfuegen() {
     if (!letztesDa()) return false;
+    // the island may still hold the focus (the Wörter field): give it back, else Ctrl+V lands in the island
+    if (fokussiert && insel && !insel.isDestroyed()) { fokussiert = false; insel.setFocusable(false); insel.blur(); }
     await warten(120);
     return einfuegen(letztesDiktat.text);
   }
@@ -713,9 +717,13 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
   kanal('insel:ziehen', 'insel', () => {
     if (!insel || insel.isDestroyed() || eingeklappt) return false;
     ziehen = { zeigerX: screen.getCursorScreenPoint().x, fensterX: insel.getBounds().x, gezogen: false };
-    // the poll ends it when the hook reports the release (a quick click ends at once: then the page opens the island)
+    // the renderer saw the press: count the button as held even if the hook's mousedown is a few ms late; the poll ends
+    // the drag when the hook reports the release (a quick click ends at once: then the page opens the island)
+    linksGedrueckt = true;
     return true;
   });
+  /** The page saw the release (the window moves with the pointer, so it gets the mouseup): never a stuck drag. */
+  kanal('insel:ziehen-los', 'insel', () => { if (ziehen) linksGedrueckt = false; });
   kanal('insel:ansicht', 'insel', (_e, neu) => {
     const vorher = ansicht;
     ansicht = ['versteckt', 'kompakt', 'offen'].includes(neu) ? neu : 'versteckt';
@@ -1020,6 +1028,8 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     neuLaden() { stamm = null; lagePlanen(true); },
     shutdown() {
       beendet = true;
+      nativeTheme.removeListener('updated', themaGeaendert);
+      if (letztesTimer) clearTimeout(letztesTimer);
       stoppen();
       pet.shutdown();
       for (const k of kanaele) ipcMain.removeHandler(k);

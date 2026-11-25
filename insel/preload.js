@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('spaceInsel', {
   inselNochmals: () => ipcRenderer.invoke('insel:nochmals'),
   woerter: () => ipcRenderer.invoke('insel:woerter'),
   ziehen: () => ipcRenderer.invoke('insel:ziehen'),
+  ziehenLos: () => ipcRenderer.invoke('insel:ziehen-los'),
   wort: (wort) => ipcRenderer.invoke('insel:wort', wort),
   // pill → main
   pillenFlaechen: (rects) => ipcRenderer.invoke('pille:flaechen', rects),
