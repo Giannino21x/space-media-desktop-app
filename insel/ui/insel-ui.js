@@ -1527,7 +1527,7 @@
 
   // ---------------------------------------------------------------- wiring
   api.onLage(lageNeu);
-  api.onEinstellungen((e) => {
+  const einstellungenNeu = (e) => {
     st.einstellungen = { ...st.einstellungen, ...e };
     aussehenSetzen();
     zoomSetzen();
@@ -1536,7 +1536,10 @@
     tonSymbol();
     if (st.ansicht === 'einstellungen' && st.modus === 'offen') { einstellungenZeichnen(); geoZiel(OFFEN_B, hoeheFuer('einstellungen'), 22); }
     if (st.ansicht === 'uebersicht' && st.modus === 'offen') uebersichtZeichnen();
-  });
+  };
+  api.onEinstellungen(einstellungenNeu);
+  // ask once we listen: what main sent at load may have come before (insel:hallo)
+  if (api.hallo) api.hallo().then((d) => { if (d && d.einstellungen) einstellungenNeu(d.einstellungen); if (d && d.lage) lageNeu(d.lage); }).catch(() => {});
   api.onZeiger(zeigerNeu);
   api.onAussenKlick(() => {
     if (st.modus !== 'offen') return;

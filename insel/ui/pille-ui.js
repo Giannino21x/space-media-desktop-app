@@ -294,7 +294,7 @@
 
   // lokalBereit + lokalDiktat (insel.js): dictation goes to the model on this PC → send WAV
   let lokalWav = false;
-  api.onEinstellungen((e) => {
+  const einstellungenNeu = (e) => {
     // S7: light or dark like the island
     if (e && e.aussehen === 'hell') document.documentElement.dataset.aussehen = 'hell'; else delete document.documentElement.dataset.aussehen;
     K.an = e.toene !== false;
@@ -308,7 +308,10 @@
       if (pet && st.look === 'werkzeug') look('ruhe');
       flaechenMelden();
     }
-  });
+  };
+  api.onEinstellungen(einstellungenNeu);
+  // ask once we listen: what main sent at load may have come before (insel:hallo) — else no WAV for the model on this PC
+  if (api.hallo) api.hallo().then((d) => { if (d && d.einstellungen) einstellungenNeu(d.einstellungen); }).catch(() => {});
   if (api.onLage) api.onLage((lage) => {
     const steno = !!(lage && lage.steno);
     gesicht.figur(steno ? 'steno' : 'space');

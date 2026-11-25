@@ -821,6 +821,9 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
       return { ok: false, meldung: 'Keine Verbindung.' };
     }
   });
+  /** The page asks once it listens: what main sends at ready-to-show can arrive before that and is lost (25.11.2026:
+   *  the pill never learned that the model on this PC is there, every dictation went to the app). */
+  kanal('insel:hallo', 'beide', () => ({ einstellungen: fuerFenster(), lage: lageFuerFenster() }));
   kanal('insel:einstellung', 'beide', (_e, input) => {
     const patch = input && einstellungPruefen(input.schluessel, input.wert);
     if (patch) aendern(patch);

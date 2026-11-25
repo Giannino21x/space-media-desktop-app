@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('spaceInsel', {
   dateiZumChat: (name, type, daten) => ipcRenderer.invoke('insel:datei-chat', { name, type, daten }),
   mail: (felder) => ipcRenderer.invoke('insel:mail', felder),
   einstellung: (schluessel, wert) => ipcRenderer.invoke('insel:einstellung', { schluessel, wert }),
+  hallo: () => ipcRenderer.invoke('insel:hallo'),
   inselNochmals: () => ipcRenderer.invoke('insel:nochmals'),
   woerter: () => ipcRenderer.invoke('insel:woerter'),
   ziehen: () => ipcRenderer.invoke('insel:ziehen'),
