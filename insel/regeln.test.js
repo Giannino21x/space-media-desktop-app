@@ -260,6 +260,20 @@ test('filler words go, with the comma that sets them off', () => {
     ['a; äh b', 'a; b'],
     ['Zeile eins\näh\nZeile zwei', 'Zeile eins\nZeile zwei'],
     ['Wenn du kommst, äh, dann gehen wir.', 'Wenn du kommst dann gehen wir.'],
+    ['Hm. Ja.', 'Ja.'],
+    ['Gut. Hm. Weiter.', 'Gut. Weiter.'],
+    ['Hmm.\nJa', 'Ja'],
+    ['Echt?? Hm. Gut', 'Echt?? Gut'],
+    ['Text\nähm ich', 'Text\nich'],
+    ['Text.\nÄhm, ja', 'Text.\nJa'],
+    ['Ja äh\nNein', 'Ja\nNein'],
+    ['Zeile\r\näh\r\nWeiter', 'Zeile\r\nWeiter'],
+    ['Ja\n\näh\n\nNein', 'Ja\n\nNein'],
+    ['So.\näh?\nWeiter', 'So.\nWeiter'],
+    ['Ja\näh', 'Ja'],
+    ['Gut; äh; weiter', 'Gut; weiter'],
+    ['  - zwei\nÄh, drei', '  - zwei\nDrei'],
+    ['Und dann … ? Äh, ja.', 'Und dann … ? Ja.'],
   ];
   for (const [rein, raus] of faelle) assert.equal(aufraeumen(rein), raus, rein);
 });
@@ -278,6 +292,7 @@ test('a text without a filler comes back character for character', () => {
     'ÄH ist eine Abkürzung.',
     'Noch 5 hm weit.',
     'Die äh-Laute zählen.',
+    'Zeile\r\nzwei',
     '',
   ];
   for (const t of gleich) assert.equal(aufraeumen(t), t, t);

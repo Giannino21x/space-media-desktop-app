@@ -355,36 +355,59 @@ function petFarbe(lage) {
 //
 // Removes a standalone «äh», «ähm», «öhm», «hm» (with the comma that sets it off); «mhm» stays, it often means «yes».
 // Nothing else: doubled words stay («die die» is correct German). Untouched: all caps («HM» is a brand), after a number
-// («5 hm»), with a hyphen («äh-Laute»). A text without a filler comes back character for character.
+// («5 hm»), with a hyphen («äh-Laute»). Clean-up only where a filler was (mark): spaces, comma, its own punctuation at a
+// sentence start, a line that held only the filler. A text without a filler comes back character for character.
 // 1:1 as fuellwoerterWeg in the web app (src/lib/voice/fuellwoerter.ts) — change both together.
-const FUELL_RE = /(^|[\s,;])[ \t]*(äh|ähh|ähm|ähmm|öhm|hm|hmm)(?![\p{L}\p{N}-])(?:[ \t]*(?:\.\.\.|…))?(?:[ \t]*,)?/giu;
-/** Marks «the removed filler was capitalised: capitalise the next word». */
+const FUELL_RE = /(^|[\s,;])[ \t ]*(äh|ähh|ähm|ähmm|öhm|hm|hmm)(?![\p{L}\p{N}-])(?:[ \t ]*(?:\.\.\.|…))?([ \t ]*[,;]|[ \t ]*[.?!]+)?/giu;
+/** Where a filler was. */
+const STELLE = '\u0002';
+/** The removed filler was capitalised: capitalise the next word. */
 const GROSS = '\u0001';
-const GROSS_RE = /\u0001(\s*)(\p{L})/gu;
+const RAUM = '[ \\t\\u00a0]*';
+const AM_ANFANG = new RegExp(`^${RAUM}((?:${GROSS}?${STELLE}${RAUM})+)`);
+const AM_ENDE = new RegExp(`${RAUM}(?:${GROSS}?${STELLE}${RAUM})+$`);
+const VOR_ZEICHEN = new RegExp(`${RAUM}(?:${GROSS}?${STELLE}${RAUM})+(?=[.,;:!?…])`, 'g');
+const DAZWISCHEN = new RegExp(`${RAUM}((?:${GROSS}?${STELLE}${RAUM})+)`, 'g');
+
+function zeileAufraeumen(zeile) {
+  return zeile
+    .replace(AM_ANFANG, (_m, marken) => (marken.includes(GROSS) ? GROSS : ''))
+    .replace(AM_ENDE, '')
+    .replace(VOR_ZEICHEN, '')
+    .replace(DAZWISCHEN, (_m, marken) => ` ${marken.includes(GROSS) ? GROSS : ''}`)
+    .replace(/\u0001([^\p{L}]*)(\p{L})/gu, (_m, zwischen, b) => zwischen + b.toUpperCase())
+    .split(GROSS).join('');
+}
 
 function aufraeumen(text) {
   if (typeof text !== 'string' || !text) return text;
   let entfernt = false;
-  const roh = text.replace(FUELL_RE, (m, vor, wort, pos, ganz) => {
+  const roh = text.replace(FUELL_RE, (m, vor, wort, nach, pos, ganz) => {
     const kleinOderErstGross = wort === wort.toLowerCase() || wort.slice(1) === wort.slice(1).toLowerCase();
-    if (!kleinOderErstGross || /\d[ \t]*$/.test(ganz.slice(0, pos + vor.length))) return m;
+    if (!kleinOderErstGross || /\d[ \t ]*$/.test(ganz.slice(0, pos + vor.length))) return m;
     entfernt = true;
-    const gross = wort[0] !== wort[0].toLowerCase();
-    const danach = ganz[pos + m.length];
-    // a filler alone on its line: the line goes, not a blank line in its place
-    const rest = vor === '\n' && (danach === '\n' || danach === undefined) ? '' : vor === ',' ? ' ' : vor;
-    return rest + (gross ? GROSS : '');
+    const davor = ganz.slice(0, pos).replace(/[ \t ]+$/, '');
+    const satzanfang = vor === '' || vor === '\n' || vor === '\r' || davor === '' || /[.!?…:\n]$/.test(davor);
+    const eigenesZeichen = nach && /[.?!]/.test(nach) && !satzanfang ? nach.trim() : '';
+    return (vor === ';' ? ';' : /[\r\n]/.test(vor) ? vor : '') + (wort[0] !== wort[0].toLowerCase() ? GROSS : '') + STELLE + eigenesZeichen;
   });
   if (!entfernt) return text;
-  const sauber = roh
-    .replace(GROSS_RE, (_m, ws, b) => ws + b.toUpperCase())
-    .split(GROSS).join('')
-    // «Hm? Was …» / «Gut. Hm? Weiter.»: the question mark of the filler goes with it
-    .replace(/(^|[.!?…][ \t]+)[?!]+[ \t]*/g, '$1')
-    .replace(/[ \t]{2,}/g, ' ')
-    .replace(/[ \t]+([.,;:!?…])/g, '$1')
-    .replace(/^[\s,;]+/, '')
-    .trim();
+  // line by line: only lines with a mark change; a line that held only fillers goes with its line break
+  const teile = roh.split(/(\r?\n)/);
+  const aus = [];
+  for (let i = 0; i < teile.length; i += 2) {
+    const zeile = teile[i];
+    const umbruch = teile[i + 1] ?? '';
+    if (!zeile.includes(STELLE)) { aus.push(zeile, umbruch); continue }
+    const sauber = zeileAufraeumen(zeile);
+    if (/[\p{L}\p{N}]/u.test(sauber)) { aus.push(sauber, umbruch); continue }
+    // dropped line between two blank lines: one blank line is enough
+    const vorigeLeer = aus.length >= 2 && aus[aus.length - 2] === '' && aus[aus.length - 1] !== '';
+    const naechsteLeer = teile[i + 2] === '';
+    if (vorigeLeer && naechsteLeer) { aus.pop(); aus.pop() }
+    if (!umbruch && aus.length) aus.pop();
+  }
+  const sauber = aus.join('');
   // only punctuation left («Hm.»): nothing was said
   return /[\p{L}\p{N}]/u.test(sauber) ? sauber : '';
 }

@@ -2,7 +2,7 @@
 
 Anlass: Giannino, 25.11.2026 — «so einfach wie möglich bedienbar und mehr customizable, auch in der Insel selber».
 Analyse: `docs/reviews/2026-11-25-insel-diktat/analyse.md`. Auftrag von Chief: Teil 2 (Zielbild).
-Status: S1–S6 geprüft (APPROVED Runde 3) und von Chief freigegeben; S7 neu (Entscheid Chief 25.11.), Prüfung S7 Runde 1 REVISE eingearbeitet (Claude-Prüfer statt Codex, Log `docs/plans/2026-11-25-insel-diktat-review-log.md`).
+Status: S1–S6 geprüft (APPROVED Runde 3) und von Chief freigegeben; S7 neu (Entscheid Chief 25.11.), Prüfung S7 Runde 3: Befunde eingearbeitet, keine weitere Runde nötig (Prüfer) (Claude-Prüfer statt Codex, Log `docs/plans/2026-11-25-insel-diktat-review-log.md`).
 Wartet auf Freigabe der Scheiben durch Chief. Kein Release ohne Go.
 
 ## Ziel und Abnahme
@@ -175,17 +175,25 @@ Diktat» (Handlung) und «Wörter» (Inhalt). Die Zeile «SPACE Pet» aus S1 geh
   (`flaecheSkalieren` rein in `regeln.js`); damit stimmen Poll, `ZIEH_RAND` und Aussen-Klick. `insel:zeiger` wird durch den
   Faktor geteilt. Der Weck-Streifen bleibt unskaliert (300×10). Nach jedem Laden und nach `render-process-gone` setzt die Seite
   den Faktor aus den Einstellungen neu. Arbeitsbereich < 1280 px: «gross» wird «normal». Sichtprüfung: `getBoundingClientRect`
-  mit CSS-`zoom` im Demo-Modus bestätigen, bevor main umrechnet.
-- **Aussehen** (`inselAussehen: 'app' | 'hell' | 'dunkel'`, Standard app): Quelle ist das Theme-Attribut der App-Seite, nicht
-  die gemessene Titelleiste (die misst nur 40×28 px, nicht bei verstecktem Fenster). `preload.js` beobachtet das Attribut
-  schon (löst `titlebar-resync` aus) und meldet es neu per IPC `app:aussehen` (nur App-Origin); main speichert den letzten
+  mit CSS-`zoom` im Demo-Modus messen; diese eine Messung entscheidet Flächen UND Zeiger zusammen (Chromium ab 128 rechnet
+  `zoom` standardisiert; liefert `getBoundingClientRect` schon Fenster-px, fallen beide Umrechnungen weg). `--groesse` gilt nur,
+  solange das Panel offen ist (sonst wüchse der Griff im 300×10-Streifen mit).
+- **Aussehen** (`inselAussehen: 'app' | 'hell' | 'dunkel'`, Standard app): Quelle ist `data-theme` auf `<html>` der App-Seite
+  (`liquid-glass` = hell, `dark` = dunkel; «Automatisch» löst die App selbst schon in einen der beiden Werte auf —
+  `src/lib/theme/provider.tsx`), nicht die gemessene Titelleiste (40×28 px, nicht bei verstecktem Fenster). `preload.js`
+  beobachtet das Attribut schon (`titlebar-resync`) und sendet neu den Wert selbst per IPC `app:aussehen` — einmal beim
+  `DOMContentLoaded` (das Inline-Skript setzt ihn vorher) und dann bei jeder Änderung, nur `dark` oder `liquid-glass`; main nimmt ihn nur
+  von App-Origin (wie `connector:*`); main speichert den letzten
   Wert in `insel.json` (`appAussehen`). Noch kein Wert (Start im Hintergrund): `nativeTheme.shouldUseDarkColors`. Main
-  schickt `insel:aussehen` an Insel, Pille und Pet; die Seiten setzen `data-aussehen` auf `<html>`; hell = zweiter Satz
-  Farb-Tokens in `insel.css`, `pille.css`, `pet.css` (Kontrast ≥ 4,5:1 nachgerechnet). Der Helm bleibt gleich.
+  schickt `insel:aussehen` an Insel, Pille, Pet und Wurf; die Seiten setzen `data-aussehen` auf `<html>`; hell = zweiter Satz
+  Farb-Tokens in `insel.css`, `pille.css`, `pet.css`, `wurf.css` (Kontrast ≥ 4,5:1 nachgerechnet). Der Helm bleibt gleich.
 - **Zeigt** (`pet` wie heute, `zeigtLaeufe`, `zeigtFreigaben`, Standard alle an): gefiltert wird nur die Kopie für die
   Insel-Fenster, nach `beiLage` (`lageFuerInsel(l, zeigt)` rein in `regeln.js`); der Infobereich nimmt weiter die volle
-  Lage (`freigabenZahl`) — das bernsteinfarbene Symbol bleibt bei Freigaben immer. Abfragen: `/api/runs/laufend` läuft
-  immer (billig, trägt die Zahl der Freigaben); `/api/approvals` nur, wenn `zeigtFreigaben` an ist und Freigaben offen sind
+  Lage — das bernsteinfarbene Symbol bleibt bei Freigaben immer; dafür liest `beiLage` in `main.js` neu
+  `lage.freigabenZahl` statt `lage.freigaben.length` (Symbol und Tooltip, Test: Freigaben aus, Zahl > 0 → bernstein).
+  Gefiltert wird nach `lageMitApp`, an allen drei Stellen, die die Lage senden (`lageSenden` und beim Laden von Insel und
+  Pille, `insel.js` `did-finish-load`) über eine Hilfe `lageFuerFenster()`; «Laufende Arbeit» aus blendet auch «Antwort im Chat» und die fertigen Läufe aus.
+  Abfragen: `/api/runs/laufend` läuft immer (ausser Steno, wie heute; billig, trägt die Zahl der Freigaben); `/api/approvals` nur, wenn `zeigtFreigaben` an ist und Freigaben offen sind
   (`lageAbfragen(zeigt, zahl)` rein, Test). Freigaben aus → keine Karte, die Insel klappt bei einer Freigabe nicht auf.
 - **Mikrofon** (`mikrofon: null` = Standard des Systems, sonst `{ id, name }`): Liste aus `enumerateDevices()` im
   Insel-Fenster; Pseudo-Geräte `default` und `communications` gehen in «Standard» auf; ohne Namen (keine Erlaubnis) «Mikrofon

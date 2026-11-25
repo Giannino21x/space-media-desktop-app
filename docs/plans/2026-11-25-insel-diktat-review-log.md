@@ -57,3 +57,16 @@ Einstellungen; (9) `pet` bleibt Schlüssel, eigene Ausgabe für Text-Werte. Rund
 Wörter nur auf Whisper-Wegen mit 700 ms und Abbruch, 400 Zeichen + Priorität (von Hand, neueste), Cache räumt auf und
 merkt leere Listen nur 30 s, Sprach-Tests ohne Datenbank, Wächter-Ausnahme bleibt je Datei (der Wächter kennt nichts
 Feineres). Zusätzlich: S4 (Füllwörter) auch im Web, weil Chief S4 als «wirkt ohne Desktop-Release» meldet.
+
+## S7 Runde 2 — REVISE
+
+8 von 9 Befunden erledigt. Neu, alle angenommen: (A hoch) Infobereich liest `lage.freigaben.length` → `freigabenZahl`
+ausdrücklich, Test; (B) eine Messung im Demo-Modus entscheidet Flächen und Zeiger zusammen (CSS-zoom in Chromium ≥ 128);
+(C) Attribut benannt: `data-theme` `liquid-glass`/`dark`, preload sendet den Wert, Origin-Prüfung; (D) «ausser Steno»;
+(E) `--groesse` nur bei offenem Panel; (F) Filter nach `lageMitApp`, «Antwort im Chat» und Fertige mit ausgeblendet.
+
+## S7 Runde 3 — REVISE (klein), Prüfer: «keine dritte Runde nötig»
+
+A–F erledigt. Neu, übernommen: preload sendet `data-theme` einmal beim Laden und dann bei Änderungen, nur zwei Werte;
+die Lage wird an allen drei Stellen über `lageFuerFenster()` gefiltert (auch beim Laden der Fenster); `wurf.css` bekommt
+den hellen Satz mit. Damit gilt S7 als geprüft.
