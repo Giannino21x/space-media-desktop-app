@@ -1254,7 +1254,7 @@
   $('f-ja').addEventListener('click', () => entscheiden('approve'));
   $('f-nein').addEventListener('click', () => entscheiden('reject'));
   $('f-ansehen').addEventListener('click', () => api.oeffnen('/aktivitaet'));
-  $('f-zu').addEventListener('click', () => { st.gepinnt = false; modusSetzen('kompakt'); });
+  $('f-zu').addEventListener('click', () => { st.gepinnt = false; modusSetzen('kompakt'); K.spielen('stups'); });
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     e.preventDefault();
@@ -1263,6 +1263,7 @@
       st.gepinnt = false;
       fokusAus();
       modusSetzen('kompakt');
+      K.spielen('stups'); // the answer to the person's key
       zuPlanen();
     }
   });

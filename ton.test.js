@@ -66,6 +66,8 @@ test('notifications of the page are always silent, everything else kept', async 
   assert.ok(n instanceof w.Notification);
   assert.equal(w.Notification.permission, 'granted');
   assert.equal(new w.Notification('Ohne').opts.silent, true);
+  // silent together with vibrate throws in Chromium: vibrate goes
+  assert.equal(JSON.stringify(new w.Notification('V', { vibrate: [100] }).opts), JSON.stringify({ silent: true }));
   await new w.ServiceWorkerRegistration().showNotification('SW', { tag: 't' });
   assert.equal(JSON.stringify(gezeigt), JSON.stringify([{ titel: 'SW', opts: { tag: 't', silent: true } }]));
 });

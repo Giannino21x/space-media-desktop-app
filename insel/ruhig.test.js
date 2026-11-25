@@ -29,4 +29,6 @@ test('hearts on hover stay silent', () => {
 
 test('a click on the island still answers with a sound', () => {
   assert.match(rumpf('aufklappen'), /K\.spielen\('hallo'\)/);
+  // closing it by its button or Escape is the person's action too
+  assert.match(quelle, /\$\('f-zu'\)\.addEventListener\('click', \(\) => \{[^}]*K\.spielen\('stups'\)/);
 });

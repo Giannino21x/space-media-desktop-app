@@ -4,10 +4,11 @@
 // app stay): only the window in front makes a sound. Hidden in the tray, minimised or without focus, the page is muted.
 // A conversation, reading aloud or a recording that is running must not break off: a recording (microphone open)
 // keeps the sound, and sound that is playing keeps it until NACHLAUF_MS of silence — read-aloud pauses between
-// sentences. Once muted the page stays muted until the window comes to the front again: a new sound from a page
+// parts. Once muted the page stays muted until the window comes to the front again: a new sound from a page
 // in the background (a chime for a message) never unmutes it.
 
-const NACHLAUF_MS = 4000;
+// Long enough for read-aloud fetching its next part or a voice reply being thought up (both sound again soon).
+const NACHLAUF_MS = 10000;
 
 /**
  * @param {{ stumm: boolean, vorne: boolean, aufnahme: boolean, hoerbar: boolean, stilleMs: number }} z

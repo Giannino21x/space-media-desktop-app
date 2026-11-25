@@ -20,7 +20,8 @@ if (process.platform === 'win32') {
 // <seite-still>
 function seiteStill(w) {
   w = w || window;
-  const still = (opts) => Object.assign({}, opts || {}, { silent: true });
+  // `vibrate` with `silent` makes the constructor throw: dropped (no vibration on a PC anyway)
+  const still = (opts) => { const o = Object.assign({}, opts || {}, { silent: true }); delete o.vibrate; return o; };
   if (typeof w.Notification === 'function') {
     w.Notification = new Proxy(w.Notification, {
       construct: (Ziel, args, neu) => Reflect.construct(Ziel, [args[0], still(args[1])], neu),
