@@ -425,10 +425,13 @@ function aufraeumen(text) {
 // The dictation key is stored as `diktat` (one source: «Strg rechts» = on, «Aus» = off), so a step back to 1.0.15
 // keeps working. `hoverOeffnen` is still accepted (the app page of 1.0.15 sends it) but nothing reads it any more.
 const TASTEN = ['strgRechts', 'aus'];
-const SCHALTER_EINSTELLUNGEN = ['an', 'diktat', 'toene', 'hoverOeffnen', 'begruesst', 'pet', 'lokalDiktat'];
+const SCHALTER_EINSTELLUNGEN = ['an', 'diktat', 'toene', 'hoverOeffnen', 'begruesst', 'pet', 'lokalDiktat', 'zeigtLaeufe', 'zeigtFreigaben'];
 /** One change → the patch to store, or null when the key or the value is not allowed. */
 function einstellungPruefen(schluessel, wert) {
   if (schluessel === 'taste') return TASTEN.includes(wert) ? { diktat: wert !== 'aus' } : null;
+  if (schluessel === 'inselGroesse') return Object.prototype.hasOwnProperty.call(GROESSEN, wert) ? { inselGroesse: wert } : null;
+  if (schluessel === 'inselAussehen') return AUSSEHEN.includes(wert) ? { inselAussehen: wert } : null;
+  if (schluessel === 'mikrofon') { const m = mikrofonPruefen(wert); return m === undefined ? null : { mikrofon: m }; }
   if (!SCHALTER_EINSTELLUNGEN.includes(schluessel)) return null;
   const patch = { [schluessel]: !!wert };
   // switching the pet on also brings back a pet hidden «until I fetch it»
@@ -459,6 +462,44 @@ function inselAnteil(fensterX, bounds, breite) {
   return Math.min(1, Math.max(0, (fensterX + breite / 2 - bounds.x) / bounds.width));
 }
 
+// ---- adapting the island (Plan 2026-11-25-insel-diktat.md, S7): size, look, what it shows, microphone ----
+
+const GROESSEN = { klein: 0.85, normal: 1, gross: 1.2 };
+/** The island's size factor; «gross» needs room (work area ≥ 1280 DIP), else it is «normal». */
+function groesseFaktor(e, arbeitsBreite) {
+  const g = e && GROESSEN[e.inselGroesse] ? e.inselGroesse : 'normal';
+  if (g === 'gross' && arbeitsBreite < 1280) return 1;
+  return GROESSEN[g];
+}
+const AUSSEHEN = ['app', 'hell', 'dunkel'];
+/** «wie die App»: data-theme of the app page (liquid-glass = light, dark), else Windows; or fixed light / dark. */
+function aussehenWirksam(e, systemDunkel) {
+  const a = e && AUSSEHEN.includes(e.inselAussehen) ? e.inselAussehen : 'app';
+  if (a !== 'app') return a;
+  if (e && e.appAussehen === 'liquid-glass') return 'hell';
+  if (e && e.appAussehen === 'dark') return 'dunkel';
+  return systemDunkel ? 'dunkel' : 'hell';
+}
+/** What the island's windows get: runs and approvals only when shown. The tray keeps the full state (amber stays). */
+function lageFuerInsel(l, e) {
+  if (!l) return l;
+  const out = { ...l };
+  if (e && e.zeigtLaeufe === false) { out.laufend = []; out.fertig = []; }
+  if (e && e.zeigtFreigaben === false) { out.freigaben = []; out.freigabenZahl = 0; }
+  return out;
+}
+/** Fetch the approvals' cards only when they are shown and some are open (the count comes with /api/runs/laufend). */
+function freigabenAbfragen(e, zahl) {
+  return !(e && e.zeigtFreigaben === false) && zahl > 0;
+}
+/** A chosen microphone: { id, name } with sane lengths, or null (the system's default). */
+function mikrofonPruefen(wert) {
+  if (wert === null || wert === undefined || wert === '') return null;
+  if (typeof wert !== 'object' || typeof wert.id !== 'string' || !wert.id || wert.id.length > 200) return undefined;
+  if (wert.id === 'default' || wert.id === 'communications') return null;
+  return { id: wert.id, name: typeof wert.name === 'string' ? wert.name.slice(0, 100) : '' };
+}
+
 /** A multipart/form-data body with one file field (net.fetch takes a Buffer, not FormData). */
 function multipart(feld, dateiname, mime, bytes) {
   const grenze = `----spaceinsel${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
@@ -482,6 +523,7 @@ function diktatFehler(status, antwort) {
 return {
   HALTEN_MIN_MS, DOPPEL_MS, MAX_AUFNAHME_MS,
   diktatTaste, inselRahmen, pillenRahmen, imRechteck, weckStreifen, inselLage, BOT_FARBEN, multipart, diktatFehler, aufraeumen, TASTEN, einstellungPruefen, tasteVon, LETZTES_MS, letztesDiktatGueltig, ZIEH_SCHWELLE, inselZiehen, inselAnteil,
+  GROESSEN, groesseFaktor, AUSSEHEN, aussehenWirksam, lageFuerInsel, freigabenAbfragen, mikrofonPruefen,
   // the pet
   DOESEN_MS, SCHLAFEN_MS, REAKTION_PAUSE_MS, WURF_MS, LEVEL_STUFEN, ECKE_RAND, TASKLEISTE_DIP,
   petRahmen, petLage, petArbeitsbereich, inEcke, petVersteckBis, petVersteckt, petWachheit, petReaktion,

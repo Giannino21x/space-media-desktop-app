@@ -19,14 +19,15 @@
 
 const fs = require('fs');
 const path = require('path');
-const { BrowserWindow, screen, ipcMain, clipboard, session } = require('electron');
+const { BrowserWindow, screen, ipcMain, clipboard, session, nativeTheme } = require('electron');
 const {
-  diktatTaste, inselRahmen, pillenRahmen, imRechteck, inselLage, multipart, diktatFehler, aufraeumen, einstellungPruefen, tasteVon, LETZTES_MS, letztesDiktatGueltig, inselZiehen, inselAnteil,
+  diktatTaste, inselRahmen, pillenRahmen, imRechteck, inselLage, multipart, diktatFehler, aufraeumen, einstellungPruefen, tasteVon, LETZTES_MS, letztesDiktatGueltig, inselZiehen, inselAnteil, groesseFaktor, aussehenWirksam, lageFuerInsel, freigabenAbfragen,
 } = require('./regeln');
 const { diktatWeg } = require('../lokal-regeln');
 const { createPet } = require('./pet');
 
-const PANEL = { breite: 720, hoehe: 320 };
+// 400 high since S7: the sheet «Anpassen» has up to five rows plus the group switch (transparent, click-through outside)
+const PANEL = { breite: 720, hoehe: 400 };
 const STREIFEN = { breite: 300, hoehe: 10 }; // the hidden island: easy to hit at the top centre, a small handle shows where
 const PILLE = { breite: 520, hoehe: 170, abstand: 4 };
 const TREFFER_RAND = 14;          // a click near the island must never be swallowed
@@ -47,6 +48,8 @@ const STANDARD = {
   lokalDiktat: true,
   // where the island sits along the top edge (S5): share of the screen width, 0.5 = centre
   inselX: 0.5,
+  // S7: size, look («app» = like the app: appAussehen is the app page's data-theme), what the island shows, microphone
+  inselGroesse: 'normal', inselAussehen: 'app', appAussehen: null, zeigtLaeufe: true, zeigtFreigaben: true, mikrofon: null,
 };
 /** What the app's settings (Einstellungen → Bot → Insel) may read and change — never the internal flags. */
 // v4 (Desktop 1.0.13): lokalDiktat (dictation through the model on this PC) plus the read-only lokalBereit.
@@ -113,12 +116,15 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     if (chatFertig && Date.now() - chatFertig.zeit < 3 * 60 * 1000) l.fertig = [chatFertig, ...lage.fertig];
     return l;
   }
+  /** What the island's windows see: runs and approvals only when shown (S7, lageFuerInsel). */
+  function lageFuerFenster() { return lageFuerInsel(lageMitApp(), einstellungen); }
   function lageSenden() {
-    const l = lageMitApp();
+    const l = lageFuerFenster();
     senden(insel, 'insel:lage', l);
     senden(pille, 'insel:lage', l);
     if (pet) pet.lage(l);
-    if (beiLage) beiLage(l);
+    // the tray keeps the full state: amber while approvals wait, even when the island hides them
+    if (beiLage) beiLage(lageMitApp());
   }
 
   const senden = (fenster, kanal, daten) => {
@@ -127,7 +133,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
   /** The settings as the island's own windows see them: plus whether the pet is active right now. */
   // testDiktat (unpackaged, SPACE_INSEL_TEST_TEXT): the pill keeps a silent take, so the paste can be tested without a voice
   // lokalBereit: the model on this PC (lokal.js) is there → the pill sends WAV when lokalDiktat is on
-  const fuerFenster = () => ({ ...einstellungen, taste: tasteVon(einstellungen), letztesDiktat: letztesDa(), lokalBereit: !!(lokalKi && lokalKi.bereit()), petAktiv: !!(pet && pet.aktiv()), testDiktat: !!testText });
+  const fuerFenster = () => ({ ...einstellungen, taste: tasteVon(einstellungen), letztesDiktat: letztesDa(), aussehen: aussehenJetzt(), groesse: faktor(), lokalBereit: !!(lokalKi && lokalKi.bereit()), petAktiv: !!(pet && pet.aktiv()), testDiktat: !!testText });
   /** The app's settings page: the switches plus whether the model on this PC is there (lokalBereit). */
   const fuerAppJetzt = () => fuerApp(einstellungen, lokalKi && lokalKi.bereit());
 
@@ -178,7 +184,10 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     });
   }
 
-  function panelRahmen() { return inselRahmen(anzeige().bounds, PANEL.breite, PANEL.hoehe, einstellungen.inselX); }
+  /** S7: the island's size factor (the page scales itself with CSS zoom; the strip stays as it is). */
+  function faktor() { return groesseFaktor(einstellungen, anzeige().workArea.width); }
+  function aussehenJetzt() { return aussehenWirksam(einstellungen, nativeTheme.shouldUseDarkColors); }
+  function panelRahmen() { const f = faktor(); return inselRahmen(anzeige().bounds, Math.round(PANEL.breite * f), Math.round(PANEL.hoehe * f), einstellungen.inselX); }
   function streifenRahmen() { return inselRahmen(anzeige().bounds, STREIFEN.breite, STREIFEN.hoehe, einstellungen.inselX); }
 
   function inselAnlegen() {
@@ -193,7 +202,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
       if (!insel || insel.isDestroyed()) return;
       insel.showInactive();
       senden(insel, 'insel:einstellungen', fuerFenster());
-      senden(insel, 'insel:lage', lageMitApp());
+      senden(insel, 'insel:lage', lageFuerFenster());
     });
     insel.on('closed', () => { insel = null; });
     // Typing in the island, then a click into another app: the island lets go of the keyboard.
@@ -233,7 +242,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
       if (!pille || pille.isDestroyed()) return;
       if (einstellungen.diktat) pille.showInactive();
       senden(pille, 'insel:einstellungen', fuerFenster());
-      senden(pille, 'insel:lage', lageMitApp());
+      senden(pille, 'insel:lage', lageFuerFenster());
     });
     pille.on('closed', () => { pille = null; });
     pille.webContents.on('render-process-gone', () => {
@@ -408,7 +417,8 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
         const laufend = steno ? { ok: false } : await api('/api/runs/laufend');
         if (laufend.status === 401) stamm = null; // signed out meanwhile
         const zahl = laufend.ok && laufend.daten ? Number(laufend.daten.freigaben || 0) : 0;
-        const freigaben = zahl > 0 ? await api('/api/approvals?runs=0') : { ok: false };
+        // the cards only when the island shows approvals (S7); the count for the tray comes with /api/runs/laufend
+        const freigaben = freigabenAbfragen(einstellungen, zahl) ? await api('/api/approvals?runs=0') : { ok: false };
         lage = stamm ? inselLage({
           profil: stamm.profil,
           team: stamm.team,
@@ -689,6 +699,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     oeffnen: (pfad) => { zeigen(); if (typeof pfad === 'string' && pfad.startsWith('/') && !pfad.startsWith('//')) navigieren(pfad); },
     blatt: () => blattZeigen(),
     letztes: () => letztesDa(),
+    aussehen: () => aussehenJetzt(),
     nochmals: () => nochmalsEinfuegen(),
     log,
   });
@@ -903,6 +914,11 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
       if (pille && !pille.isDestroyed()) { if (wert) pille.showInactive(); else pille.hide(); }
     }
     if (keys.includes('an') && vorher.an !== einstellungen.an) { if (einstellungen.an) starten(); else stoppen(); }
+    // S7: a new size takes effect at once (the page zooms itself); what the island shows is filtered again; the look
+    // goes to the pet as well
+    if (keys.includes('inselGroesse') && insel && !insel.isDestroyed() && !eingeklappt) insel.setBounds(panelRahmen());
+    if (keys.some((k) => k === 'zeigtLaeufe' || k === 'zeigtFreigaben')) { lageSenden(); if (keys.includes('zeigtFreigaben')) lagePlanen(true); }
+    if (keys.some((k) => k === 'inselAussehen' || k === 'appAussehen')) pet.zustand();
     if (einstellungen.an && keys.some((k) => k === 'pet' || k === 'petName' || k === 'petVersteckt')) pet.einstellungen();
     senden(insel, 'insel:einstellungen', fuerFenster());
     senden(pille, 'insel:einstellungen', fuerFenster());
@@ -941,6 +957,9 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     pillenZeigerDrin = null;
   }
 
+  // «Aussehen: wie die App» without a value from the app follows Windows
+  const themaGeaendert = () => { einstellungenSenden(); pet.zustand(); };
+  nativeTheme.on('updated', themaGeaendert);
   screen.on('display-metrics-changed', neuAusrichten);
   screen.on('display-added', neuAusrichten);
   screen.on('display-removed', neuAusrichten);
@@ -956,6 +975,10 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     diktatSchalten(an) { einstellungsAenderung('diktat', !!an); },
     get lokalDiktat() { return einstellungen.lokalDiktat; },
     lokalDiktatSchalten(an) { einstellungsAenderung('lokalDiktat', !!an); },
+    /** The app page's theme (data-theme: dark | liquid-glass), for «Aussehen: wie die App» (S7). Kept in insel.json. */
+    appAussehen(wert) {
+      if ((wert === 'dark' || wert === 'liquid-glass') && wert !== einstellungen.appAussehen) aendern({ appAussehen: wert });
+    },
     /** The model on this PC arrived or went away (main.js): the pill learns whether to send WAV. */
     lokalGeaendert() { einstellungenSenden(); if (beiEinstellungen) beiEinstellungen(fuerAppJetzt()); },
     petSchalten(an) { aendern(an ? { pet: true, petVersteckt: 0 } : { pet: false }); },

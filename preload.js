@@ -326,6 +326,16 @@ window.addEventListener('DOMContentLoaded', () => {
   // in main.js via 'did-navigate-in-page' — patching history.pushState here
   // would only patch the isolated preload world, not the page.
   const requestTitlebarSync = () => ipcRenderer.send('titlebar-resync');
+  // The island's «Aussehen: wie die App» (S7): the page's data-theme once now (the inline script set it before this
+  // ran) and on every change; only the two known values ever cross.
+  let aussehen = null;
+  const aussehenMelden = () => {
+    const t = document.documentElement.dataset.theme;
+    const wert = t === 'liquid-glass' ? 'liquid-glass' : t === 'dark' ? 'dark' : null;
+    if (wert && wert !== aussehen) { aussehen = wert; ipcRenderer.send('app:aussehen', wert); }
+  };
+  aussehenMelden();
+  new MutationObserver(aussehenMelden).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   new MutationObserver(requestTitlebarSync).observe(document.documentElement, {
     attributes: true,
     attributeFilter: ['data-theme', 'data-brand', 'class', 'style'],

@@ -119,6 +119,28 @@
 
   // ---- recording ----
 
+  // S7: the chosen microphone (insel.json mikrofon { id, name }), else the system's default. Device ids are salted per
+  // session: a missing id is looked up by name; a device that is gone falls back to the default (no error for the person).
+  let mikrofon = null;
+  const TON = { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 };
+  async function mikrofonOeffnen() {
+    if (mikrofon && mikrofon.id) {
+      let id = mikrofon.id;
+      try {
+        const geraete = await navigator.mediaDevices.enumerateDevices();
+        const eingaenge = geraete.filter((g) => g.kind === 'audioinput');
+        if (!eingaenge.some((g) => g.deviceId === id) && mikrofon.name) {
+          const gleich = eingaenge.find((g) => g.label === mikrofon.name);
+          if (gleich) { id = gleich.deviceId; api.einstellung('mikrofon', { id, name: mikrofon.name }); }
+        }
+        return await navigator.mediaDevices.getUserMedia({ audio: { ...TON, deviceId: { exact: id } } });
+      } catch (err) {
+        if (!err || (err.name !== 'OverconstrainedError' && err.name !== 'NotFoundError')) throw err;
+      }
+    }
+    return navigator.mediaDevices.getUserMedia({ audio: TON });
+  }
+
   async function aufnahmeStarten(id) {
     if (st.aufnahme) aufnahmeVerwerfen();
     const a = { id, chunks: [], start: 0, peak: 0, messungen: 0, stopp: null, freihand: false, stream: null, recorder: null, ctx: null, analyser: null };
@@ -126,7 +148,7 @@
     // a shortcut tap (Ctrl+C) must not flash the pill: show it only when the take lasts
     uhr('zeigen', 150, () => { if (st.aufnahme === a && !a.stopp) { look(a.freihand ? 'freihand' : 'live'); K.spielen('diktatStart'); } });
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
+      const stream = await mikrofonOeffnen();
       if (st.aufnahme !== a) { stream.getTracks().forEach((t) => t.stop()); return; }
       a.stream = stream;
       const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'].find((t) => MediaRecorder.isTypeSupported(t)) || '';
@@ -273,8 +295,11 @@
   // lokalBereit + lokalDiktat (insel.js): dictation goes to the model on this PC → send WAV
   let lokalWav = false;
   api.onEinstellungen((e) => {
+    // S7: light or dark like the island
+    if (e && e.aussehen === 'hell') document.documentElement.dataset.aussehen = 'hell'; else delete document.documentElement.dataset.aussehen;
     K.an = e.toene !== false;
     lokalWav = e.lokalDiktat !== false && !!e.lokalBereit;
+    mikrofon = e.mikrofon && typeof e.mikrofon.id === 'string' ? e.mikrofon : null;
     st.test = !!e.testDiktat;
     const pet = !!e.petAktiv;
     if (pet !== st.pet) {

@@ -358,3 +358,51 @@ test('a press that moves less than the threshold is a click; more is a drag, cla
   assert.ok(Math.abs(inselAnteil(600, b, 720) - (960 / 1920)) < 1e-9);
   assert.equal(inselRahmen(b, 720, 320, inselAnteil(123, b, 720)).x, 123);
 });
+
+// ---- S7: size, look, what the island shows, microphone ----
+const { groesseFaktor, aussehenWirksam, lageFuerInsel, freigabenAbfragen, mikrofonPruefen } = require('./regeln');
+
+test('size: three steps, «gross» only with room', () => {
+  assert.equal(groesseFaktor({ inselGroesse: 'klein' }, 1920), 0.85);
+  assert.equal(groesseFaktor({ inselGroesse: 'normal' }, 1920), 1);
+  assert.equal(groesseFaktor({ inselGroesse: 'gross' }, 1920), 1.2);
+  assert.equal(groesseFaktor({ inselGroesse: 'gross' }, 1100), 1);
+  assert.equal(groesseFaktor({ inselGroesse: 'riesig' }, 1920), 1);
+  assert.equal(groesseFaktor({}, 1920), 1);
+});
+
+test('look: like the app (its data-theme), else Windows; or fixed', () => {
+  assert.equal(aussehenWirksam({ inselAussehen: 'app', appAussehen: 'liquid-glass' }, true), 'hell');
+  assert.equal(aussehenWirksam({ inselAussehen: 'app', appAussehen: 'dark' }, false), 'dunkel');
+  assert.equal(aussehenWirksam({ inselAussehen: 'app', appAussehen: null }, false), 'hell');
+  assert.equal(aussehenWirksam({}, true), 'dunkel');
+  assert.equal(aussehenWirksam({ inselAussehen: 'hell', appAussehen: 'dark' }, true), 'hell');
+  assert.equal(aussehenWirksam({ inselAussehen: 'dunkel' }, false), 'dunkel');
+});
+
+test('what the island shows: runs and approvals hidden only in its copy; approvals fetched only when shown', () => {
+  const l = { laufend: [{ id: 'a' }], fertig: [{ id: 'b' }], freigaben: [{ id: 'c' }], freigabenZahl: 1, steno: false };
+  assert.deepEqual(lageFuerInsel(l, {}), l);
+  const ohneLaeufe = lageFuerInsel(l, { zeigtLaeufe: false });
+  assert.deepEqual([ohneLaeufe.laufend, ohneLaeufe.fertig, ohneLaeufe.freigaben.length], [[], [], 1]);
+  const ohneFreigaben = lageFuerInsel(l, { zeigtFreigaben: false });
+  assert.deepEqual([ohneFreigaben.freigaben, ohneFreigaben.freigabenZahl, ohneFreigaben.laufend.length], [[], 0, 1]);
+  assert.equal(l.freigabenZahl, 1, 'the original (for the tray) stays untouched');
+  assert.equal(freigabenAbfragen({}, 2), true);
+  assert.equal(freigabenAbfragen({}, 0), false);
+  assert.equal(freigabenAbfragen({ zeigtFreigaben: false }, 2), false);
+});
+
+test('microphone: a device with id and name, or the default; Windows pseudo devices count as default', () => {
+  assert.deepEqual(mikrofonPruefen({ id: 'abc', name: 'Headset' }), { id: 'abc', name: 'Headset' });
+  assert.equal(mikrofonPruefen(null), null);
+  assert.equal(mikrofonPruefen({ id: 'default', name: 'Standard' }), null);
+  assert.equal(mikrofonPruefen({ id: 'communications' }), null);
+  assert.equal(mikrofonPruefen({ id: '' }), undefined);
+  assert.equal(mikrofonPruefen('abc'), undefined);
+  assert.equal(mikrofonPruefen({ id: 'x'.repeat(201) }), undefined);
+  assert.deepEqual(einstellungPruefen('mikrofon', { id: 'abc', name: 'H' }), { mikrofon: { id: 'abc', name: 'H' } });
+  assert.deepEqual(einstellungPruefen('inselAussehen', 'hell'), { inselAussehen: 'hell' });
+  assert.equal(einstellungPruefen('inselGroesse', 'toString'), null);
+  assert.deepEqual(einstellungPruefen('zeigtFreigaben', false), { zeigtFreigaben: false });
+});

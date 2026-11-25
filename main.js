@@ -338,6 +338,12 @@ ipcMain.handle('insel:app-einstellung', (event, input) => {
   return insel.einstellungSetzen(schluessel, schluessel === 'petName' || schluessel === 'taste' ? String(wert == null ? '' : wert) : !!wert);
 });
 
+// «Aussehen: wie die App» (S7): the app page reports its data-theme (preload.js); only from the app's own pages.
+ipcMain.on('app:aussehen', (event, wert) => {
+  if (!insel || !appSenderOrigin(event)) return;
+  insel.appAussehen(wert);
+});
+
 ipcMain.handle('insel:datei-nehmen', (event) => {
   if (!appSenderOrigin(event) || !inselDatei || Date.now() - inselDatei.zeit > 2 * 60 * 1000) return null;
   const d = inselDatei;
@@ -628,7 +634,8 @@ app.on('ready', () => {
       beiLage: (lage) => {
         if (!tray) return;
         // Steno has its own robot; the Bot-Team the SPACE helmet, amber while approvals wait
-        const zahl = lage.freigaben.length;
+        // the count, not the cards: the island may hide approvals (S7), the tray never does
+        const zahl = Number(lage.freigabenZahl) || 0;
         const bild = lage.steno ? 'tray-steno.ico' : zahl ? 'tray-wartet.ico' : 'tray.ico';
         if (tray.__bild !== bild) { tray.setImage(path.join(__dirname, 'assets', bild)); tray.__bild = bild; }
         tray.setToolTip(lage.steno ? 'Steno' : zahl ? `SPACE · ${zahl === 1 ? 'eine Freigabe wartet' : `${zahl} Freigaben warten`}` : 'SPACE Media Engine');

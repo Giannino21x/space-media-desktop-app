@@ -246,6 +246,8 @@
     z.name = String(s.name || '');
     z.steno = !!s.steno;
     z.tooltip = String(s.tooltip || '');
+    // S7: light or dark like the island
+    if (s.aussehen === 'hell') document.documentElement.dataset.aussehen = 'hell'; else delete document.documentElement.dataset.aussehen;
     // «Letztes Diktat einfügen» only while there is one (10 minutes, insel.js)
     const nochmals = document.querySelector('[data-aktion="nochmals"]');
     if (nochmals) nochmals.hidden = !s.letztes;

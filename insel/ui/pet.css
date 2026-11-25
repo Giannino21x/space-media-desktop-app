@@ -2,6 +2,9 @@
    pet-ui.js); the dictation pill, the tooltip and the menu are DOM, in the look of the island's pill (pille.css). */
 
 :root {
+  --ueber: 255 255 255;
+  --grund: 0 0 0;
+  --grund-2: 10 11 14;
   color-scheme: dark;
   --font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --ink: #f5f6f8;
@@ -10,6 +13,20 @@
   --rot: #ff8d97;
   --bot: 51, 170, 255;
 }
+
+/* «Aussehen: hell» (S7): main sets html[data-aussehen="hell"] (wie die App: data-theme of the app page, else Windows).
+   Only tokens change; contrast checked: ink 16:1, dim-2 5.6:1, akzent 5.2:1 on the light island. */
+html[data-aussehen="hell"] {
+  color-scheme: light;
+  --ueber: 0 0 0;
+  --grund: 244 245 247;
+  --grund-2: 250 250 251;
+  --ink: #16181c;
+  --dim: #5a6069;
+  --akzent: #1764c8;
+  --rot: #c8293a;
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; font-family: var(--font); color: var(--ink); -webkit-font-smoothing: antialiased; user-select: none; cursor: default; }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: default; }
@@ -28,8 +45,8 @@ button:focus-visible { outline: 2px solid var(--akzent); outline-offset: 2px; }
   align-items: center;
   gap: 8px;
   border-radius: 17px;
-  background: rgba(0, 0, 0, 0.94);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16), 0 4px 10px rgba(0, 0, 0, 0.35);
+  background: rgb(var(--grund) / 0.94);
+  box-shadow: inset 0 0 0 1px rgb(var(--ueber) / 0.16), 0 4px 10px rgba(0, 0, 0, 0.35);
   white-space: nowrap;
   opacity: 0;
   scale: 0.6;
@@ -44,13 +61,13 @@ button:focus-visible { outline: 2px solid var(--akzent); outline-offset: 2px; }
 
 .p-text { font-size: 12.5px; font-weight: 600; }
 .punkte { display: flex; align-items: center; gap: 3.2px; height: 26px; }
-.punkte i { display: block; width: 3.4px; height: 3.4px; border-radius: 2px; background: rgba(255, 255, 255, 0.94); }
+.punkte i { display: block; width: 3.4px; height: 3.4px; border-radius: 2px; background: rgb(var(--ueber) / 0.94); }
 .pille[data-look="meldung"] .punkte { display: none; }
 
 .p-klein { display: none; width: 24px; height: 24px; border-radius: 12px; align-items: center; justify-content: center; flex: none; }
 .pille[data-look="freihand"] .p-klein { display: inline-flex; }
-.p-weg { color: var(--dim); background: rgba(255, 255, 255, 0.08); margin-left: -4px; }
-.p-weg:hover { color: var(--ink); background: rgba(255, 255, 255, 0.14); }
+.p-weg { color: var(--dim); background: rgb(var(--ueber) / 0.08); margin-left: -4px; }
+.p-weg:hover { color: var(--ink); background: rgb(var(--ueber) / 0.14); }
 .p-fertig { background: #f5f6f8; color: #0b0c0e; margin-right: -2px; }
 .p-klein svg { width: 12px; height: 12px; }
 
@@ -61,8 +78,8 @@ button:focus-visible { outline: 2px solid var(--akzent); outline-offset: 2px; }
   height: 28px;
   padding: 0 12px;
   border-radius: 14px;
-  background: rgba(0, 0, 0, 0.94);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 4px 12px rgba(0, 0, 0, 0.35);
+  background: rgb(var(--grund) / 0.94);
+  box-shadow: inset 0 0 0 1px rgb(var(--ueber) / 0.12), 0 4px 12px rgba(0, 0, 0, 0.35);
   font-size: 12px;
   font-weight: 600;
   display: flex;
@@ -83,8 +100,8 @@ button:focus-visible { outline: 2px solid var(--akzent); outline-offset: 2px; }
   min-width: 184px;
   padding: 6px;
   border-radius: 14px;
-  background: rgba(10, 11, 14, 0.96);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), 0 8px 24px rgba(0, 0, 0, 0.45);
+  background: rgb(var(--grund-2) / 0.96);
+  box-shadow: inset 0 0 0 1px rgb(var(--ueber) / 0.12), 0 8px 24px rgba(0, 0, 0, 0.45);
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -102,17 +119,17 @@ button:focus-visible { outline: 2px solid var(--akzent); outline-offset: 2px; }
 .m-titel { padding: 4px 10px 6px; font-weight: 700; }
 .m-gruppe { padding: 4px 10px 2px; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.04em; }
 .m-eintrag { text-align: left; padding: 5px 10px; border-radius: 9px; font-weight: 600; }
-.m-eintrag:hover { background: rgba(255, 255, 255, 0.1); }
+.m-eintrag:hover { background: rgb(var(--ueber) / 0.1); }
 .m-eintrag[hidden] { display: none; }
-.m-strich { height: 1px; margin: 3px 6px; background: rgba(255, 255, 255, 0.1); }
+.m-strich { height: 1px; margin: 3px 6px; background: rgb(var(--ueber) / 0.1); }
 .m-name { padding: 2px 6px 4px; }
 .m-name input {
   width: 100%;
   height: 28px;
   padding: 0 10px;
   border-radius: 9px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgb(var(--ueber) / 0.16);
+  background: rgb(var(--ueber) / 0.06);
   color: var(--ink);
   font: inherit;
   outline: none;

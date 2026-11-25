@@ -18,7 +18,7 @@
   const reduziert = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const HOEHE = { uebersicht: 160, freigabe: 160, fragen: 160, ablage: 176, datei: 176, mail: 240, einstellungen: 228, hinweis: 160, begruessung: 150 };
-  const TITEL = { uebersicht: '', freigabe: 'Freigabe', fragen: 'SPACE Bot fragen', ablage: 'Datei ablegen', datei: '', mail: 'Per Mail senden', einstellungen: 'Diktat', hinweis: '', begruessung: '' };
+  const TITEL = { uebersicht: '', freigabe: 'Freigabe', fragen: 'SPACE Bot fragen', ablage: 'Datei ablegen', datei: '', mail: 'Per Mail senden', einstellungen: 'Anpassen', hinweis: '', begruessung: '' };
   const KOMPAKT_ZU_MS = 60_000;
   const OFFEN_ZU_MS = 15_000;
   const HOVER_ZU_MS = 600;
@@ -137,9 +137,23 @@
   }
 
   /** The island's outline in window coordinates → main decides click-through with it. */
+  /** S7: the page's zoom (island size) — only while the panel shows; the hidden strip keeps 1. */
+  function zoom() { return st.modus === 'versteckt' ? 1 : (Number(st.einstellungen.groesse) || 1); }
+  function zoomSetzen() {
+    const f = zoom();
+    document.documentElement.style.zoom = f === 1 ? '' : String(f);
+    gemeldetRect = null;
+  }
+  /** S7: light or dark, from main (like the app, or fixed). */
+  function aussehenSetzen() {
+    if (st.einstellungen.aussehen === 'hell') document.documentElement.dataset.aussehen = 'hell';
+    else delete document.documentElement.dataset.aussehen;
+  }
   function flaechenMelden() {
     if (st.modus === 'versteckt') return;
-    const r = { x: (PANEL - geo.w) / 2, y: 0, width: geo.w, height: Math.max(2, geo.h) };
+    // window px for main: the island's CSS px times the page zoom (S7 size)
+    const f = zoom();
+    const r = { x: ((PANEL - geo.w) / 2) * f, y: 0, width: geo.w * f, height: Math.max(2, geo.h) * f };
     const g = gemeldetRect;
     if (g && Math.abs(g.x - r.x) < 0.5 && Math.abs(g.width - r.width) < 0.5 && Math.abs(g.height - r.height) < 0.5) return;
     gemeldetRect = r;
@@ -203,9 +217,8 @@
   function hoeheFuer(name) {
     // the sheet grows with its rows (the last dictation, the model on this PC come and go)
     if (name === 'einstellungen') {
-      const e = st.einstellungen;
-      const zeilen = 3 + (e.letztesDiktat ? 1 : 0) + (e.lokalBereit ? 1 : 0);
-      return Math.max(160, 52 + 14 + zeilen * 42 + 34);
+      // group switch 38 + rows + footer (S7: one group at a time)
+      return Math.max(160, Math.round(52 + 14 + 38 + blattZeilen() * 42 + 34));
     }
     if (name !== 'uebersicht') return HOEHE[name] || 160;
     const l = st.lage;
@@ -228,6 +241,7 @@
     if (st.modus === neu) return;
     const vorher = st.modus;
     st.modus = neu;
+    zoomSetzen();
     insel.dataset.modus = neu;
     if (neu === 'versteckt') {
       geoZiel(184, 0, 14);
@@ -418,7 +432,9 @@
     if (st.modus === 'offen') {
       gesichtGross.zeiger(zeigerFuer(grossCanvas));
       // hover on the face → love after 1.9 s (moving > 40 px restarts)
-      const ueber = grossCanvas.style.opacity !== '0' && Math.hypot(p.x - (40 + fg.x), p.y - fg.y) < fg.d / 1.2;
+      // p is in window px; the island's own geometry in CSS px (S7: the page may be zoomed)
+      const pc = { x: p.x / zoom(), y: p.y / zoom() };
+      const ueber = grossCanvas.style.opacity !== '0' && Math.hypot(pc.x - (40 + fg.x), pc.y - fg.y) < fg.d / 1.2;
       if (ueber) {
         if (!letzteHoverPos) gesichtGross.hover(true);
         else if (Math.hypot(p.x - letzteHoverPos.x, p.y - letzteHoverPos.y) > 40) { gesichtGross.hoverBewegt(); letzteHoverPos = p; }
@@ -775,46 +791,140 @@
     b.addEventListener('click', () => fn(!an));
     return b;
   }
+  // Two groups, one at a time (the panel is 400 px high): «Diktat» and «Insel» (S7); the open microphone list shows alone
+  const blattSt = { gruppe: 'diktat', mikrofone: null, mikrofonOffen: false };
+  function gruppenZeile() {
+    const z = document.createElement('div');
+    z.className = 'e-gruppen';
+    z.append(segment('Gruppe', [
+      { wert: 'diktat', inhalt: 'Diktat', label: 'Diktat' },
+      { wert: 'insel', inhalt: 'Insel', label: 'Insel' },
+    ], blattSt.gruppe, (w) => { blattSt.gruppe = w; blattSt.mikrofonOffen = false; einstellungenZeichnen(); geoZiel(OFFEN_B, hoeheFuer('einstellungen'), 22); }));
+    return z;
+  }
+  /** Rows of the current group (for the panel's height). */
+  function blattZeilen() {
+    const e = st.einstellungen;
+    if (blattSt.gruppe === 'insel') return 3;
+    if (blattSt.mikrofonOffen) return 1 + Math.min(5, (blattSt.mikrofone || []).length + 1) * 0.68;
+    return 3 + (e.letztesDiktat ? 1 : 0) + (e.lokalBereit ? 1 : 0);
+  }
+  // ---- microphone (S7): the system's default or a chosen device; the list never opens the microphone
+  async function mikrofoneLaden() {
+    try {
+      const geraete = await navigator.mediaDevices.enumerateDevices();
+      let n = 0;
+      blattSt.mikrofone = geraete
+        .filter((g) => g.kind === 'audioinput' && g.deviceId !== 'default' && g.deviceId !== 'communications')
+        .map((g) => ({ id: g.deviceId, name: g.label || `Mikrofon ${++n}` }));
+    } catch {
+      blattSt.mikrofone = [];
+    }
+    if (st.ansicht === 'einstellungen' && st.modus === 'offen') { einstellungenZeichnen(); geoZiel(OFFEN_B, hoeheFuer('einstellungen'), 22); }
+  }
+  if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) navigator.mediaDevices.addEventListener('devicechange', () => { if (blattSt.mikrofone) mikrofoneLaden(); });
+  function mikrofonZeilen(liste) {
+    const e = st.einstellungen;
+    const m = e.mikrofon;
+    const da = !m || !blattSt.mikrofone || blattSt.mikrofone.some((g) => g.id === m.id || g.name === m.name);
+    const name = !m ? 'Standard von Windows' : `${m.name || 'Gewähltes Mikrofon'}${da ? '' : ' (nicht verbunden)'}`;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'z-wahl';
+    b.setAttribute('aria-expanded', String(blattSt.mikrofonOffen));
+    b.innerHTML = `<span>${escape(name)}</span><span class="z-pfeil" aria-hidden="true">${blattSt.mikrofonOffen ? '▴' : '▾'}</span>`;
+    b.addEventListener('click', () => {
+      blattSt.mikrofonOffen = !blattSt.mikrofonOffen;
+      if (blattSt.mikrofonOffen) mikrofoneLaden();
+      einstellungenZeichnen();
+      geoZiel(OFFEN_B, hoeheFuer('einstellungen'), 22);
+    });
+    liste.append(zeile('Mikrofon', da ? 'Womit du diktierst' : 'Nicht da — es hört das Standard-Mikrofon', b, m ? () => setzen('mikrofon', null) : null));
+    if (!blattSt.mikrofonOffen) return;
+    const wahl = document.createElement('div');
+    wahl.className = 'e-liste-wahl';
+    wahl.setAttribute('role', 'radiogroup');
+    wahl.setAttribute('aria-label', 'Mikrofon');
+    const eintraege = [{ id: null, name: 'Standard von Windows' }, ...(blattSt.mikrofone || [])].slice(0, 5);
+    for (const g of eintraege) {
+      const r = document.createElement('button');
+      r.type = 'button';
+      r.setAttribute('role', 'radio');
+      const an = g.id === null ? !m : !!m && (m.id === g.id || m.name === g.name);
+      r.setAttribute('aria-checked', String(an));
+      r.textContent = g.name;
+      r.addEventListener('click', () => { blattSt.mikrofonOffen = false; setzen('mikrofon', g.id === null ? null : { id: g.id, name: g.name }); geoZiel(OFFEN_B, hoeheFuer('einstellungen'), 22); });
+      wahl.append(r);
+    }
+    liste.append(wahl);
+  }
   function einstellungenZeichnen() {
     const e = st.einstellungen;
     const liste = $('e-liste');
     liste.innerHTML = '';
-    // the last dictation once more (10 minutes, in memory only) — only the title, never the text (screen sharing)
-    if (e.letztesDiktat) {
-      const b = knopf('Einfügen', '', () => {
-        modusSetzen('kompakt');
-        zuPlanen();
-        if (api.inselNochmals) api.inselNochmals();
-      });
-      b.classList.add('z-knopf');
-      liste.append(zeile('Letztes Diktat einfügen', 'Dort, wo du gerade schreibst', b, null));
-    }
-    const taste = e.taste || (e.diktat === false ? 'aus' : 'strgRechts');
-    liste.append(zeile(
-      'Taste fürs Diktat',
-      taste === 'aus' ? 'Kein Diktat, auch nicht über die Knöpfe' : 'Halten und sprechen · zweimal tippen für freihändig',
-      segment('Taste fürs Diktat', [
-        { wert: 'strgRechts', inhalt: '<span class="taste">Strg</span> rechts', label: 'Strg rechts' },
-        { wert: 'aus', inhalt: 'Aus', label: 'Aus' },
-      ], taste, (w) => setzen('taste', w)),
-      taste !== 'strgRechts' ? () => setzen('taste', 'strgRechts') : null,
-    ));
-    liste.append(woerterZeile());
-    const petAn = e.petAktiv !== undefined ? !!e.petAktiv : !!e.pet;
-    liste.append(zeile(
-      'SPACE Pet',
-      'Der Kopf unten rechts, er fängt dein Diktat und wirft es',
-      schalter('SPACE Pet', petAn, (an) => setzen('pet', an)),
-      !petAn ? () => setzen('pet', true) : null,
-    ));
-    // dictation on this PC (lokal.js) — only once the model is there; otherwise the app's service (the person's KI-Option)
-    if (e.lokalBereit) {
+    liste.append(gruppenZeile());
+    if (blattSt.gruppe === 'insel') {
+      const groesse = e.inselGroesse || 'normal';
+      liste.append(zeile('Grösse', 'Wie gross die Insel oben ist', segment('Grösse', [
+        { wert: 'klein', inhalt: 'Klein', label: 'Klein' },
+        { wert: 'normal', inhalt: 'Normal', label: 'Normal' },
+        { wert: 'gross', inhalt: 'Gross', label: 'Gross' },
+      ], groesse, (w) => setzen('inselGroesse', w)), groesse !== 'normal' ? () => setzen('inselGroesse', 'normal') : null));
+      const aussehen = e.inselAussehen || 'app';
+      liste.append(zeile('Aussehen', aussehen === 'app' ? 'Hell oder dunkel wie SME' : 'Insel, Pille und Pet', segment('Aussehen', [
+        { wert: 'app', inhalt: 'Wie SME', label: 'Wie SME' },
+        { wert: 'hell', inhalt: 'Hell', label: 'Hell' },
+        { wert: 'dunkel', inhalt: 'Dunkel', label: 'Dunkel' },
+      ], aussehen, (w) => setzen('inselAussehen', w)), aussehen !== 'app' ? () => setzen('inselAussehen', 'app') : null));
+      const petAn = e.petAktiv !== undefined ? !!e.petAktiv : !!e.pet;
+      const zeigt = document.createElement('div');
+      zeigt.className = 'e-chips';
+      for (const [k, label, an] of [['pet', 'Pet', petAn], ['zeigtLaeufe', 'Laufende Arbeit', e.zeigtLaeufe !== false], ['zeigtFreigaben', 'Freigaben', e.zeigtFreigaben !== false]]) {
+        const c = document.createElement('button');
+        c.type = 'button';
+        c.className = 'e-chip';
+        c.setAttribute('aria-pressed', String(an));
+        c.textContent = label;
+        c.addEventListener('click', () => setzen(k, !an));
+        zeigt.append(c);
+      }
+      const alleAn = petAn && e.zeigtLaeufe !== false && e.zeigtFreigaben !== false;
+      liste.append(zeile('Zeigt', e.zeigtFreigaben === false ? 'Freigaben siehst du im Symbol unten rechts' : 'Was die Insel dir zeigt', zeigt,
+        alleAn ? null : () => { setzen('pet', true); setzen('zeigtLaeufe', true); setzen('zeigtFreigaben', true); }));
+    } else if (blattSt.mikrofonOffen) {
+      mikrofonZeilen(liste);
+    } else {
+      // the last dictation once more (10 minutes, in memory only) — only the title, never the text (screen sharing)
+      if (e.letztesDiktat) {
+        const b = knopf('Einfügen', '', () => {
+          modusSetzen('kompakt');
+          zuPlanen();
+          if (api.inselNochmals) api.inselNochmals();
+        });
+        b.classList.add('z-knopf');
+        liste.append(zeile('Letztes Diktat einfügen', 'Dort, wo du gerade schreibst', b, null));
+      }
+      const taste = e.taste || (e.diktat === false ? 'aus' : 'strgRechts');
       liste.append(zeile(
-        'Diktat auf diesem PC',
-        'Das Modell auf diesem Rechner hört, nichts geht ins Netz',
-        schalter('Diktat auf diesem PC', !!e.lokalDiktat, (an) => setzen('lokalDiktat', an)),
-        !e.lokalDiktat ? () => setzen('lokalDiktat', true) : null,
+        'Taste fürs Diktat',
+        taste === 'aus' ? 'Kein Diktat, auch nicht über die Knöpfe' : 'Halten und sprechen · zweimal tippen für freihändig',
+        segment('Taste fürs Diktat', [
+          { wert: 'strgRechts', inhalt: '<span class="taste">Strg</span> rechts', label: 'Strg rechts' },
+          { wert: 'aus', inhalt: 'Aus', label: 'Aus' },
+        ], taste, (w) => setzen('taste', w)),
+        taste !== 'strgRechts' ? () => setzen('taste', 'strgRechts') : null,
       ));
+      mikrofonZeilen(liste);
+      liste.append(woerterZeile());
+      // dictation on this PC (lokal.js) — only once the model is there; otherwise the app's service (the person's KI-Option)
+      if (e.lokalBereit) {
+        liste.append(zeile(
+          'Diktat auf diesem PC',
+          'Das Modell auf diesem Rechner hört, nichts geht ins Netz',
+          schalter('Diktat auf diesem PC', !!e.lokalDiktat, (an) => setzen('lokalDiktat', an)),
+          !e.lokalDiktat ? () => setzen('lokalDiktat', true) : null,
+        ));
+      }
     }
     const fuss = document.createElement('div');
     fuss.className = 'fuss';
@@ -874,6 +984,7 @@
   }
   /** Right-click on the island, the pill or «Einstellungen…» on the pet: open straight into the sheet. */
   function blattOeffnen() {
+    blattSt.gruppe = 'diktat';
     st.durchHover = false;
     st.interagiert = true;
     if (st.modus !== 'offen') { st.ansicht = 'einstellungen'; modusSetzen('offen'); } else ansichtZeigen('einstellungen');
@@ -1027,7 +1138,7 @@
     if (!hatDateien(e)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
-    ablageFolgen({ x: e.clientX, y: e.clientY });
+    ablageFolgen({ x: e.clientX / zoom(), y: e.clientY / zoom() });
   });
   document.addEventListener('dragleave', (e) => {
     if (!hatDateien(e)) return;
@@ -1047,7 +1158,7 @@
     ziehenTiefe = 0;
     delete $('zone').dataset.heiss;
     const datei = e.dataTransfer.files && e.dataTransfer.files[0];
-    if (datei) dateiNehmen(datei, { x: e.clientX, y: e.clientY });
+    if (datei) dateiNehmen(datei, { x: e.clientX / zoom(), y: e.clientY / zoom() });
   });
   $('z-waehlen').addEventListener('click', () => $('z-input').click());
   $('z-input').addEventListener('change', () => {
@@ -1346,8 +1457,8 @@
     uhr('hoverZu', null);
     if (st.modus !== 'offen' || grossCanvas.style.opacity === '0') return;
     // a poke on the face (hit circle a little larger than the helmet)
-    const x = e.clientX - 40;
-    if (Math.hypot(x - fg.x, e.clientY - fg.y) < fg.d / 1.2 && !st.datei) {
+    const x = e.clientX / zoom() - 40;
+    if (Math.hypot(x - fg.x, e.clientY / zoom() - fg.y) < fg.d / 1.2 && !st.datei) {
       const r = gesichtGross.stups();
       if (r === 'schwindlig') {
         K.spielen('schwindlig');
@@ -1403,6 +1514,9 @@
   api.onLage(lageNeu);
   api.onEinstellungen((e) => {
     st.einstellungen = { ...st.einstellungen, ...e };
+    aussehenSetzen();
+    zoomSetzen();
+    flaechenMelden();
     K.an = st.einstellungen.toene;
     tonSymbol();
     if (st.ansicht === 'einstellungen' && st.modus === 'offen') { einstellungenZeichnen(); geoZiel(OFFEN_B, hoeheFuer('einstellungen'), 22); }

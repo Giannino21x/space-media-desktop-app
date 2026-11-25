@@ -19,7 +19,7 @@
     return dpr;
   }
 
-  function blase(x, y, skala, text, farbe, alpha) {
+  function blase(x, y, skala, text, farbe, alpha, hell) {
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.translate(x, y);
@@ -30,7 +30,7 @@
     ctx.shadowColor = 'rgba(0,0,0,0.4)';
     ctx.shadowBlur = 10;
     ctx.shadowOffsetY = 3;
-    ctx.fillStyle = 'rgba(8,9,12,0.95)';
+    ctx.fillStyle = hell ? 'rgba(250,250,251,0.97)' : 'rgba(8,9,12,0.95)';
     ctx.beginPath();
     ctx.roundRect(-b / 2, -h / 2, b, h, h / 2);
     ctx.fill();
@@ -38,7 +38,7 @@
     ctx.strokeStyle = `rgba(${farbe},0.9)`;
     ctx.lineWidth = 1.2;
     ctx.stroke();
-    ctx.fillStyle = '#f5f6f8';
+    ctx.fillStyle = hell ? '#16181c' : '#f5f6f8';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, 0, 1);
@@ -55,11 +55,11 @@
     if (e < lauf.dauer) {
       const pos = R.wurfBogen(lauf.von, lauf.nach, p);
       const skala = 0.55 + 0.45 * Math.min(1, p * 3);
-      blase(pos.x, pos.y, skala, lauf.text, lauf.farbe, 1);
+      blase(pos.x, pos.y, skala, lauf.text, lauf.farbe, 1, lauf.hell);
     } else {
       // impact: the bubble shrinks away, a ring spreads where the words landed
       const q = Math.min(1, (e - lauf.dauer) / NACHLAUF_MS);
-      if (q < 0.5) blase(lauf.nach.x, lauf.nach.y, 1 - q * 2, lauf.text, lauf.farbe, 1 - q * 2);
+      if (q < 0.5) blase(lauf.nach.x, lauf.nach.y, 1 - q * 2, lauf.text, lauf.farbe, 1 - q * 2, lauf.hell);
       ctx.save();
       ctx.globalAlpha = 1 - q;
       ctx.strokeStyle = `rgba(${lauf.farbe},0.9)`;
@@ -76,7 +76,7 @@
   api.onWurfStart((w) => {
     if (!w || !w.von || !w.nach) return;
     const dpr = messen();
-    lauf = { von: w.von, nach: w.nach, text: String(w.text || '…'), farbe: String(w.farbe || '51,170,255'), dauer: Math.max(120, Number(w.dauer) || 400), start: performance.now(), dpr };
+    lauf = { von: w.von, nach: w.nach, text: String(w.text || '…'), farbe: String(w.farbe || '51,170,255'), dauer: Math.max(120, Number(w.dauer) || 400), start: performance.now(), dpr, hell: w.aussehen === 'hell' };
     requestAnimationFrame(bild);
   });
 })();

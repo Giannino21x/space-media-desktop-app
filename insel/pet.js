@@ -33,6 +33,7 @@ const WURF_NACHLAUF_MS = 260; // the splash after the impact, then the overlay g
  * @param {() => Electron.Display} d.anzeige
  * @param {() => object} d.einstellungen                   the island's settings (pet, petName, petLage, petVersteckt, petZaehler)
  * @param {() => boolean} d.blatt                         open the sheet «Diktat» at the island (false: no island)
+ * @param {() => string} d.aussehen                       'hell' | 'dunkel' (S7)
  * @param {() => boolean} d.letztes                       is there a last dictation to paste again (S2)
  * @param {() => Promise<boolean>} d.nochmals             paste the last dictation again
  * @param {(patch: object, opts?: {app?: boolean}) => void} d.aendern  write settings; app: tell the app's settings page
@@ -302,6 +303,7 @@ function createPet(d) {
       tooltip: petTooltip(s.petZaehler, s.petName),
       zaehler: s.petZaehler || null,
       letztes: !!(d.letztes && d.letztes()),
+      aussehen: d.aussehen ? d.aussehen() : 'dunkel',
     });
   }
 
@@ -335,7 +337,7 @@ function createPet(d) {
     const ziel = screen.getCursorScreenPoint();
     const nach = { x: ziel.x - anzeige.x, y: ziel.y - anzeige.y };
     try { wurf.showInactive(); } catch { return Promise.resolve(); }
-    d.senden(wurf, 'wurf:start', { von, nach, text: wurfText(text), farbe: petFarbe(lage), dauer: WURF_MS });
+    d.senden(wurf, 'wurf:start', { von, nach, text: wurfText(text), farbe: petFarbe(lage), dauer: WURF_MS, aussehen: d.aussehen ? d.aussehen() : 'dunkel' });
     d.senden(fenster, 'pet:wurf', { dauer: WURF_MS });
     return new Promise((resolve) => {
       setTimeout(resolve, WURF_MS);
