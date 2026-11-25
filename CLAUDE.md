@@ -261,7 +261,10 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
   Web-Repo: Teil E (Sync in «Meine Dateien», Live-Zugriff der Bots, `PcBruecke`, `/api/pc/*`). Geprüft mit `node --test` und
   `electron . --dev` gegen eine Testseite (Playwright, Dialog im Main-Prozess ersetzt): Wählen nur nach Klick,
   Liste/Lesen/Ausbruch, Änderungen entprellt, Neuladen räumt Watcher weg.
-- **Desktop:** letztes veröffentlichtes GitHub Release ist `v1.0.16` (25.11.2026, aus `85c730d` auf Branch
+- **Desktop:** letztes veröffentlichtes GitHub Release ist `v1.0.17` (25.11.2026, aus `89a7af7` auf Branch
+  `Giannino21x/insel-diktat`: Text sofort einfügen, Wurf gleichzeitig; Infobereich «Nach Update suchen (Version x)» mit
+  Ergebnis in einem Satz (`update-text.js`); Brücke gibt `taste` als Text weiter. Geprüft am gebauten Paket: echtes Diktat
+  über LFM3, Text einmal im eigenen Editor). Davor `v1.0.16` (25.11.2026, aus `85c730d` auf Branch
   `Giannino21x/insel-diktat`: Blatt «Anpassen» an der Insel, Letztes Diktat, Wörter, Ziehen, Grösse/Aussehen/Mikrofon, Füllwörter,
   `insel:hallo` — vorher kamen die Einstellungen beim Fenster-Start nie an, das Diktat auf dem PC lief deshalb nie; Installer-Fix
   aus `insel`). Geprüft am gebauten Paket mit eigenem Profil: echtes Diktat über LFM3 mit WAV als Fake-Mikrofon
