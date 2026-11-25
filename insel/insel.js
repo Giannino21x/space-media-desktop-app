@@ -66,6 +66,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
   const datei = path.join(userDataDir, 'insel.json');
   let einstellungen = { ...STANDARD };
   try { einstellungen = { ...STANDARD, ...JSON.parse(fs.readFileSync(datei, 'utf8')) }; } catch { /* first start */ }
+  delete einstellungen.inselX; // test builds of 25.11.2026 stored the spot without its screen set-up
   const speichern = () => { try { fs.writeFileSync(datei, JSON.stringify(einstellungen, null, 2)); } catch { /* best effort */ } };
   // What the island and the pill see: the settings plus whether the model on this PC can hear right now (the pill
   // then sends WAV — the model hears nothing else; lokal-wav.js).
@@ -300,6 +301,8 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     if (pille && !pille.isDestroyed()) pille.setBounds(pillenRahmen(anzeige().workArea, PILLE.breite, PILLE.hoehe, PILLE.abstand));
     if (pet) pet.neuAusrichten();
     senden(insel, 'insel:anzeige', null);
+    // another set-up: «Zurück in die Mitte» shows or hides with the spot that now applies
+    einstellungenSenden();
   }
 
   // ---- the cursor poll: click-through decided in the same tick the cursor is read ----
