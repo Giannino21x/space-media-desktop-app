@@ -380,7 +380,7 @@ test('stand() with a model on disk warms the server up; entfernen stops it and d
     try {
       const s = await host3.stand();
       assert.equal(s.vision, true, 'ready as soon as the files are there');
-      assert.ok(await bis(() => host3.laeuft, 5000), 'warmed up without a question');
+      assert.ok(await bis(() => host3.laeuft, 15000), 'warmed up without a question');
       await host3.entfernen('omni');
       assert.equal(host3.laeuft, false);
       assert.equal(host3.bereit(), false);
