@@ -749,6 +749,28 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
       return { ok: false, meldung: 'Keine Verbindung. Die Mail ging nicht raus.' };
     }
   });
+  // The company dictionary (S3): read when the sheet opens, add a word; deleting stays in the app (it is the company's list).
+  kanal('insel:woerter', 'insel', async () => {
+    try {
+      const r = await api('/api/meetings/woerter');
+      if (!r.ok) return { ok: false, meldung: r.status === 401 ? 'Bitte zuerst in SME anmelden.' : 'Die Wörter liessen sich nicht laden.' };
+      const liste = Array.isArray(r.daten && r.daten.woerter) ? r.daten.woerter : [];
+      return { ok: true, woerter: liste.map((w) => String(w && w.wort || '')).filter(Boolean).slice(0, 300) };
+    } catch {
+      return { ok: false, meldung: 'Keine Verbindung.' };
+    }
+  });
+  kanal('insel:wort', 'insel', async (_e, wort) => {
+    const w = typeof wort === 'string' ? wort.replace(/[\r\n\t]/g, ' ').trim().slice(0, 60) : '';
+    if (w.length < 2) return { ok: false, meldung: 'Das Wort braucht mindestens 2 Zeichen.' };
+    try {
+      const r = await api('/api/meetings/woerter', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ wort: w }) });
+      if (!r.ok) return { ok: false, meldung: (r.daten && (r.daten.error || r.daten.message)) || 'Das Wort liess sich nicht speichern.' };
+      return { ok: true };
+    } catch {
+      return { ok: false, meldung: 'Keine Verbindung.' };
+    }
+  });
   kanal('insel:einstellung', 'beide', (_e, input) => {
     const patch = input && einstellungPruefen(input.schluessel, input.wert);
     if (patch) aendern(patch);

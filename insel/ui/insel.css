@@ -551,6 +551,9 @@ html[data-streifen] .griff { opacity: 1; }
 .e-zeile .z-standard:hover { color: var(--ink); background: rgba(255, 255, 255, 0.06); }
 .e-zeile .z-standard:focus-visible, .segment button:focus-visible, .schalter-knopf:focus-visible { outline: 2px solid var(--akzent); outline-offset: 2px; }
 .e-zeile .z-knopf { height: 28px; font-size: 12.5px; padding: 0 12px; flex: none; }
+.e-zeile .z-feld { flex: none; width: 150px; height: 28px; padding: 0 10px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(255, 255, 255, 0.05); color: var(--ink); font: inherit; font-size: 12.5px; }
+.e-zeile .z-feld::placeholder { color: var(--dim-2); }
+.e-zeile .z-feld:focus { outline: none; border-color: var(--akzent); background: rgba(255, 255, 255, 0.08); }
 .segment { display: inline-flex; flex: none; padding: 2px; gap: 2px; border-radius: 10px; background: rgba(255, 255, 255, 0.06); }
 .segment button { height: 26px; padding: 0 10px; border-radius: 8px; font-size: 12.5px; color: var(--ink-2); display: inline-flex; align-items: center; gap: 5px; }
 .segment button:hover { color: var(--ink); }

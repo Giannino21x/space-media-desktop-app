@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('spaceInsel', {
   mail: (felder) => ipcRenderer.invoke('insel:mail', felder),
   einstellung: (schluessel, wert) => ipcRenderer.invoke('insel:einstellung', { schluessel, wert }),
   inselNochmals: () => ipcRenderer.invoke('insel:nochmals'),
+  woerter: () => ipcRenderer.invoke('insel:woerter'),
+  wort: (wort) => ipcRenderer.invoke('insel:wort', wort),
   // pill → main
   pillenFlaechen: (rects) => ipcRenderer.invoke('pille:flaechen', rects),
   pegel: (wert, baender) => ipcRenderer.invoke('pille:pegel', wert, baender),

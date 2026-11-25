@@ -204,7 +204,7 @@
     // the sheet grows with its rows (the last dictation, the model on this PC come and go)
     if (name === 'einstellungen') {
       const e = st.einstellungen;
-      const zeilen = 2 + (e.letztesDiktat ? 1 : 0) + (e.lokalBereit ? 1 : 0);
+      const zeilen = 3 + (e.letztesDiktat ? 1 : 0) + (e.lokalBereit ? 1 : 0);
       return Math.max(160, 52 + 14 + zeilen * 42 + 34);
     }
     if (name !== 'uebersicht') return HOEHE[name] || 160;
@@ -284,7 +284,7 @@
     if (name === 'fragen' || name === 'mail') fokusAn(name === 'fragen' ? $('q-eingabe') : $('m-an'));
     else if (vorher === 'fragen' || vorher === 'mail') fokusAus();
     if (name === 'uebersicht') uebersichtZeichnen();
-    if (name === 'einstellungen') einstellungenZeichnen();
+    if (name === 'einstellungen') { einstellungenZeichnen(); woerterLaden(); }
     if (name === 'fragen') fragenZeichnen();
     flaechenMelden();
   }
@@ -799,6 +799,7 @@
       ], taste, (w) => setzen('taste', w)),
       taste !== 'strgRechts' ? () => setzen('taste', 'strgRechts') : null,
     ));
+    liste.append(woerterZeile());
     const petAn = e.petAktiv !== undefined ? !!e.petAktiv : !!e.pet;
     liste.append(zeile(
       'SPACE Pet',
@@ -822,6 +823,54 @@
     aus.title = 'Wieder einschalten: SME-Symbol unten rechts oder in SME unter Einstellungen → Bot';
     fuss.append(aus);
     liste.append(fuss);
+  }
+  // ---- the company dictionary at the island (S3): see the first words, add one; deleting stays in SME (whole company)
+  const woerterSt = { liste: null, meldung: '', entwurf: '', laedt: false };
+  async function woerterLaden() {
+    if (!api.woerter || woerterSt.laedt) return;
+    woerterSt.laedt = true;
+    const r = await api.woerter();
+    woerterSt.laedt = false;
+    woerterSt.liste = r && r.ok ? r.woerter : woerterSt.liste;
+    woerterSt.meldung = r && r.ok ? '' : (r && r.meldung) || '';
+    if (st.ansicht === 'einstellungen' && st.modus === 'offen') einstellungenZeichnen();
+  }
+  function woerterZeile() {
+    const l = woerterSt.liste;
+    const unter = woerterSt.meldung || (!l ? 'Namen und Fachwörter, die das Diktat richtig schreiben soll'
+      : !l.length ? 'Noch keine — zum Beispiel Namen von Kunden oder Projekten'
+        : l.slice(0, 3).join(' · ') + (l.length > 3 ? ` · +${l.length - 3}` : ''));
+    const feld = document.createElement('input');
+    feld.type = 'text';
+    feld.className = 'z-feld';
+    feld.maxLength = 60;
+    feld.placeholder = 'Wort dazu';
+    feld.setAttribute('aria-label', 'Wort für das Wörterbuch');
+    feld.spellcheck = false;
+    feld.value = woerterSt.entwurf;
+    feld.addEventListener('input', () => { woerterSt.entwurf = feld.value; });
+    // the island never has focus on its own: the field asks for it, and gives it back with Enter, Esc or a click elsewhere
+    feld.addEventListener('mousedown', () => fokusAn(feld));
+    feld.addEventListener('keydown', async (ev) => {
+      if (ev.key === 'Escape') { woerterSt.entwurf = ''; fokusAus(); einstellungenZeichnen(); return; }
+      if (ev.key !== 'Enter') return;
+      const wort = feld.value.trim();
+      if (wort.length < 2) return;
+      feld.disabled = true;
+      const r = await api.wort(wort);
+      if (r && r.ok) {
+        woerterSt.entwurf = '';
+        woerterSt.liste = [wort, ...(woerterSt.liste || []).filter((w) => w.toLowerCase() !== wort.toLowerCase())];
+        woerterSt.meldung = '';
+        fokusAus();
+      } else {
+        woerterSt.meldung = (r && r.meldung) || 'Das Wort liess sich nicht speichern.';
+      }
+      einstellungenZeichnen();
+    });
+    const z = zeile('Eigene Wörter', unter, feld, null);
+    z.querySelector('.z-unter').title = l && l.length > 3 ? 'Alle Wörter: in SME unter Sitzungen → Wörterbuch' : '';
+    return z;
   }
   /** Right-click on the island, the pill or «Einstellungen…» on the pet: open straight into the sheet. */
   function blattOeffnen() {
@@ -1390,6 +1439,7 @@
     return {
       flaechen: log('flaechen'), ansicht: log('ansicht'), fokus: log('fokus'), neuLaden: log('neuLaden'), oeffnen: log('oeffnen'),
       fragen: log('fragen'), freigabe: log('freigabe'), dateiZumChat: log('dateiZumChat'), mail: log('mail'), einstellung: log('einstellung'),
+      woerter: () => Promise.resolve({ ok: true, woerter: ['Huber Treuhand', 'Tremola', 'Gotthard Logistik', 'Brunner-Zehnder', 'Seeblick AG'] }), wort: log('wort'), inselNochmals: log('nochmals'),
       onLage: leer, onEinstellungen: leer, onZeiger: leer, onAussenKlick: leer, onAnzeige: leer, onDiktat: leer, onPegel: leer,
     };
   }
