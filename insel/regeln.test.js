@@ -298,3 +298,35 @@ test('a text without a filler comes back character for character', () => {
   for (const t of gleich) assert.equal(aufraeumen(t), t, t);
   assert.equal(aufraeumen(null), null);
 });
+
+// ---- S1: the sheet «Diktat», the tray and the app change settings through one check ----
+const { einstellungPruefen, tasteVon } = require('./regeln');
+
+test('the key: «Strg rechts» or «Aus», stored as diktat (a step back to 1.0.15 keeps working)', () => {
+  assert.deepEqual(einstellungPruefen('taste', 'aus'), { diktat: false });
+  assert.deepEqual(einstellungPruefen('taste', 'strgRechts'), { diktat: true });
+  assert.equal(einstellungPruefen('taste', 'shiftRechts'), null);
+  assert.equal(einstellungPruefen('taste', true), null);
+  assert.equal(tasteVon({ diktat: false }), 'aus');
+  assert.equal(tasteVon({ diktat: true }), 'strgRechts');
+  assert.equal(tasteVon({}), 'strgRechts');
+});
+
+test('switches stay switches; the page of 1.0.15 still may send diktat and hoverOeffnen', () => {
+  assert.deepEqual(einstellungPruefen('diktat', 0), { diktat: false });
+  assert.deepEqual(einstellungPruefen('hoverOeffnen', true), { hoverOeffnen: true });
+  assert.deepEqual(einstellungPruefen('toene', 'ja'), { toene: true });
+  assert.deepEqual(einstellungPruefen('pet', true), { pet: true, petVersteckt: 0 });
+  assert.deepEqual(einstellungPruefen('pet', false), { pet: false });
+  for (const k of ['petName', 'petLage', 'petZaehler', 'irgendwas', '__proto__']) assert.equal(einstellungPruefen(k, true), null, k);
+});
+
+// ---- S2: the last dictation, 10 minutes, in memory only ----
+const { LETZTES_MS, letztesDiktatGueltig } = require('./regeln');
+
+test('the last dictation can be pasted again for 10 minutes', () => {
+  assert.equal(letztesDiktatGueltig({ text: 'Hallo', zeit: 0 }, LETZTES_MS - 1), true);
+  assert.equal(letztesDiktatGueltig({ text: 'Hallo', zeit: 0 }, LETZTES_MS), false);
+  assert.equal(letztesDiktatGueltig({ text: '', zeit: 0 }, 1), false);
+  assert.equal(letztesDiktatGueltig(null, 1), false);
+});

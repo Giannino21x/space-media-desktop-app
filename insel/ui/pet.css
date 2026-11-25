@@ -103,6 +103,7 @@ button:focus-visible { outline: 2px solid var(--akzent); outline-offset: 2px; }
 .m-gruppe { padding: 4px 10px 2px; font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.04em; }
 .m-eintrag { text-align: left; padding: 5px 10px; border-radius: 9px; font-weight: 600; }
 .m-eintrag:hover { background: rgba(255, 255, 255, 0.1); }
+.m-eintrag[hidden] { display: none; }
 .m-strich { height: 1px; margin: 3px 6px; background: rgba(255, 255, 255, 0.1); }
 .m-name { padding: 2px 6px 4px; }
 .m-name input {

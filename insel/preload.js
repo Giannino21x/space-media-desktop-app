@@ -10,7 +10,7 @@ const abo = (kanal) => (callback) => {
 };
 
 contextBridge.exposeInMainWorld('spaceInsel', {
-  version: 2,
+  version: 3,
   // island → main
   flaechen: (rects) => ipcRenderer.invoke('insel:flaechen', rects),
   ansicht: (name) => ipcRenderer.invoke('insel:ansicht', name),
@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('spaceInsel', {
   dateiZumChat: (name, type, daten) => ipcRenderer.invoke('insel:datei-chat', { name, type, daten }),
   mail: (felder) => ipcRenderer.invoke('insel:mail', felder),
   einstellung: (schluessel, wert) => ipcRenderer.invoke('insel:einstellung', { schluessel, wert }),
+  inselNochmals: () => ipcRenderer.invoke('insel:nochmals'),
   // pill → main
   pillenFlaechen: (rects) => ipcRenderer.invoke('pille:flaechen', rects),
   pegel: (wert, baender) => ipcRenderer.invoke('pille:pegel', wert, baender),
@@ -29,6 +30,7 @@ contextBridge.exposeInMainWorld('spaceInsel', {
   audio: (id, mime, daten) => ipcRenderer.invoke('pille:audio', { id, mime, daten }),
   leer: (id) => ipcRenderer.invoke('pille:leer', { id }),
   nochmals: () => ipcRenderer.invoke('pille:nochmals'),
+  blatt: () => ipcRenderer.invoke('pille:blatt'),
   meldung: (text, art) => ipcRenderer.invoke('pille:meldung', { text, art }),
   // pet → main
   petFlaechen: (flaechen, figur) => ipcRenderer.invoke('pet:flaechen', { flaechen, figur }),
@@ -39,6 +41,8 @@ contextBridge.exposeInMainWorld('spaceInsel', {
   petOeffnen: (pfad) => ipcRenderer.invoke('pet:oeffnen', pfad),
   petVerstecken: (wahl) => ipcRenderer.invoke('pet:verstecken', wahl),
   petName: (name) => ipcRenderer.invoke('pet:name', name),
+  petBlatt: () => ipcRenderer.invoke('pet:blatt'),
+  petNochmals: () => ipcRenderer.invoke('pet:nochmals'),
   // main → windows
   onLage: abo('insel:lage'),
   onEinstellungen: abo('insel:einstellungen'),
@@ -46,6 +50,7 @@ contextBridge.exposeInMainWorld('spaceInsel', {
   onAussenKlick: abo('insel:aussen-klick'),
   onWecken: abo('insel:wecken'),
   onAufklappen: abo('insel:aufklappen'),
+  onBlatt: abo('insel:blatt'),
   onAnzeige: abo('insel:anzeige'),
   onDiktat: abo('insel:diktat'),
   onPegel: abo('insel:pegel'),

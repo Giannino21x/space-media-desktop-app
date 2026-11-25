@@ -21,7 +21,7 @@ const fs = require('fs');
 const path = require('path');
 const { BrowserWindow, screen, ipcMain, clipboard, session } = require('electron');
 const {
-  diktatTaste, inselRahmen, pillenRahmen, imRechteck, inselLage, multipart, diktatFehler, aufraeumen,
+  diktatTaste, inselRahmen, pillenRahmen, imRechteck, inselLage, multipart, diktatFehler, aufraeumen, einstellungPruefen, tasteVon, LETZTES_MS, letztesDiktatGueltig,
 } = require('./regeln');
 const { diktatWeg } = require('../lokal-regeln');
 const { createPet } = require('./pet');
@@ -49,8 +49,10 @@ const STANDARD = {
 /** What the app's settings (Einstellungen → Bot → Insel) may read and change — never the internal flags. */
 // v4 (Desktop 1.0.13): lokalDiktat (dictation through the model on this PC) plus the read-only lokalBereit.
 const FUER_APP = ['an', 'diktat', 'toene', 'hoverOeffnen', 'pet', 'lokalDiktat'];
+// v5 (Desktop 1.0.16): `taste` ('strgRechts' | 'aus') read and set; `diktat` and `hoverOeffnen` stay for the page of 1.0.15.
 const fuerApp = (e, lokalBereit) => ({
   ...Object.fromEntries(FUER_APP.map((k) => [k, !!e[k]])),
+  taste: tasteVon(e),
   petName: typeof e.petName === 'string' ? e.petName : '',
   lokalBereit: !!lokalBereit,
 });
@@ -122,7 +124,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
   /** The settings as the island's own windows see them: plus whether the pet is active right now. */
   // testDiktat (unpackaged, SPACE_INSEL_TEST_TEXT): the pill keeps a silent take, so the paste can be tested without a voice
   // lokalBereit: the model on this PC (lokal.js) is there → the pill sends WAV when lokalDiktat is on
-  const fuerFenster = () => ({ ...einstellungen, lokalBereit: !!(lokalKi && lokalKi.bereit()), petAktiv: !!(pet && pet.aktiv()), testDiktat: !!testText });
+  const fuerFenster = () => ({ ...einstellungen, taste: tasteVon(einstellungen), letztesDiktat: letztesDa(), lokalBereit: !!(lokalKi && lokalKi.bereit()), petAktiv: !!(pet && pet.aktiv()), testDiktat: !!testText });
   /** The app's settings page: the switches plus whether the model on this PC is there (lokalBereit). */
   const fuerAppJetzt = () => fuerApp(einstellungen, lokalKi && lokalKi.bereit());
 
@@ -421,7 +423,24 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
   let taktTimer = null;
   let aufnahme = null;          // { id } while the pill records
   let rechtsGedrueckt = false;
-  let letztesDiktat = '';
+  // the last dictation: in memory only, LETZTES_MS long (regeln.js), then gone — «Letztes Diktat einfügen»
+  let letztesDiktat = null; // { text, zeit }
+  let letztesTimer = null;
+  function letztesMerken(text) {
+    letztesDiktat = { text, zeit: Date.now() };
+    if (letztesTimer) clearTimeout(letztesTimer);
+    letztesTimer = setTimeout(() => { letztesDiktat = null; letztesTimer = null; einstellungenSenden(); pet.zustand(); }, LETZTES_MS);
+    einstellungenSenden();
+    pet.zustand();
+  }
+  const letztesDa = () => letztesDiktatGueltig(letztesDiktat, Date.now());
+  /** Paste the last dictation again (sheet, pet menu, pill). The island and the pet never take focus, so Ctrl+V
+   *  goes to the window in front; a short wait lets the sheet fold first. */
+  async function nochmalsEinfuegen() {
+    if (!letztesDa()) return false;
+    await warten(120);
+    return einfuegen(letztesDiktat.text);
+  }
   let transkription = null;     // { id, abgebrochen } while the app turns the take into text
   let eigeneTastenBis = 0;      // our own Ctrl+V is not «another key»
   let zurueckAusstehend = null; // { timer, vorher } — the clipboard to restore after a paste
@@ -650,6 +669,9 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     kanal,
     taste: (was) => pillenTaste(was),
     oeffnen: (pfad) => { zeigen(); if (typeof pfad === 'string' && pfad.startsWith('/') && !pfad.startsWith('//')) navigieren(pfad); },
+    blatt: () => blattZeigen(),
+    letztes: () => letztesDa(),
+    nochmals: () => nochmalsEinfuegen(),
     log,
   });
 
@@ -728,10 +750,17 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     }
   });
   kanal('insel:einstellung', 'beide', (_e, input) => {
-    if (!input || !(input.schluessel in STANDARD)) return fuerFenster();
-    einstellungsAenderung(input.schluessel, !!input.wert);
+    const patch = input && einstellungPruefen(input.schluessel, input.wert);
+    if (patch) aendern(patch);
     return fuerFenster();
   });
+  /** Right-click on the pill / «Einstellungen…» on the pet: the island opens straight into the sheet «Diktat». */
+  function blattZeigen() {
+    if (!insel || insel.isDestroyed()) return false;
+    senden(insel, 'insel:blatt', null);
+    return true;
+  }
+  kanal('pille:blatt', 'pille', () => blattZeigen());
 
   kanal('pille:flaechen', 'pille', (_e, rects) => {
     pillenFlaechen = Array.isArray(rects)
@@ -777,7 +806,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
         pet.diktat('aus');
         return { ok: false, still: true };
       }
-      letztesDiktat = text;
+      letztesMerken(text);
       const woerter = text.split(/\s+/).filter(Boolean).length;
       // The pet throws the words to the pointer first (≤ 450 ms); the paste lands on impact.
       await pet.werfen(text);
@@ -798,10 +827,8 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     senden(insel, 'insel:diktat', { zustand: 'aus' });
     pet.diktat('aus');
   });
-  kanal('pille:nochmals', 'pille', async () => {
-    if (!letztesDiktat) return false;
-    return einfuegen(letztesDiktat);
-  });
+  kanal('pille:nochmals', 'pille', () => nochmalsEinfuegen());
+  kanal('insel:nochmals', 'insel', () => nochmalsEinfuegen());
 
   function einstellungenSenden() {
     senden(insel, 'insel:einstellungen', fuerFenster());
@@ -893,8 +920,9 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
         if (n !== einstellungen.petName) aendern({ petName: n });
       } else if (schluessel === 'pet') {
         if (!!wert !== (!!einstellungen.pet && pet.aktiv())) aendern(wert ? { pet: true, petVersteckt: 0 } : { pet: false });
-      } else if (FUER_APP.includes(schluessel)) {
-        if (einstellungen[schluessel] !== !!wert) einstellungsAenderung(schluessel, !!wert);
+      } else if (schluessel === 'taste' || FUER_APP.includes(schluessel)) {
+        const patch = einstellungPruefen(schluessel, wert);
+        if (patch && Object.keys(patch).some((k) => einstellungen[k] !== patch[k])) aendern(patch);
       }
       return fuerAppJetzt();
     },

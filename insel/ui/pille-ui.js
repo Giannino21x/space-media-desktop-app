@@ -291,6 +291,8 @@
     $('p-oeffnen').dataset.tipp = `${name} öffnen`;
     $('p-oeffnen').setAttribute('aria-label', `${name} öffnen`);
   });
+  // right-click on the pill opens the sheet «Diktat» at the island
+  document.addEventListener('contextmenu', (e) => { e.preventDefault(); if (api.blatt) api.blatt(); });
   look('ruhe');
 
   function demoBruecke() {

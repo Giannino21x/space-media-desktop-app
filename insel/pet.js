@@ -32,6 +32,9 @@ const WURF_NACHLAUF_MS = 260; // the splash after the impact, then the overlay g
  * @param {(f: BrowserWindow) => void} d.fensterSichern   always on top, no navigation, no zoom
  * @param {() => Electron.Display} d.anzeige
  * @param {() => object} d.einstellungen                   the island's settings (pet, petName, petLage, petVersteckt, petZaehler)
+ * @param {() => boolean} d.blatt                         open the sheet «Diktat» at the island (false: no island)
+ * @param {() => boolean} d.letztes                       is there a last dictation to paste again (S2)
+ * @param {() => Promise<boolean>} d.nochmals             paste the last dictation again
  * @param {(patch: object, opts?: {app?: boolean}) => void} d.aendern  write settings; app: tell the app's settings page
  * @param {(fenster, kanal, daten) => void} d.senden
  * @param {(name, wer, handler) => void} d.kanal           IPC with a sender check ('pet' | 'wurf')
@@ -298,6 +301,7 @@ function createPet(d) {
       wachheit,
       tooltip: petTooltip(s.petZaehler, s.petName),
       zaehler: s.petZaehler || null,
+      letztes: !!(d.letztes && d.letztes()),
     });
   }
 
@@ -361,6 +365,9 @@ function createPet(d) {
   });
   d.kanal('pet:taste', 'pet', (_e, was) => d.taste(String(was)));
   d.kanal('pet:oeffnen', 'pet', (_e, pfad) => d.oeffnen(typeof pfad === 'string' ? pfad : undefined));
+  // «Einstellungen…»: the sheet «Diktat» at the island; the app's page only when the island is not there
+  d.kanal('pet:nochmals', 'pet', () => (d.nochmals ? d.nochmals() : false));
+  d.kanal('pet:blatt', 'pet', () => { if (!d.blatt()) d.oeffnen('/settings?tab=bot'); });
   d.kanal('pet:verstecken', 'pet', (_e, wahl) => {
     const bis = petVersteckBis(String(wahl), jetzt());
     if (bis === 0) {
@@ -405,6 +412,8 @@ function createPet(d) {
     },
     /** Settings changed (pet, petName, petVersteckt): show, hide, rename. */
     einstellungen() { abgleichen(); zustandSenden(); },
+    /** Only tell the pet window what changed (the last dictation came or went), nothing created or shown. */
+    zustand() { zustandSenden(); },
     get fenster() { return fenster; },
     get wurfFenster() { return wurf; },
     shutdown() { beendet = true; zerstoeren(); },

@@ -236,9 +236,7 @@ function trayMenue() {
     ...(insel ? [
       { type: 'separator' },
       { label: 'Insel oben anzeigen', type: 'checkbox', checked: insel.an, click: (item) => insel.schalten(item.checked) },
-      { label: 'Diktieren mit Strg rechts', type: 'checkbox', checked: insel.diktat, enabled: insel.an, click: (item) => insel.diktatSchalten(item.checked) },
-      // the island's dictation through the model on this PC (lokal.js) instead of the app — only once the model is there
-      { label: 'Diktat auf diesem PC', type: 'checkbox', checked: insel.lokalDiktat, enabled: insel.an && insel.diktat && !!(lokal && lokal.bereit()), click: (item) => insel.lokalDiktatSchalten(item.checked) },
+      // the dictation's settings live in the sheet «Diktat» at the island (right-click on it), not here
       { label: 'SPACE Pet anzeigen', type: 'checkbox', checked: insel.pet, enabled: insel.an, click: (item) => insel.petSchalten(item.checked) },
     ] : []),
     { type: 'separator' },
@@ -335,7 +333,9 @@ ipcMain.handle('insel:app-einstellungen', (event) => {
 });
 ipcMain.handle('insel:app-einstellung', (event, input) => {
   if (!insel || !appSenderOrigin(event) || !input || typeof input.schluessel !== 'string') return null;
-  return insel.einstellungSetzen(input.schluessel, input.schluessel === 'petName' ? String(input.wert == null ? '' : input.wert) : !!input.wert);
+  const { schluessel, wert } = input;
+  // petName is text, taste one of a few words (checked in insel.js); every other setting is a switch
+  return insel.einstellungSetzen(schluessel, schluessel === 'petName' || schluessel === 'taste' ? String(wert == null ? '' : wert) : !!wert);
 });
 
 ipcMain.handle('insel:datei-nehmen', (event) => {

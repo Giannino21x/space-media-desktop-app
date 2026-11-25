@@ -407,9 +407,39 @@ function aufraeumen(text) {
     if (vorigeLeer && naechsteLeer) { aus.pop(); aus.pop() }
     if (!umbruch && aus.length) aus.pop();
   }
-  const sauber = aus.join('');
+  // a dropped first or last line leaves no empty line at the edge of the text
+  const ersteWeg = !teile[0].includes(STELLE) ? false : !/[\p{L}\p{N}]/u.test(zeileAufraeumen(teile[0]));
+  const letzteWeg = !teile[teile.length - 1].includes(STELLE) ? false : !/[\p{L}\p{N}]/u.test(zeileAufraeumen(teile[teile.length - 1]));
+  let sauber = aus.join('');
+  if (ersteWeg) sauber = sauber.replace(/^\r?\n/, '');
+  if (letzteWeg) sauber = sauber.replace(/\r?\n$/, '');
   // only punctuation left («Hm.»): nothing was said
   return /[\p{L}\p{N}]/u.test(sauber) ? sauber : '';
+}
+
+// ---- settings the sheet «Diktat», the tray and the app may change (Plan 2026-11-25-insel-diktat.md, S1) ----
+//
+// The dictation key is stored as `diktat` (one source: «Strg rechts» = on, «Aus» = off), so a step back to 1.0.15
+// keeps working. `hoverOeffnen` is still accepted (the app page of 1.0.15 sends it) but nothing reads it any more.
+const TASTEN = ['strgRechts', 'aus'];
+const SCHALTER_EINSTELLUNGEN = ['an', 'diktat', 'toene', 'hoverOeffnen', 'begruesst', 'pet', 'lokalDiktat'];
+/** One change → the patch to store, or null when the key or the value is not allowed. */
+function einstellungPruefen(schluessel, wert) {
+  if (schluessel === 'taste') return TASTEN.includes(wert) ? { diktat: wert !== 'aus' } : null;
+  if (!SCHALTER_EINSTELLUNGEN.includes(schluessel)) return null;
+  const patch = { [schluessel]: !!wert };
+  // switching the pet on also brings back a pet hidden «until I fetch it»
+  if (schluessel === 'pet' && wert) patch.petVersteckt = 0;
+  return patch;
+}
+/** The dictation key as the sheet and the app show it. */
+function tasteVon(e) { return e && e.diktat === false ? 'aus' : 'strgRechts'; }
+
+// ---- the last dictation, once more (Plan 2026-11-25-insel-diktat.md, S2) ----
+// Kept in memory only (never on disk), for LETZTES_MS after it was pasted.
+const LETZTES_MS = 10 * 60 * 1000;
+function letztesDiktatGueltig(gemerkt, jetzt) {
+  return !!(gemerkt && typeof gemerkt.text === 'string' && gemerkt.text && jetzt - gemerkt.zeit < LETZTES_MS);
 }
 
 /** A multipart/form-data body with one file field (net.fetch takes a Buffer, not FormData). */
@@ -434,7 +464,7 @@ function diktatFehler(status, antwort) {
 
 return {
   HALTEN_MIN_MS, DOPPEL_MS, MAX_AUFNAHME_MS,
-  diktatTaste, inselRahmen, pillenRahmen, imRechteck, weckStreifen, inselLage, BOT_FARBEN, multipart, diktatFehler, aufraeumen,
+  diktatTaste, inselRahmen, pillenRahmen, imRechteck, weckStreifen, inselLage, BOT_FARBEN, multipart, diktatFehler, aufraeumen, TASTEN, einstellungPruefen, tasteVon, LETZTES_MS, letztesDiktatGueltig,
   // the pet
   DOESEN_MS, SCHLAFEN_MS, REAKTION_PAUSE_MS, WURF_MS, LEVEL_STUFEN, ECKE_RAND, TASKLEISTE_DIP,
   petRahmen, petLage, petArbeitsbereich, inEcke, petVersteckBis, petVersteckt, petWachheit, petReaktion,

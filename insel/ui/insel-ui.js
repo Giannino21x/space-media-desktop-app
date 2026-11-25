@@ -18,7 +18,7 @@
   const reduziert = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const HOEHE = { uebersicht: 160, freigabe: 160, fragen: 160, ablage: 176, datei: 176, mail: 240, einstellungen: 228, hinweis: 160, begruessung: 150 };
-  const TITEL = { uebersicht: '', freigabe: 'Freigabe', fragen: 'SPACE Bot fragen', ablage: 'Datei ablegen', datei: '', mail: 'Per Mail senden', einstellungen: 'Insel', hinweis: '', begruessung: '' };
+  const TITEL = { uebersicht: '', freigabe: 'Freigabe', fragen: 'SPACE Bot fragen', ablage: 'Datei ablegen', datei: '', mail: 'Per Mail senden', einstellungen: 'Diktat', hinweis: '', begruessung: '' };
   const KOMPAKT_ZU_MS = 60_000;
   const OFFEN_ZU_MS = 15_000;
   const HOVER_ZU_MS = 600;
@@ -34,7 +34,7 @@
     drin: false,
     zeiger: null,
     lage: null,
-    einstellungen: { diktat: true, toene: true, hoverOeffnen: false, begruesst: true },
+    einstellungen: { diktat: true, taste: 'strgRechts', toene: true, pet: true, begruesst: true },
     gesehenFreigaben: new Set(),
     gesehenLaeufe: new Set(),
     gemeldet: new Set(),
@@ -201,8 +201,12 @@
 
   /** Height of a view; the overview grows with the team (two tiles per row, up to four rows of 28 px). */
   function hoeheFuer(name) {
-    // settings grow by one row («Diktat auf diesem PC») once the model on this PC is there
-    if (name === 'einstellungen') return HOEHE.einstellungen + (st.einstellungen.lokalBereit ? 40 : 0);
+    // the sheet grows with its rows (the last dictation, the model on this PC come and go)
+    if (name === 'einstellungen') {
+      const e = st.einstellungen;
+      const zeilen = 2 + (e.letztesDiktat ? 1 : 0) + (e.lokalBereit ? 1 : 0);
+      return Math.max(160, 52 + 14 + zeilen * 42 + 34);
+    }
     if (name !== 'uebersicht') return HOEHE[name] || 160;
     const l = st.lage;
     const kacheln = l && l.angemeldet && l.team.length > 1 ? Math.min(8, l.team.length) : 4;
@@ -337,15 +341,7 @@
     uhr('offenZu', null);
     uhr('hoverZu', null);
     countdownAus();
-    if (st.modus === 'kompakt' && st.einstellungen.hoverOeffnen) {
-      uhr('hoverAuf', 220, () => {
-        if (!st.drin || st.modus !== 'kompakt') return;
-        st.durchHover = true;
-        st.interagiert = false;
-        st.ansicht = standardAnsicht();
-        modusSetzen('offen');
-      });
-    }
+    // «Beim Darüberfahren öffnen» is gone (Entscheid Chief 25.11.2026): a click opens the island
   }
 
   function mausRaus() {
@@ -715,12 +711,9 @@
     $('ansage').textContent = `${titel}. ${text}`;
   }
 
-  // ---------------------------------------------------------------- settings
-  const SCHALTER = [
-    ['diktat', 'Diktieren mit der rechten Strg-Taste', 'Halten, sprechen, loslassen · zweimal tippen für freihändig · Esc bricht ab'],
-    ['toene', 'Töne', 'Kurze, leise Klänge, wenn etwas passiert'],
-    ['hoverOeffnen', 'Beim Darüberfahren öffnen', 'Sonst öffnet ein Klick die Insel'],
-  ];
+  // ---------------------------------------------------------------- the sheet «Diktat» (settings at the island)
+  // One sheet, right-click on the island, the pill or «Einstellungen…» on the pet. Every row acts at once, no save
+  // button; a row that differs from its default shows «Standard» (Plan 2026-11-25-insel-diktat.md, S1).
   /** The settings' footer: which service turns a dictation into text (lage.diktatDienst from the app, or the model on this PC). */
   function diktatDienstText(l, e) {
     if (e && e.lokalDiktat && e.lokalBereit) return 'Zu Text auf diesem PC — nichts geht ins Netz.';
@@ -729,49 +722,112 @@
     if (!d.server) return 'Kein Transkriptionsdienst hinterlegt — Diktate scheitern.';
     return `Zu Text durch ${d.name} · ${d.ort}.`;
   }
+  /** Change one setting: the sheet shows it at once, main stores it and tells every window (and the app). */
+  async function setzen(schluessel, wert) {
+    st.einstellungen = { ...st.einstellungen, [schluessel]: wert };
+    if (schluessel === 'taste') st.einstellungen.diktat = wert !== 'aus';
+    einstellungenZeichnen();
+    const neu = await api.einstellung(schluessel, wert);
+    if (neu && typeof neu === 'object') { st.einstellungen = { ...st.einstellungen, ...neu }; einstellungenZeichnen(); }
+  }
+  /** A row: title and a short line on the left, the control on the right, «Standard» when it differs. */
+  function zeile(titel, unter, steuer, standard) {
+    const z = document.createElement('div');
+    z.className = 'e-zeile';
+    z.innerHTML = `<span class="z-text"><span class="z-titel">${escape(titel)}</span>${unter ? `<span class="z-unter">${escape(unter)}</span>` : ''}</span>`;
+    if (standard) {
+      const s = document.createElement('button');
+      s.type = 'button';
+      s.className = 'z-standard';
+      s.textContent = 'Standard';
+      s.title = `${titel}: zurück auf den Standard`;
+      s.addEventListener('click', standard);
+      z.append(s);
+    }
+    z.append(steuer);
+    return z;
+  }
+  /** A segmented choice: [{ wert, inhalt (HTML), label }]. */
+  function segment(name, wahl, aktuell, fn) {
+    const g = document.createElement('div');
+    g.className = 'segment';
+    g.setAttribute('role', 'radiogroup');
+    g.setAttribute('aria-label', name);
+    for (const w of wahl) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(w.wert === aktuell));
+      b.setAttribute('aria-label', w.label);
+      b.innerHTML = w.inhalt;
+      b.addEventListener('click', () => { if (w.wert !== aktuell) fn(w.wert); });
+      g.append(b);
+    }
+    return g;
+  }
+  function schalter(name, an, fn) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'schalter-knopf';
+    b.setAttribute('role', 'switch');
+    b.setAttribute('aria-checked', String(!!an));
+    b.setAttribute('aria-label', name);
+    b.addEventListener('click', () => fn(!an));
+    return b;
+  }
   function einstellungenZeichnen() {
+    const e = st.einstellungen;
     const liste = $('e-liste');
     liste.innerHTML = '';
-    for (const [schluessel, titel, unter] of SCHALTER) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'schalter';
-      b.setAttribute('role', 'switch');
-      b.setAttribute('aria-checked', String(!!st.einstellungen[schluessel]));
-      b.innerHTML = `<span class="s-text"><span class="s-titel">${escape(titel)}</span><span class="s-unter">${escape(unter)}</span></span><span class="s-knopf"></span>`;
-      b.addEventListener('click', async () => {
-        const neu = !st.einstellungen[schluessel];
-        st.einstellungen = { ...st.einstellungen, [schluessel]: neu };
-        b.setAttribute('aria-checked', String(neu));
-        K.an = st.einstellungen.toene;
-        tonSymbol();
-        await api.einstellung(schluessel, neu);
+    // the last dictation once more (10 minutes, in memory only) — only the title, never the text (screen sharing)
+    if (e.letztesDiktat) {
+      const b = knopf('Einfügen', '', () => {
+        modusSetzen('kompakt');
+        zuPlanen();
+        if (api.inselNochmals) api.inselNochmals();
       });
-      liste.append(b);
+      b.classList.add('z-knopf');
+      liste.append(zeile('Letztes Diktat einfügen', 'Dort, wo du gerade schreibst', b, null));
     }
+    const taste = e.taste || (e.diktat === false ? 'aus' : 'strgRechts');
+    liste.append(zeile(
+      'Taste fürs Diktat',
+      taste === 'aus' ? 'Kein Diktat, auch nicht über die Knöpfe' : 'Halten und sprechen · zweimal tippen für freihändig',
+      segment('Taste fürs Diktat', [
+        { wert: 'strgRechts', inhalt: '<span class="taste">Strg</span> rechts', label: 'Strg rechts' },
+        { wert: 'aus', inhalt: 'Aus', label: 'Aus' },
+      ], taste, (w) => setzen('taste', w)),
+      taste !== 'strgRechts' ? () => setzen('taste', 'strgRechts') : null,
+    ));
+    const petAn = e.petAktiv !== undefined ? !!e.petAktiv : !!e.pet;
+    liste.append(zeile(
+      'SPACE Pet',
+      'Der Kopf unten rechts, er fängt dein Diktat und wirft es',
+      schalter('SPACE Pet', petAn, (an) => setzen('pet', an)),
+      !petAn ? () => setzen('pet', true) : null,
+    ));
     // dictation on this PC (lokal.js) — only once the model is there; otherwise the app's service (the person's KI-Option)
-    if (st.einstellungen.lokalBereit) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'schalter';
-      b.setAttribute('role', 'switch');
-      b.setAttribute('aria-checked', String(!!st.einstellungen.lokalDiktat));
-      b.innerHTML = `<span class="s-text"><span class="s-titel">Diktat auf diesem PC</span><span class="s-unter">Das Modell auf diesem Rechner hört, nichts geht ins Netz</span></span><span class="s-knopf"></span>`;
-      b.addEventListener('click', async () => {
-        const neu = !st.einstellungen.lokalDiktat;
-        st.einstellungen = { ...st.einstellungen, lokalDiktat: neu };
-        b.setAttribute('aria-checked', String(neu));
-        await api.einstellung('lokalDiktat', neu);
-      });
-      liste.append(b);
+    if (e.lokalBereit) {
+      liste.append(zeile(
+        'Diktat auf diesem PC',
+        'Das Modell auf diesem Rechner hört, nichts geht ins Netz',
+        schalter('Diktat auf diesem PC', !!e.lokalDiktat, (an) => setzen('lokalDiktat', an)),
+        !e.lokalDiktat ? () => setzen('lokalDiktat', true) : null,
+      ));
     }
     const fuss = document.createElement('div');
     fuss.className = 'fuss';
-    fuss.innerHTML = `<span>${escape(diktatDienstText(st.lage, st.einstellungen))}</span>`;
+    fuss.innerHTML = `<span>${escape(diktatDienstText(st.lage, e))}</span>`;
     const aus = knopf('Insel ausblenden', 'leise', () => api.einstellung('an', false));
     aus.title = 'Wieder einschalten: SME-Symbol unten rechts oder in SME unter Einstellungen → Bot';
     fuss.append(aus);
     liste.append(fuss);
+  }
+  /** Right-click on the island, the pill or «Einstellungen…» on the pet: open straight into the sheet. */
+  function blattOeffnen() {
+    st.durchHover = false;
+    st.interagiert = true;
+    if (st.modus !== 'offen') { st.ansicht = 'einstellungen'; modusSetzen('offen'); } else ansichtZeigen('einstellungen');
   }
   function tonSymbol() {
     const b = $('ton');
@@ -1267,7 +1323,8 @@
       zuPlanen();
     }
   });
-  document.addEventListener('contextmenu', (e) => e.preventDefault());
+  // right-click anywhere on the island opens the sheet «Diktat»
+  document.addEventListener('contextmenu', (e) => { e.preventDefault(); blattOeffnen(); });
   document.addEventListener('wheel', (e) => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
 
   // wake: the hidden window is the 240×6 strip — touching it peeks out
@@ -1277,7 +1334,7 @@
     st.interagiert = false;
     modusSetzen('kompakt');
     gesichtKlein.ausdruck('bogen', 900);
-    if (st.einstellungen.hoverOeffnen) { st.ansicht = standardAnsicht(); modusSetzen('offen'); st.durchHover = true; }
+
   }
   // The handle shows only while the window is the strip (after the 420 ms retract)
   function griffPruefen() {
@@ -1296,7 +1353,7 @@
     st.einstellungen = { ...st.einstellungen, ...e };
     K.an = st.einstellungen.toene;
     tonSymbol();
-    if (st.ansicht === 'einstellungen' && st.modus === 'offen') einstellungenZeichnen();
+    if (st.ansicht === 'einstellungen' && st.modus === 'offen') { einstellungenZeichnen(); geoZiel(OFFEN_B, hoeheFuer('einstellungen'), 22); }
     if (st.ansicht === 'uebersicht' && st.modus === 'offen') uebersichtZeichnen();
   });
   api.onZeiger(zeigerNeu);
@@ -1309,6 +1366,7 @@
   });
   if (api.onWecken) api.onWecken(wecken);
   if (api.onAufklappen) api.onAufklappen(aufklappen);
+  if (api.onBlatt) api.onBlatt(blattOeffnen);
   api.onDiktat(diktatNeu);
   api.onPegel((p) => { gesichtKlein.pegel(p); gesichtGross.pegel(p); });
 

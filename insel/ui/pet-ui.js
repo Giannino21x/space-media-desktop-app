@@ -215,9 +215,10 @@
     if (!knopf) return;
     const a = knopf.dataset.aktion;
     if (a === 'diktieren') { menueSchliessen(false); api.petTaste('freihand'); }
+    else if (a === 'nochmals') { menueSchliessen(false); if (api.petNochmals) api.petNochmals(); }
     else if (a === 'oeffnen') { menueSchliessen(false); api.petOeffnen('/'); }
     // the app's settings page, Bot tab: island switches, the pet, which service turns dictation into text
-    else if (a === 'einstellungen') { menueSchliessen(false); api.petOeffnen('/settings?tab=bot'); }
+    else if (a === 'einstellungen') { menueSchliessen(false); if (api.petBlatt) api.petBlatt(); else api.petOeffnen('/settings?tab=bot'); }
     else if (a === '1min' || a === '1std' || a === 'immer') { z.menueOffen = null; menue.hidden = true; flaechenMelden(); api.petVerstecken(a); }
     else if (a === 'name') {
       $('m-name').hidden = false;
@@ -245,6 +246,9 @@
     z.name = String(s.name || '');
     z.steno = !!s.steno;
     z.tooltip = String(s.tooltip || '');
+    // «Letztes Diktat einfügen» only while there is one (10 minutes, insel.js)
+    const nochmals = document.querySelector('[data-aktion="nochmals"]');
+    if (nochmals) nochmals.hidden = !s.letztes;
     kopf.figur(z.steno ? 'steno' : 'space');
     kopf.farbe(z.steno ? null : z.farbe); // Steno keeps its gold and amber, like on the island
     if (s.wachheit && s.wachheit !== z.wachheit) {

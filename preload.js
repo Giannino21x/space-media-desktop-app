@@ -161,9 +161,11 @@ ipcRenderer.on('insel:datei-bereit', () => window.dispatchEvent(new Event('insel
 // Version 2: the island's switches for Einstellungen → Bot → Insel (null where there is no island).
 // v3 (SPACE Pet, 30.10.2026): einstellungen() also carries `pet` (switch) and `petName`; setzen('pet', bool) brings a
 // hidden pet back too, setzen('petName', string) renames it. v4 (30.10.2026): `lokalDiktat` (switch) and the read-only
-// `lokalBereit` (the model on this PC is there). Web: lib/insel/desktop.ts.
+// `lokalBereit` (the model on this PC is there). v5 (Desktop 1.0.16): `taste` ('strgRechts' | 'aus') in einstellungen(),
+// setzen('taste', …); `diktat` and `hoverOeffnen` stay for the page of 1.0.15 (hoverOeffnen has no effect any more).
+// Web: lib/insel/desktop.ts.
 contextBridge.exposeInMainWorld('spaceInselApp', {
-  version: 4,
+  version: 5,
   einstellungen: () => ipcRenderer.invoke('insel:app-einstellungen'),
   setzen: (schluessel, wert) => ipcRenderer.invoke('insel:app-einstellung', {
     schluessel: String(schluessel),
