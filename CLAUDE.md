@@ -160,7 +160,7 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
   Mitte nimmt weiter auf (derselbe Code), zeigt aber nichts (`petAktiv` in den Fenster-Einstellungen, `body.pet`), sendet die
   neun Bänder (`pille:pegel`) und ihre Meldungen (`pille:meldung`) ans Pet. Nach der Transkription `pet.werfen(text)`: Blase mit
   den ersten Worten (`wurfText`) fliegt im Bogen (`wurfBogen`, `WURF_MS` = 400 ≤ 450) von der Figur zum Mauszeiger
-  (`screen.getCursorScreenPoint`, das Caret ist unter Windows nicht sicher lesbar), dann erst `einfuegen()` — bestehender Weg
+  (`screen.getCursorScreenPoint`, das Caret ist unter Windows nicht sicher lesbar); seit 1.0.17 gleichzeitig `einfuegen()` (der Wurf hält nichts auf) — bestehender Weg
   Zwischenablage → Strg+V. Fehler: rote LEDs mit genervtem Blick und ×, Pille rot. Leben (rein in regeln.js, getestet): `petReaktion`
   (danke/merci → Herzen, «?» → grosse Augen und «?», fertig/erledigt → Hüpfer, ≥ 80 Wörter → Augenrolle und Funken, höchstens alle
   30 s), `petWachheit` (2 Min dösen = Augen halb zu, 10 Min schlafen = zZz, Diktat weckt), Klick = Squash und genervter Blick, dreimal

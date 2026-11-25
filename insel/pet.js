@@ -1,7 +1,7 @@
 // The SPACE Pet — the island's head (gesicht.js: the real helmet with the LED eyes) living bottom right above the
 // taskbar, wired into the island (insel.js): its eyes follow the pointer anywhere on screen, while the right Ctrl is
 // held the dictation pill appears next to it, after the transcription it throws the words into the text field (a
-// bubble flies in an arc to the pointer, the paste lands on impact). It reacts to what was said, dozes after two
+// bubble flies in an arc to the pointer while the text is pasted at once). It reacts to what was said, dozes after two
 // minutes, sleeps after ten, takes a poke, can be dragged, and hides when dragged into the corner. A compact head with
 // a face instead of a whole figure and the behaviour after Aqua Voice's pet (aquavoice.com/pet, researched 30.10.2026
 // and 05.11.2026); helmet, colours and motion are ours.

@@ -902,7 +902,7 @@
         zeigt.append(c);
       }
       const alleAn = petAn && e.zeigtLaeufe !== false && e.zeigtFreigaben !== false;
-      liste.append(zeile('Zeigt', e.zeigtFreigaben === false ? 'Freigaben siehst du im Symbol unten rechts' : 'Was die Insel dir zeigt', zeigt,
+      liste.append(zeile('Zeigt', petAn ? 'Das Pet unten rechts wirft dein Diktat ins Textfeld' : e.zeigtFreigaben === false ? 'Freigaben siehst du im Symbol unten rechts' : 'Was die Insel dir zeigt', zeigt,
         alleAn ? null : () => { setzen('pet', true); setzen('zeigtLaeufe', true); setzen('zeigtFreigaben', true); }));
     } else if (blattSt.mikrofonOffen) {
       mikrofonZeilen(liste);

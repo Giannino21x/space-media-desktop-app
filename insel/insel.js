@@ -883,8 +883,9 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
       }
       letztesMerken(text);
       const woerter = text.split(/\s+/).filter(Boolean).length;
-      // The pet throws the words to the pointer first (≤ 450 ms); the paste lands on impact.
-      await pet.werfen(text);
+      // The text goes in at once; the pet's throw (0.4 s) runs alongside and never holds the paste (Entscheid Chief
+      // 25.11.2026: «Diktieren ist zu langsam»).
+      pet.werfen(text).catch(() => {});
       const eingefuegt = await einfuegen(text);
       senden(insel, 'insel:diktat', { zustand: 'fertig', woerter });
       pet.diktat(eingefuegt ? 'fertig' : 'meldung', eingefuegt ? { woerter } : { text: 'Kopiert · Strg+V zum Einfügen', art: 'info' });
