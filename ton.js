@@ -26,4 +26,43 @@ function tonStumm({ stumm, vorne, aufnahme, hoerbar, stilleMs }) {
   return !(stilleMs < NACHLAUF_MS);
 }
 
-module.exports = { NACHLAUF_MS, tonStumm };
+/**
+ * Hangs the rule on a window: muted while it is not in front, on again when it comes back.
+ * @param win  BrowserWindow (or a fake with the same calls: on, isDestroyed, isVisible, isMinimized, isFocused,
+ *             webContents { on, isAudioMuted, setAudioMuted, isCurrentlyAudible })
+ * @param uhr  { jetzt, warten, abbrechen } — Date.now/setTimeout/clearTimeout, replaceable in tests
+ * @returns {{ aufnahme(an: boolean): void, pruefen(): void }}
+ */
+function tonWache(win, uhr = { jetzt: () => Date.now(), warten: setTimeout, abbrechen: clearTimeout }) {
+  const wc = win.webContents;
+  let hoerbar = !!wc.isCurrentlyAudible();
+  let aufnahme = false;
+  let stilleSeit = 0;
+  let timer = null;
+  const pruefen = () => {
+    if (win.isDestroyed()) return;
+    if (timer) { uhr.abbrechen(timer); timer = null; }
+    const vorne = win.isVisible() && !win.isMinimized() && win.isFocused();
+    const stilleMs = hoerbar ? 0 : stilleSeit ? uhr.jetzt() - stilleSeit : Infinity;
+    const stumm = tonStumm({ stumm: wc.isAudioMuted(), vorne, aufnahme, hoerbar, stilleMs });
+    if (stumm !== wc.isAudioMuted()) wc.setAudioMuted(stumm);
+    // just went quiet in the background: look again once the pause is long enough
+    if (!stumm && !vorne && !hoerbar && stilleMs < NACHLAUF_MS) timer = uhr.warten(pruefen, NACHLAUF_MS - stilleMs + 50);
+  };
+  for (const name of ['focus', 'blur', 'show', 'hide', 'minimize', 'restore']) win.on(name, pruefen);
+  wc.on('audio-state-changed', (event) => {
+    hoerbar = !!(event && event.audible);
+    if (!hoerbar) stilleSeit = uhr.jetzt();
+    pruefen();
+  });
+  // a new page has no recording yet
+  wc.on('did-navigate', () => { aufnahme = false; pruefen(); });
+  win.on('closed', () => { if (timer) uhr.abbrechen(timer); });
+  pruefen();
+  return {
+    aufnahme(an) { aufnahme = !!an; pruefen(); },
+    pruefen,
+  };
+}
+
+module.exports = { NACHLAUF_MS, tonStumm, tonWache };

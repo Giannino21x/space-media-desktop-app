@@ -6,7 +6,7 @@ const path = require('path');
 const { anmeldeAdresse, connectorOrigin, createConnectorHost } = require('./connector');
 const { DateienFehler, createDateienHost, fehlerMeldung, grundVon } = require('./dateien');
 const { appModelId, fensterWache } = require('./fenster');
-const { NACHLAUF_MS, tonStumm } = require('./ton');
+const { tonWache } = require('./ton');
 const { createInselHost } = require('./insel/insel');
 const { createLokalHost } = require('./lokal');
 
@@ -85,7 +85,7 @@ function createWindow() {
     callback(false);
   });
 
-  tonWache(mainWindow);
+  tonFenster = tonWache(mainWindow);
 
   // Show after first paint is composited (prevents flash). Started with Windows: stay in the tray.
   mainWindow.once('ready-to-show', () => {
@@ -185,43 +185,12 @@ function createWindow() {
   }
 }
 
-// The page's sound follows the window (ton.js): muted while hidden, minimised or without focus, on again in front.
-// A recording (preload.js reports the open microphone) and sound that is still playing keep it on.
-let seiteAufnahme = false;
-let tonPruefen = () => {};
+// The page's sound follows the window (ton.js → tonWache). The preload reports an open microphone.
+let tonFenster = null;
 ipcMain.on('seite-aufnahme', (event, an) => {
-  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return;
-  seiteAufnahme = !!an;
-  tonPruefen();
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents || !tonFenster) return;
+  tonFenster.aufnahme(!!an);
 });
-
-function tonWache(win) {
-  const wc = win.webContents;
-  let hoerbar = wc.isCurrentlyAudible();
-  let stilleSeit = 0;
-  let timer = null;
-  const pruefen = () => {
-    if (win.isDestroyed()) return;
-    clearTimeout(timer);
-    const vorne = win.isVisible() && !win.isMinimized() && win.isFocused();
-    const stilleMs = hoerbar ? 0 : stilleSeit ? Date.now() - stilleSeit : Infinity;
-    const stumm = tonStumm({ stumm: wc.isAudioMuted(), vorne, aufnahme: seiteAufnahme, hoerbar, stilleMs });
-    if (stumm !== wc.isAudioMuted()) wc.setAudioMuted(stumm);
-    // just went quiet in the background: look again once the pause is long enough
-    if (!stumm && !vorne && !hoerbar && stilleMs < NACHLAUF_MS) timer = setTimeout(pruefen, NACHLAUF_MS - stilleMs + 50);
-  };
-  tonPruefen = pruefen;
-  for (const name of ['focus', 'blur', 'show', 'hide', 'minimize', 'restore']) win.on(name, pruefen);
-  wc.on('audio-state-changed', (event) => {
-    hoerbar = !!event.audible;
-    if (!hoerbar) stilleSeit = Date.now();
-    pruefen();
-  });
-  // a new page has no recording yet
-  wc.on('did-navigate', () => { seiteAufnahme = false; pruefen(); });
-  win.on('closed', () => clearTimeout(timer));
-  pruefen();
-}
 
 /** Bring the window back (tray click, second app start, notification). */
 function zeigen() {

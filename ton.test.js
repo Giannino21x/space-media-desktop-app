@@ -5,7 +5,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { NACHLAUF_MS, tonStumm } = require('./ton');
+const { EventEmitter } = require('node:events');
+const { NACHLAUF_MS, tonStumm, tonWache } = require('./ton');
 
 const z = (extra) => ({ stumm: false, vorne: false, aufnahme: false, hoerbar: false, stilleMs: Infinity, ...extra });
 
@@ -95,4 +96,92 @@ test('the background note is a silent toast', () => {
   const main = fs.readFileSync(path.join(__dirname, 'main.js'), 'utf8');
   const hinweis = main.slice(main.indexOf('function hintergrundHinweis'), main.indexOf('function mitWindowsStarten'));
   assert.match(hinweis, /silent: true/);
+});
+
+// ---- tonWache against a fake window: window state → setAudioMuted
+function fenster({ sichtbar = true, fokus = true, minimiert = false, hoerbar = false } = {}) {
+  const win = new EventEmitter();
+  const wc = new EventEmitter();
+  const st = { sichtbar, fokus, minimiert, stumm: false, aufrufe: [] };
+  Object.assign(wc, {
+    isAudioMuted: () => st.stumm,
+    setAudioMuted: (m) => { st.stumm = m; st.aufrufe.push(m); },
+    isCurrentlyAudible: () => hoerbar,
+  });
+  Object.assign(win, {
+    webContents: wc,
+    isDestroyed: () => false,
+    isVisible: () => st.sichtbar,
+    isMinimized: () => st.minimiert,
+    isFocused: () => st.fokus,
+  });
+  let jetzt = 1000;
+  const timer = [];
+  const uhr = {
+    jetzt: () => jetzt,
+    warten: (f, ms) => { const t = { f, bis: jetzt + ms }; timer.push(t); return t; },
+    abbrechen: (t) => { const i = timer.indexOf(t); if (i >= 0) timer.splice(i, 1); },
+  };
+  const weiter = (ms) => {
+    jetzt += ms;
+    for (const t of timer.filter((x) => x.bis <= jetzt)) { uhr.abbrechen(t); t.f(); }
+  };
+  return { win, wc, st, uhr, weiter };
+}
+
+test('tonWache: started hidden → muted; brought to the front → on; to the back → muted again', () => {
+  const f = fenster({ sichtbar: false, fokus: false });
+  tonWache(f.win, f.uhr);
+  assert.equal(f.st.stumm, true);
+  f.st.sichtbar = true; f.win.emit('show');
+  f.st.fokus = true; f.win.emit('focus');
+  assert.equal(f.st.stumm, false); // focus back: sound on
+  f.st.fokus = false; f.win.emit('blur');
+  assert.equal(f.st.stumm, true);
+  f.st.fokus = true; f.win.emit('focus');
+  assert.equal(f.st.stumm, false);
+  f.st.sichtbar = false; f.win.emit('hide');
+  assert.equal(f.st.stumm, true);
+});
+
+test('tonWache: in front and focused nothing is muted; minimised mutes', () => {
+  const f = fenster();
+  tonWache(f.win, f.uhr);
+  assert.deepEqual(f.st.aufrufe, []);
+  f.st.minimiert = true; f.win.emit('minimize');
+  assert.equal(f.st.stumm, true);
+  f.st.minimiert = false; f.win.emit('restore');
+  assert.equal(f.st.stumm, false);
+});
+
+test('tonWache: sound playing when the window goes back runs on, muted after NACHLAUF_MS of silence', () => {
+  const f = fenster();
+  tonWache(f.win, f.uhr);
+  f.wc.emit('audio-state-changed', { audible: true });
+  f.st.fokus = false; f.win.emit('blur');
+  assert.equal(f.st.stumm, false); // read-aloud keeps going
+  f.wc.emit('audio-state-changed', { audible: false });
+  f.weiter(NACHLAUF_MS - 100);
+  assert.equal(f.st.stumm, false);
+  f.wc.emit('audio-state-changed', { audible: true }); // next part
+  f.wc.emit('audio-state-changed', { audible: false });
+  f.weiter(NACHLAUF_MS + 100);
+  assert.equal(f.st.stumm, true);
+  f.st.fokus = true; f.win.emit('focus');
+  assert.equal(f.st.stumm, false);
+});
+
+test('tonWache: a recording keeps the sound in the back; a new page drops the recording', () => {
+  const f = fenster();
+  const t = tonWache(f.win, f.uhr);
+  t.aufnahme(true);
+  f.st.fokus = false; f.win.emit('blur');
+  assert.equal(f.st.stumm, false);
+  t.aufnahme(false);
+  assert.equal(f.st.stumm, true);
+  f.st.fokus = true; f.win.emit('focus');
+  t.aufnahme(true);
+  f.wc.emit('did-navigate');
+  f.st.fokus = false; f.win.emit('blur');
+  assert.equal(f.st.stumm, true);
 });
