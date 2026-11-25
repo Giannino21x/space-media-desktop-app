@@ -1,6 +1,18 @@
-// Preload — drag region + taskbar badge observer + titlebar theme resync + bridges (spaceConnector, spaceDateien, spaceLokal)
+// Preload — drag region + Dock badge observer (macOS) + titlebar theme resync + bridges (spaceConnector, spaceDateien, spaceLokal)
 
 const { contextBridge, ipcRenderer } = require('electron');
+
+// Windows: no number on the taskbar symbol. The web app sets the app badge through the Badging API
+// (lib/abzeichen/flaechen.ts, feature-detected); Electron draws it as a dark plate on the taskbar button.
+// Removed in the page's world before its scripts run, so the web app skips it.
+if (process.platform === 'win32') {
+  contextBridge.executeInMainWorld({
+    func: () => {
+      delete Navigator.prototype.setAppBadge;
+      delete Navigator.prototype.clearAppBadge;
+    },
+  });
+}
 
 // Expose restart function for auto-updater banner. With contextIsolation the
 // preload's `window` is not the page's `window`, so the banner (injected via
@@ -257,8 +269,8 @@ window.addEventListener('DOMContentLoaded', () => {
     readBadge();
   };
 
-  // Wait a bit for the app to render
-  setTimeout(startObserving, 3000);
+  // Wait a bit for the app to render. Only the Mac shows the count (Dock); Windows has no taskbar badge.
+  if (process.platform === 'darwin') setTimeout(startObserving, 3000);
 
   // Titlebar theme: the main process samples the pixels under the native
   // window controls. Instead of polling every second it now resamples when

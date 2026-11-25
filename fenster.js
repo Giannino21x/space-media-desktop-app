@@ -24,4 +24,12 @@ function fensterWache({ allowed, isDev, openExternal }) {
   };
 }
 
-module.exports = { fensterWache };
+// Windows groups taskbar buttons and finds name and symbol through this ID: it takes the Start menu shortcut that
+// carries it. A dev run (`npm run dev`, plain electron.exe) under the same ID let a shortcut to electron.exe claim it
+// once — then the installed app showed «Electron» with the Electron symbol. Dev runs get their own ID.
+const APP_ID = 'ch.space-media.app';
+function appModelId(isPackaged) {
+  return isPackaged ? APP_ID : `${APP_ID}.dev`;
+}
+
+module.exports = { APP_ID, appModelId, fensterWache };

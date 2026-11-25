@@ -1,11 +1,11 @@
-const { app, BrowserWindow, shell, Menu, ipcMain, nativeImage, dialog, net, Tray, Notification } = require('electron');
+const { app, BrowserWindow, shell, Menu, ipcMain, dialog, net, Tray, Notification } = require('electron');
 const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
 const os = require('os');
 const path = require('path');
 const { anmeldeAdresse, connectorOrigin, createConnectorHost } = require('./connector');
 const { DateienFehler, createDateienHost, fehlerMeldung, grundVon } = require('./dateien');
-const { fensterWache } = require('./fenster');
+const { appModelId, fensterWache } = require('./fenster');
 const { createInselHost } = require('./insel/insel');
 const { createLokalHost } = require('./lokal');
 
@@ -182,20 +182,6 @@ function createWindow() {
   }
 }
 
-// Generate a badge overlay icon with a number (Windows taskbar)
-function createBadgeIcon(count) {
-  const size = 16;
-  const canvas = `
-    <svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="8" cy="8" r="8" fill="#ef4444"/>
-      <text x="8" y="12" text-anchor="middle" fill="white" font-size="10" font-family="Arial" font-weight="bold">${count > 9 ? '9+' : count}</text>
-    </svg>
-  `;
-  return nativeImage.createFromBuffer(
-    Buffer.from(canvas.trim())
-  );
-}
-
 /** Bring the window back (tray click, second app start, notification). */
 function zeigen() {
   if (!mainWindow) createWindow();
@@ -265,20 +251,10 @@ ipcMain.on('restart-for-update', () => {
   setImmediate(() => autoUpdater.quitAndInstall(false, true));
 });
 
-// Listen for badge count updates from the renderer
+// Unread count from the renderer (preload.js) → Dock badge on macOS. Windows shows no taskbar badge: a bare
+// «50» on the symbol says nothing (Chief, 25.11.2026); the bell inside the app carries the number.
 ipcMain.on('set-badge-count', (event, count) => {
-  if (!mainWindow) return;
-  if (process.platform === 'win32') {
-    if (count > 0) {
-      mainWindow.setOverlayIcon(createBadgeIcon(count), `${count} ungelesene Benachrichtigungen`);
-    } else {
-      mainWindow.setOverlayIcon(null, '');
-    }
-  }
-  // macOS dock badge
-  if (process.platform === 'darwin') {
-    app.setBadgeCount(count);
-  }
+  if (process.platform === 'darwin') app.setBadgeCount(count);
 });
 
 // Only the app's own pages may use the bridges (connector, PC folders); the origin comes from the asking frame,
@@ -533,9 +509,10 @@ if (app && app.commandLine) {
   app.commandLine.appendSwitch('disable-features', 'PaintHolding');
 }
 
-// Windows: set app user model ID for notifications to show "SPACE Media Engine"
+// Windows: the app user model ID ties taskbar button, Start menu shortcut and notifications to «SPACE Media Engine»
+// and its symbol. Dev runs use their own (fenster.js → appModelId).
 if (process.platform === 'win32') {
-  app.setAppUserModelId('ch.space-media.app');
+  app.setAppUserModelId(appModelId(app.isPackaged));
 }
 
 // Auto-updater: check GitHub Releases for new versions

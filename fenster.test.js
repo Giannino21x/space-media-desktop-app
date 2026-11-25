@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { fensterWache } = require('./fenster');
+const { APP_ID, appModelId, fensterWache } = require('./fenster');
 
 const APP = ['https://app.space-media.ch', 'https://space-media-app.vercel.app'];
 
@@ -80,4 +80,10 @@ test('navigieren (will-navigate): sign-in, OAuth and payment hosts leave the win
   ];
   for (const url of extern) assert.equal(nav(url), true, url);
   assert.deepEqual(w.extern, extern);
+});
+
+test('app ID: the installed app keeps its ID, dev runs never share it', () => {
+  assert.equal(appModelId(true), APP_ID);
+  assert.equal(APP_ID, 'ch.space-media.app'); // the installer's shortcut and every notification hang on it
+  assert.notEqual(appModelId(false), APP_ID);
 });
