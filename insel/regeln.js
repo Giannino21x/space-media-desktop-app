@@ -354,22 +354,33 @@ function petFarbe(lage) {
 // ---- clean-up of a dictation: filler words only (Plan 2026-11-25-insel-diktat.md, S4) ----
 //
 // Removes a standalone «äh», «ähm», «öhm», «hm» (with the comma that sets it off); «mhm» stays, it often means «yes».
-// Nothing else: doubled words stay («die die» is correct German). A text without a filler comes back character for character.
-const FUELL_RE = /(^|[\s,;])\s*(äh|ähh|ähm|ähmm|öhm|hm|hmm)(?![\p{L}\p{N}])(?:\s*(?:\.\.\.|…))?(?:\s*,)?/giu;
-const GROSS = '\u0001'; // marks «the removed filler was capitalised: capitalise the next word»
+// Nothing else: doubled words stay («die die» is correct German). Untouched: all caps («HM» is a brand), after a number
+// («5 hm»), with a hyphen («äh-Laute»). A text without a filler comes back character for character.
+// 1:1 as fuellwoerterWeg in the web app (src/lib/voice/fuellwoerter.ts) — change both together.
+const FUELL_RE = /(^|[\s,;])[ \t]*(äh|ähh|ähm|ähmm|öhm|hm|hmm)(?![\p{L}\p{N}-])(?:[ \t]*(?:\.\.\.|…))?(?:[ \t]*,)?/giu;
+/** Marks «the removed filler was capitalised: capitalise the next word». */
+const GROSS = '\u0001';
 const GROSS_RE = /\u0001(\s*)(\p{L})/gu;
+
 function aufraeumen(text) {
   if (typeof text !== 'string' || !text) return text;
   let entfernt = false;
-  const roh = text.replace(FUELL_RE, (_m, vor, wort) => {
+  const roh = text.replace(FUELL_RE, (m, vor, wort, pos, ganz) => {
+    const kleinOderErstGross = wort === wort.toLowerCase() || wort.slice(1) === wort.slice(1).toLowerCase();
+    if (!kleinOderErstGross || /\d[ \t]*$/.test(ganz.slice(0, pos + vor.length))) return m;
     entfernt = true;
     const gross = wort[0] !== wort[0].toLowerCase();
-    return (vor === '' || /\s/.test(vor) ? vor : ' ') + (gross ? GROSS : '');
+    const danach = ganz[pos + m.length];
+    // a filler alone on its line: the line goes, not a blank line in its place
+    const rest = vor === '\n' && (danach === '\n' || danach === undefined) ? '' : vor === ',' ? ' ' : vor;
+    return rest + (gross ? GROSS : '');
   });
   if (!entfernt) return text;
   const sauber = roh
     .replace(GROSS_RE, (_m, ws, b) => ws + b.toUpperCase())
     .split(GROSS).join('')
+    // «Hm? Was …» / «Gut. Hm? Weiter.»: the question mark of the filler goes with it
+    .replace(/(^|[.!?…][ \t]+)[?!]+[ \t]*/g, '$1')
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/[ \t]+([.,;:!?…])/g, '$1')
     .replace(/^[\s,;]+/, '')

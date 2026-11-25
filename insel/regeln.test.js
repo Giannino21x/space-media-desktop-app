@@ -254,6 +254,12 @@ test('filler words go, with the comma that sets them off', () => {
     ['Das kostet, hm, etwa 200 Franken.', 'Das kostet etwa 200 Franken.'],
     ['Öhm also gut.', 'Also gut.'],
     ['Hm.', ''],
+    ['Hm? Was meinst du?', 'Was meinst du?'],
+    ['Gut. Hm? Weiter.', 'Gut. Weiter.'],
+    ['Kommst du, äh?', 'Kommst du?'],
+    ['a; äh b', 'a; b'],
+    ['Zeile eins\näh\nZeile zwei', 'Zeile eins\nZeile zwei'],
+    ['Wenn du kommst, äh, dann gehen wir.', 'Wenn du kommst dann gehen wir.'],
   ];
   for (const [rein, raus] of faelle) assert.equal(aufraeumen(rein), raus, rein);
 });
@@ -268,6 +274,10 @@ test('a text without a filler comes back character for character', () => {
     'z. B. ca. drei Stück',
     '  zwei  Leerzeichen  ',
     'Ähnlich wie Hamburg und Hämmer.',
+    'Ich kaufe bei HM ein.',
+    'ÄH ist eine Abkürzung.',
+    'Noch 5 hm weit.',
+    'Die äh-Laute zählen.',
     '',
   ];
   for (const t of gleich) assert.equal(aufraeumen(t), t, t);
