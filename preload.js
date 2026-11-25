@@ -169,7 +169,9 @@ contextBridge.exposeInMainWorld('spaceInselApp', {
   einstellungen: () => ipcRenderer.invoke('insel:app-einstellungen'),
   setzen: (schluessel, wert) => ipcRenderer.invoke('insel:app-einstellung', {
     schluessel: String(schluessel),
-    wert: schluessel === 'petName' ? String(wert == null ? '' : wert).slice(0, 24) : !!wert,
+    // petName is text, taste one of a few words (1.0.16 turned it into a boolean: «Aus» arrived as true); the rest are switches
+    wert: schluessel === 'petName' ? String(wert == null ? '' : wert).slice(0, 24)
+      : schluessel === 'taste' ? String(wert == null ? '' : wert).slice(0, 20) : !!wert,
   }),
   beobachten: (melden) => {
     const listener = (_event, e) => { if (e && typeof e === 'object') melden(e); };

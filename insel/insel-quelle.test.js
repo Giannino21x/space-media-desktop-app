@@ -21,3 +21,10 @@ test('pollTakt declares no inner `ziehen` (it would shadow the drag state: every
   assert.ok(a > 0 && b > a);
   assert.doesNotMatch(quelle.slice(a, b), /\b(const|let|var)\s+ziehen\b/);
 });
+
+test('the app bridge passes taste as text, not as a switch (1.0.16 sent «Aus» as true)', () => {
+  const preload = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
+  assert.match(preload, /schluessel === 'taste' \? String\(/);
+  const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+  assert.match(main, /schluessel === 'taste' \? String\(/);
+});
