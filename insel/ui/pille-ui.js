@@ -273,7 +273,8 @@
 
   api.onPilleStart(({ id, zweck, live }) => aufnahmeStarten(id, zweck, live));
   if (api.onPilleLive) api.onPilleLive(({ id, text, weg }) => {
-    if (weg) { liveZeile.leeren(); return; }
+    // only for this take (an old session that gives up late must not clear the next take's line)
+    if (weg) { if ((st.aufnahme && st.aufnahme.id === id) || st.look === 'denkt') liveZeile.leeren(); return; }
     if ((st.aufnahme && st.aufnahme.id === id) || st.look === 'denkt') liveZeile.zeigen(text);
   });
   api.onPilleFreihand(() => {
