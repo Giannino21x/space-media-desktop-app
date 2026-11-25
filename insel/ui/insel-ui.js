@@ -65,7 +65,8 @@
   const gesichtKlein = G.erstellen($('gesicht-klein'), { groesse: 24, rahmen: 'eng' });
   const grossCanvas = $('gesicht-gross');
   const GROSS = 110; // canvas size of the big face; scaled down per view, never up
-  const gesichtGross = G.erstellen(grossCanvas, { groesse: GROSS, beiHerzen: () => K.spielen('herz') });
+  // Hearts on hover stay silent: a hover is no action of the person (sounds only answer a click or key, see klang.js)
+  const gesichtGross = G.erstellen(grossCanvas, { groesse: GROSS });
   const schein = $('schein');
   const fg = { x: 68, y: 100, d: 58, vx: 0, vy: 0, vd: 0, ziel: { x: 68, y: 100, d: 58 } };
   let minis = [];            // { engine, el }
@@ -244,7 +245,6 @@
       gesichtGross.stoppen();
       fokusAus();
       kompaktZeichnen();
-      if (vorher === 'offen') K.spielen('stups');
     } else {
       const h = hoeheFuer(st.ansicht);
       geoZiel(OFFEN_B, h, 22);
@@ -825,7 +825,7 @@
         if (!st.gesehenLaeufe.has(f.id) || st.gemeldet.has(f.id)) continue;
         st.gemeldet.add(f.id);
         meldung(f.chat ? `${f.bot || 'SPACE Bot'} hat geantwortet` : `${f.ok ? 'Erledigt' : 'Fehlgeschlagen'}: ${f.titel}`, f.ok ? 'erfolg' : 'fehler');
-        if (f.ok) { gesichtKlein.fertig(); gesichtGross.fertig(); K.spielen('fertig'); } else K.spielen('fehler');
+        if (f.ok) { gesichtKlein.fertig(); gesichtGross.fertig(); }
       }
     }
     for (const r of lage.laufend) st.gesehenLaeufe.add(r.id);
@@ -834,7 +834,6 @@
     const neue = lage.freigaben.filter((a) => !st.gesehenFreigaben.has(a.id));
     for (const a of lage.freigaben) st.gesehenFreigaben.add(a.id);
     if (neue.length && !ersteGeladen && st.ansicht !== 'datei' && st.ansicht !== 'mail') {
-      K.spielen('freigabe');
       st.freigabeSeit = performance.now();
       freigabeZeichnen();
       alarm('freigabe');
@@ -1276,7 +1275,6 @@
     st.durchHover = false;
     st.interagiert = false;
     modusSetzen('kompakt');
-    K.spielen('hallo');
     gesichtKlein.ausdruck('bogen', 900);
     if (st.einstellungen.hoverOeffnen) { st.ansicht = standardAnsicht(); modusSetzen('offen'); st.durchHover = true; }
   }
