@@ -585,14 +585,16 @@ function notizErgebnis(id, fertig) {
 // ---- live text while dictating (Plan docs/plans/2026-11-25-live-text.md, Stufe 1) ----
 
 /**
- * Which live way a dictation takes: 'scribe' only when the server says so (`/api/voice/status` realtime — the server
- * gives it only for «Standard») and «Diktat auf diesem PC» is off (who chose «on this PC» does not want the sound in
- * the cloud, even while the model is missing). A note («Notiz an mich») never goes live. Else null = today's way.
+ * Which live way a dictation takes: 'scribe' only when the server says so (`/api/voice/status` inselLive — the server
+ * gives it only for «Standard») and the dictation would go to the cloud anyway: «Diktat auf diesem PC» off, or on
+ * while the model is not ready (missing, broken) — then today's way sends the sound through the app to the cloud, and
+ * live changes nothing about that (Entscheid Chief 25.11.2026). Model ready → everything stays on this PC, never live.
+ * The same condition as diktatWeg in lokal-regeln.js. A note («Notiz an mich») never goes live. Else null.
  * The server checks again on every token (403 for every other KI-Option); this is only the first door. Rein.
  */
-function liveWeg({ realtime, lokalDiktat, zweck } = {}) {
+function liveWeg({ realtime, lokalDiktat, lokalBereit, zweck } = {}) {
   if (realtime !== true) return null;
-  if (lokalDiktat !== false) return null;
+  if (lokalDiktat !== false && lokalBereit !== false) return null;
   if (zweck && zweck !== 'diktat') return null;
   return 'scribe';
 }

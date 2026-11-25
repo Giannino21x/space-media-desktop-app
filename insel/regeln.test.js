@@ -530,14 +530,20 @@ test('a dragged spot counts only on the set-up it was dragged on; elsewhere the 
     k.ereignis({ art: 'diktatRunter', zeit: 5000 });
     assert.deepEqual(k.ereignis({ art: 'takt', zeit: 5000 + H }), ['gehalten']);
   });
-  test('liveWeg: nur mit realtime vom Server, «auf diesem PC» aus, nie für eine Notiz', () => {
-    assert.equal(liveWeg({ realtime: true, lokalDiktat: false }), 'scribe');
-    assert.equal(liveWeg({ realtime: true, lokalDiktat: false, zweck: 'diktat' }), 'scribe');
-    assert.equal(liveWeg({ realtime: true, lokalDiktat: true }), null);
-    assert.equal(liveWeg({ realtime: true }), null, 'lokalDiktat fehlt = Standard an');
-    assert.equal(liveWeg({ realtime: false, lokalDiktat: false }), null);
-    assert.equal(liveWeg({ realtime: 'true', lokalDiktat: false }), null);
-    assert.equal(liveWeg({ realtime: true, lokalDiktat: false, zweck: 'notiz' }), null);
+  test('liveWeg: nur mit realtime vom Server, nur wenn das Diktat ohnehin in die Cloud ginge, nie für eine Notiz', () => {
+    assert.equal(liveWeg({ realtime: true, lokalDiktat: false, lokalBereit: false }), 'scribe');
+    assert.equal(liveWeg({ realtime: true, lokalDiktat: false, lokalBereit: true }), 'scribe', 'Schalter aus: Cloud wie heute');
+    assert.equal(liveWeg({ realtime: true, lokalDiktat: false, zweck: 'diktat', lokalBereit: false }), 'scribe');
+    // «Diktat auf diesem PC» an: Modell fehlt → der Ton geht heute ohnehin in die Cloud → live erlaubt
+    assert.equal(liveWeg({ realtime: true, lokalDiktat: true, lokalBereit: false }), 'scribe');
+    // …Modell da → alles bleibt auf dem PC, nie live
+    assert.equal(liveWeg({ realtime: true, lokalDiktat: true, lokalBereit: true }), null);
+    assert.equal(liveWeg({ realtime: true, lokalDiktat: true }), null, 'unbekannt = nie live');
+    assert.equal(liveWeg({ realtime: true }), null, 'lokalDiktat fehlt = Standard an, Modell unbekannt');
+    assert.equal(liveWeg({ realtime: false, lokalDiktat: false, lokalBereit: false }), null);
+    assert.equal(liveWeg({ realtime: 'true', lokalDiktat: false, lokalBereit: false }), null);
+    assert.equal(liveWeg({ realtime: true, lokalDiktat: false, lokalBereit: false, zweck: 'notiz' }), null);
+    assert.equal(liveWeg({ realtime: true, lokalDiktat: true, lokalBereit: false, zweck: 'notiz' }), null);
     assert.equal(liveWeg(), null);
   });
   test('liveZeile: Ende des Texts, an einem Wort geschnitten, höchstens 64 Zeichen', () => {

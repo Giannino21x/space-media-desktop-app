@@ -416,13 +416,15 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
       : { ok: true, status: 204, daten: null })
     : (pfad, opts) => api(pfad, opts);
   const live = createLive({ api: liveApi, WebSocketImpl: globalThis.WebSocket, testErlaubt: !!liveTest, log });
-  /** Does this take go live? The server's realtime flag (5-min-old status: only the first door — the token route asks the
-   *  KI-Option again), «Diktat auf diesem PC» off, a dictation (never a note). */
+  /** Does this take go live? The server's inselLive (5-min-old status: only the first door — the token route asks the
+   *  KI-Option again), the take would go to the cloud anyway (switch off, or the model not ready), a dictation. */
   const liveFuer = (zweck) => liveWeg({
     // inselLive: the server's own answer for the island (only «Standard», Scribe live set up); an older server without
     // the field → never live
     realtime: liveTest ? true : !!(stamm && stamm.sprache && stamm.sprache.inselLive === true),
     lokalDiktat: einstellungen.lokalDiktat !== false,
+    // the model on this PC ready right now (the pill then sends WAV, diktatWeg → lokal): never live
+    lokalBereit: !!(lokalKi && lokalKi.bereit()),
     zweck,
   }) === 'scribe' && typeof globalThis.WebSocket === 'function';
   // open live sessions by take id: PCM and «all sound sent» may still come after pille:audio took the take

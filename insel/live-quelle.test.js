@@ -37,9 +37,10 @@ test('Rückfall: ohne Schlusstext geht die Aufnahme wie heute an transkribieren,
   assert.ok(audio.indexOf('aufraeumen(roh)') > rueck, 'Füllwörter für beide Wege');
 });
 
-test('eine Notiz geht nie live, «Diktat auf diesem PC» an nie live', () => {
+test('eine Notiz geht nie live, mit bereitem Modell auf dem PC nie live', () => {
   const fuer = zweig('const liveFuer = ', '}) ===');
   assert.ok(fuer.includes('lokalDiktat: einstellungen.lokalDiktat !== false'));
+  assert.ok(fuer.includes('lokalBereit: !!(lokalKi && lokalKi.bereit())'));
   assert.ok(fuer.includes('zweck'));
   assert.ok(insel.indexOf("if (zweck === 'notiz') return notizAblegenMelden(") < insel.indexOf('liveSitzung.schluss('));
 });
