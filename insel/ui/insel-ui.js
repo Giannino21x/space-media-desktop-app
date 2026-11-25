@@ -546,6 +546,14 @@
     b.addEventListener('click', fn);
     return b;
   }
+  // «Notiz an mich» next to the main button: short label so both fit on one row (the card has room for one row of
+  // buttons — a second row squeezes the title away); the full name stays in title and aria-label
+  function notizKnopf() {
+    const b = knopf('Notiz', 'leise', () => api.notiz());
+    b.title = 'Notiz an mich';
+    b.setAttribute('aria-label', 'Notiz an mich');
+    return b;
+  }
   function escape(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
   function uebersichtZeichnen() {
@@ -576,7 +584,7 @@
       titel.className = 'titel';
       titel.textContent = l.termin.titel;
       knoepfe.append(knopf('Aufnehmen', 'haupt', () => api.oeffnen(`/sitzungen/new?event_id=${encodeURIComponent(l.termin.id)}`), 'oeffnen'));
-      if (api.notiz) knoepfe.append(knopf('Notiz an mich', 'leise', () => api.notiz()));
+      if (api.notiz) knoepfe.append(notizKnopf());
       karte.dataset.wash = 'blau';
     } else if (l.laufend.length) {
       const h = l.laufend[0];
@@ -600,7 +608,7 @@
         + (f.entschieden ? `<span class="fs-zeile">Entschieden: ${escape(f.entschieden)}</span>` : '')
         + (f.alsNaechstes ? `<span class="fs-zeile">Als Nächstes: ${escape(f.alsNaechstes)}</span>` : '');
       knoepfe.append(knopf('Öffnen', 'haupt', () => api.oeffnen(`/sitzungen/${encodeURIComponent(f.id)}`), 'oeffnen'));
-      if (api.notiz) knoepfe.append(knopf('Notiz an mich', 'leise', () => api.notiz()));
+      if (api.notiz) knoepfe.append(notizKnopf());
       karte.dataset.wash = '';
     } else {
       name.textContent = (standard && standard.name) || (l.steno ? 'Steno' : 'SPACE Bot');
@@ -611,7 +619,7 @@
         ? 'Halte <span class="taste">Strg</span> rechts, sprich, lass los.'
         : 'Frag mich etwas oder leg eine Datei ab.';
       knoepfe.append(knopf(l.steno ? 'Steno öffnen' : 'SME öffnen', '', () => api.oeffnen(l.steno ? '/sitzungen' : '/chat'), 'oeffnen'));
-      if (api.notiz) knoepfe.append(knopf('Notiz an mich', 'leise', () => api.notiz()));
+      if (api.notiz) knoepfe.append(notizKnopf());
       karte.dataset.wash = '';
     }
 
