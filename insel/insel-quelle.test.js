@@ -60,3 +60,9 @@ test('Notiz an mich: nach dem Hochladen wird nie mehr gelöscht (Prüfer F)', ()
   assert.ok(loeschen > 0 && loeschen < ablegen.indexOf('/audio/finalize'), 'DELETE nur vor dem Abschliessen');
   assert.equal(ablegen.split("method: 'DELETE'").length, 2);
 });
+
+test('leere Aufnahme (Mikrofon weg) setzt die Taste zurück, sonst hängt eine Notiz bei Taste «Aus» (Prüfer F, Runde 2)', () => {
+  const quelle = fs.readFileSync(path.join(__dirname, 'insel.js'), 'utf8');
+  const leer = quelle.slice(quelle.indexOf("kanal('pille:leer'"), quelle.indexOf("kanal('pille:nochmals'"));
+  assert.ok(leer.includes('taste.zuruecksetzen();'));
+});

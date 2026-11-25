@@ -423,7 +423,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
         // round (6 s open, 20 s closed) shows it
         if (stamm) {
           const s = stamm;
-          api('/api/m2/steno/jetzt').then((r) => { if (stamm === s) s.jetzt = r.ok ? r.daten : null; }).catch(() => {});
+          api('/api/m2/steno/jetzt').then((r) => { if (stamm === s && r.ok) s.jetzt = r.daten; }).catch(() => {});
         }
       }
       if (!stamm) {
@@ -677,7 +677,12 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
   async function notizAblegen(bytes, mime) {
     // the appointment the note belongs to: running, or ended in the last 2 hours, recorded or not — the same rule as
     // the app (notizTermin in src/lib/m2/jetzt.ts); the route works it out, the island checks the times again
-    const t = stamm && stamm.jetzt && stamm.jetzt.notizTermin;
+    const frisch = await Promise.race([
+      api('/api/m2/steno/jetzt').then((r) => (r.ok ? r.daten : null)).catch(() => null),
+      warten(3000).then(() => null),
+    ]);
+    const quelle = frisch || (stamm && stamm.jetzt);
+    const t = quelle && quelle.notizTermin;
     const termin = t && typeof t.id === 'string' && Date.parse(t.beginn) <= Date.now() && Date.now() - Date.parse(t.ende) <= 2 * 3_600_000 ? t : null;
     const anlegen = await api('/api/meetings', {
       method: 'POST',
@@ -739,7 +744,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
       return { ok: false, meldung: err.message };
     } finally {
       if (notizAblage === lauf) notizAblage = null;
-      pilleNachNotiz(2500);
+      pilleNachNotiz(PILLE_MELDUNG_MS);
     }
   }
 
@@ -953,6 +958,7 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
   function pilleZeigen() {
     if (pille && !pille.isDestroyed() && !pille.isVisible()) pille.showInactive();
   }
+  const PILLE_MELDUNG_MS = 4500; // the pill's longest message stands 4 s
   function pilleNachNotiz(ms) {
     setTimeout(() => {
       if (einstellungen.diktat || aufnahme || notizAblage) return;
@@ -1014,10 +1020,14 @@ function createInselHost({ appUrl, appPartition, userDataDir, isDev, zeigen, nav
     }
   });
   kanal('pille:leer', 'pille', (_e, input) => {
-    if (aufnahme && input && input.id === aufnahme.id) aufnahme = null;
+    if (aufnahme && input && input.id === aufnahme.id) {
+      aufnahme = null;
+      // the key back to rest: with the key «Aus» nothing else would ever end the hands-free state of a note
+      taste.zuruecksetzen();
+    }
     senden(insel, 'insel:diktat', { zustand: 'aus' });
     pet.diktat('aus');
-    pilleNachNotiz(2500);
+    pilleNachNotiz(PILLE_MELDUNG_MS);
   });
   kanal('pille:nochmals', 'pille', () => nochmalsEinfuegen());
   kanal('insel:nochmals', 'insel', () => nochmalsEinfuegen());
