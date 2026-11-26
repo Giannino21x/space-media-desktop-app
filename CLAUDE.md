@@ -261,7 +261,11 @@ Im Dev-Modus (`--dev`) läuft kein Update-Check.
   Web-Repo: Teil E (Sync in «Meine Dateien», Live-Zugriff der Bots, `PcBruecke`, `/api/pc/*`). Geprüft mit `node --test` und
   `electron . --dev` gegen eine Testseite (Playwright, Dialog im Main-Prozess ersetzt): Wählen nur nach Klick,
   Liste/Lesen/Ausbruch, Änderungen entprellt, Neuladen räumt Watcher weg.
-- **Desktop:** letztes veröffentlichtes GitHub Release ist `v1.0.17` (25.11.2026, aus `89a7af7` auf Branch
+- **Desktop:** letztes veröffentlichtes GitHub Release ist `v1.0.18` (26.11.2026, aus `02ca84b` auf `insel`, nach dem
+  Web-Release main 190ea9a5d: Termin und fertige Sitzung an der Insel, «Notiz an mich», Live-Text beim Diktat mit 90-s-Grenze
+  — auf Produktion still aus, solange der Server `inselLive` nicht meldet. Geprüft am gebauten Paket mit eigenem Profil, Insel
+  aus, Fenster versteckt: lädt app.space-media.ch, UA space-media/1.0.18, Brücken da; Insel-Seiten in versteckten Fenstern
+  ohne eigene Fehler; kein echtes Diktat am Paket). Davor `v1.0.17` (25.11.2026, aus `89a7af7` auf Branch
   `Giannino21x/insel-diktat`: Text sofort einfügen, Wurf gleichzeitig; Infobereich «Nach Update suchen (Version x)» mit
   Ergebnis in einem Satz (`update-text.js`); Brücke gibt `taste` als Text weiter. Geprüft am gebauten Paket: echtes Diktat
   über LFM3, Text einmal im eigenen Editor). Davor `v1.0.16` (25.11.2026, aus `85c730d` auf Branch
