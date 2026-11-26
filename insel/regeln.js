@@ -603,6 +603,14 @@ function liveWeg({ realtime, lokalDiktat, lokalBereit, zweck } = {}) {
 const LIVE_SCHLUSS_MS = 800;
 /** At most this much sound waits in main for the socket (16 kHz PCM, 32 KB/s); then the live way gives up. */
 const LIVE_SCHLANGE_BYTES = 10 * 32000;
+/**
+ * The server gives the island's token max_session_duration_seconds 90 (space-media-app f3d871b05): the service closes
+ * the session on its own after 90 s. A take whose commit would come later than LIVE_SITZUNG_SICHER_MS after the
+ * session opened does not trust the socket any more and goes today's way with the whole recording — near the limit the
+ * service may answer our commit with what it had at 90 s, the tail missing. The margin covers network and queue time.
+ */
+const LIVE_SITZUNG_MS = 90_000;
+const LIVE_SITZUNG_SICHER_MS = LIVE_SITZUNG_MS - 5_000;
 /** The live line shows at most this many characters (one line in the pill). */
 const LIVE_ZEICHEN = 64;
 
@@ -675,7 +683,7 @@ function diktatFehler(status, antwort) {
 
 return {
   HALTEN_MIN_MS, DOPPEL_MS, MAX_AUFNAHME_MS,
-  diktatTaste, inselRahmen, pillenRahmen, imRechteck, weckStreifen, inselLage, terminFuerInsel, fertigFuerInsel, TERMIN_VORLAUF_MIN, BOT_FARBEN, multipart, formular, notizErgebnis, liveWeg, liveZeile, liveStabil, liveErgebnis, LIVE_SCHLUSS_MS, LIVE_SCHLANGE_BYTES, LIVE_ZEICHEN, diktatFehler, aufraeumen, TASTEN, einstellungPruefen, tasteVon, LETZTES_MS, letztesDiktatGueltig, ZIEH_SCHWELLE, inselZiehen, inselAnteil, inselAufbau, inselAnteilFuer,
+  diktatTaste, inselRahmen, pillenRahmen, imRechteck, weckStreifen, inselLage, terminFuerInsel, fertigFuerInsel, TERMIN_VORLAUF_MIN, BOT_FARBEN, multipart, formular, notizErgebnis, liveWeg, liveZeile, liveStabil, liveErgebnis, LIVE_SCHLUSS_MS, LIVE_SCHLANGE_BYTES, LIVE_ZEICHEN, LIVE_SITZUNG_MS, LIVE_SITZUNG_SICHER_MS, diktatFehler, aufraeumen, TASTEN, einstellungPruefen, tasteVon, LETZTES_MS, letztesDiktatGueltig, ZIEH_SCHWELLE, inselZiehen, inselAnteil, inselAufbau, inselAnteilFuer,
   GROESSEN, groesseFaktor, AUSSEHEN, aussehenWirksam, lageFuerInsel, freigabenAbfragen, mikrofonPruefen,
   // the pet
   DOESEN_MS, SCHLAFEN_MS, REAKTION_PAUSE_MS, WURF_MS, LEVEL_STUFEN, ECKE_RAND, TASKLEISTE_DIP,

@@ -31,7 +31,9 @@ test('Verwerfen, Abbrechen und eine leere Aufnahme beenden die Live-Sitzung (Soc
 test('Rückfall: ohne Schlusstext geht die Aufnahme wie heute an transkribieren, nie zweimal eingefügt', () => {
   const audio = zweig("kanal('pille:audio'", "kanal('pille:leer'");
   const live = audio.indexOf('liveSitzung.schluss(LIVE_SCHLUSS_MS)');
-  const rueck = audio.indexOf('if (roh === null) roh = await transkribieren(');
+  const rueck = audio.indexOf('if (roh === null) roh = await transkribieren(Buffer.from(input.daten)');
+  // the whole recording from this PC (also after the service's 90-s limit), never a piece of the live text
+  assert.ok(!/zwischen|gesendet/.test(audio), 'der heutige Weg bekommt nie Teile vom Socket');
   assert.ok(live > 0 && rueck > live, 'erst Live, dann der heutige Weg');
   assert.equal(audio.split('einfuegen(').length - 1, 1, 'genau ein Einfügen');
   assert.ok(audio.indexOf('aufraeumen(roh)') > rueck, 'Füllwörter für beide Wege');

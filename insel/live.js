@@ -4,8 +4,9 @@
 // of the take; main queues it (at most LIVE_SCHLANGE_BYTES) until the socket is open.
 //
 // The token is fetched only on 'gehalten' (key held ≥ 0.28 s, or hands-free): a shortcut tap never costs anything.
-// Whatever fails (token refused, socket, network, service, no final text in time), the take goes today's way with the
-// recording that stayed on this PC: this module only ever answers «here is the final text» or «null».
+// Whatever fails (token refused or used up, socket, network, service, no final text in time, the service's 90-s session
+// limit), the take goes today's way with the recording that stayed on this PC: this module only ever answers «here is
+// the final text» or «null». A session the service closed never reconnects: the rest of the take would be missing.
 // The socket address carries the token in its query: it never goes into a log.
 //
 // Protocol (ElevenLabs Scribe realtime, as in the web app's voice-realtime-client.ts): input_audio_chunk with base64
@@ -13,7 +14,7 @@
 
 'use strict';
 
-const { LIVE_SCHLANGE_BYTES } = require('./regeln');
+const { LIVE_SCHLANGE_BYTES, LIVE_SITZUNG_SICHER_MS } = require('./regeln');
 
 const MODELL = 'scribe_v3_live'; // like SCRIBE_LIVE_MODELL in the web app (src/lib/ai/scribe-modell.ts)
 const PFAD = '/v1/speech-to-text/realtime';
@@ -65,9 +66,11 @@ function zugangPruefen(d) {
  * @param {typeof WebSocket} d.WebSocketImpl
  * @param {boolean} [d.testErlaubt]  unpackaged only: ws://127.0.0.1 (socket double)
  * @param {(s: string) => void} [d.log]  never gets the address or the token
+ * @param {() => number} [d.jetzt]  the clock (tests)
  */
 function createLive(d) {
   const log = d.log || (() => {});
+  const jetzt = d.jetzt || Date.now;
   const KOPF = { 'x-space-insel': '1' };
 
   function sitzung(id, { onTeil, onWeg } = {}) {
@@ -79,6 +82,7 @@ function createLive(d) {
     let socket = null;
     let schlussText = null;
     let verbindenUhr = null;
+    let offenSeit = 0; // when the service started the session (its 90-s limit counts from about here)
     // commits the service made on its own before ours (long takes): kept, they lead the final text
     let zwischen = '';
     // the pill's «all sound sent» (pille:pcm-ende) — it may come after pille:audio; whoever waits gets it
@@ -130,6 +134,7 @@ function createLive(d) {
         if (zustand !== 'verbindet') return;
         clearTimeout(verbindenUhr);
         zustand = 'offen';
+        offenSeit = jetzt();
         const wartend = schlange; schlange = []; schlangeBytes = 0;
         for (const pcm of wartend) schicken(pcm);
         log(`live ${id}: offen`);
@@ -208,8 +213,13 @@ function createLive(d) {
         });
       },
 
-      /** 'senden': ask for the final text. Not open yet → give up at once (no waiting: today's way starts now). */
+      /**
+       * 'senden': ask for the final text. Not open yet → give up at once (no waiting: today's way starts now). Open
+       * longer than LIVE_SITZUNG_SICHER_MS → give up too (the service ends the session at 90 s).
+       */
       festhalten() {
+        // near the service's session limit the answer may be the first 90 s only: today's way, the whole recording
+        if (zustand === 'offen' && jetzt() - offenSeit >= LIVE_SITZUNG_SICHER_MS) { aufgeben('nahe an der Sitzungsgrenze'); return; }
         if (zustand === 'offen') { zustand = 'festgehalten'; commit(); return; }
         aufgeben(`festhalten im Zustand ${zustand}`);
       },

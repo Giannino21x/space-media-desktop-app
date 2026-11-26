@@ -282,3 +282,148 @@ test('audio vor pcm-ende: warteAufEnde wartet auf den letzten Ton, höchstens di
   offen[0].sag({ message_type: 'quota_exceeded' });
   assert.equal(weg, 1);
 });
+
+// ---- the service's 90-s session limit (server f3d871b05: max_session_duration_seconds 90) and no token ----
+
+/** A socket double that plays the service with its 90-s limit on a test clock: 64-ms pieces, at 90 s it closes. */
+function neunzig({ eigenerCommit = true, meldung = true } = {}) {
+  let uhr = 0;
+  const { FakeSocket, offen } = attrappe();
+  const aufrufe = [];
+  const api = async (pfad, opts = {}) => {
+    aufrufe.push({ pfad, opts });
+    if (pfad === '/api/voice/realtime/token') return { ok: true, status: 200, daten: zugang() };
+    return { ok: true, status: 204, daten: null };
+  };
+  const live = createLive({ api, WebSocketImpl: FakeSocket, jetzt: () => uhr });
+  let geoeffnet = 0;
+  /** Let `ms` of dictation pass: a 64-ms PCM piece each tick, the service closes at 90 s after session_started. */
+  const sprechen = (s, ms) => {
+    for (let t = 0; t < ms; t += 64) {
+      uhr += 64;
+      s.pcm(pcm(2048));
+      const k = offen[0];
+      if (k && k.readyState === 1 && uhr - geoeffnet >= 90_000) {
+        if (eigenerCommit) k.sag({ message_type: 'committed_transcript', text: 'Was in 90 s kam.' });
+        if (meldung) k.sag({ message_type: 'session_time_limit_exceeded', error: 'Maximum session duration exceeded' });
+        k.readyState = 3;
+        if (k.onclose) k.onclose({ code: 1000 });
+      }
+    }
+  };
+  const oeffnen = async (s) => { await s.verbinden(); geoeffnet = uhr; offen[0].start(); };
+  return { live, offen, aufrufe, sprechen, oeffnen, get uhr() { return uhr; } };
+}
+
+test('90 s: der Dienst schliesst mitten im Diktat — null (heutiger Weg mit der ganzen Aufnahme), Zeile still weg, nie der Teiltext', async () => {
+  for (const art of [{}, { meldung: false }, { eigenerCommit: false }, { eigenerCommit: false, meldung: false }]) {
+    const n = neunzig(art);
+    let weg = 0;
+    const teile = [];
+    const s = n.live.sitzung('n1', { onTeil: (t) => teile.push(t), onWeg: () => weg++ });
+    await n.oeffnen(s);
+    n.sprechen(s, 120_000); // two minutes at a stretch
+    assert.equal(s.zustand, 'aufgegeben', JSON.stringify(art));
+    assert.equal(weg, 1, 'die Zeile geht genau einmal, kein Fehler');
+    const vorher = n.offen[0].gesendet.length;
+    n.sprechen(s, 1000);
+    assert.equal(n.offen[0].gesendet.length, vorher, 'nach dem Schliessen geht kein Ton mehr an den Socket');
+    assert.equal(n.offen.length, 1, 'kein zweiter Socket');
+    await s.warteAufEnde(250);
+    s.festhalten();
+    assert.equal(await s.schluss(800), null, 'nie nur die ersten 90 s');
+    s.beenden();
+    assert.equal(n.aufrufe.filter((a) => a.pfad.endsWith('/token')).length, 1, 'kein zweiter Token');
+    const fin = n.aufrufe.filter((a) => a.pfad.endsWith('/finish'));
+    assert.equal(fin.length, 1);
+    assert.ok(JSON.parse(fin[0].opts.body).audioSeconds <= 91, 'finish zählt nur den gesendeten Ton');
+  }
+});
+
+test('90 s: Loslassen kurz vor der Grenze (ab 85 s) traut dem Socket nicht mehr — kein Commit, null', async () => {
+  const n = neunzig();
+  let weg = 0;
+  const s = n.live.sitzung('n2', { onWeg: () => weg++ });
+  await n.oeffnen(s);
+  n.sprechen(s, 87_000);
+  assert.equal(s.zustand, 'offen');
+  await s.warteAufEnde(10);
+  s.festhalten();
+  assert.equal(s.zustand, 'aufgegeben');
+  assert.ok(!n.offen[0].gesendet.some((m) => m.commit), 'kein Commit gesendet');
+  // a late committed_transcript of the service (its own, at 90 s) changes nothing
+  n.offen[0].sag({ message_type: 'committed_transcript', text: 'Was in 90 s kam.' });
+  assert.equal(await s.schluss(800), null);
+  assert.equal(weg, 1);
+});
+
+test('90 s: der Dienst schliesst nach unserem Commit, bevor der Schlusstext kam — null, kein Warten bis zur Frist', async () => {
+  const n = neunzig();
+  const s = n.live.sitzung('n3');
+  await n.oeffnen(s);
+  n.sprechen(s, 80_000);
+  s.festhalten();
+  assert.equal(s.zustand, 'festgehalten');
+  const p = s.schluss(800);
+  const t0 = Date.now();
+  n.offen[0].readyState = 3; n.offen[0].onclose({ code: 1000 });
+  assert.equal(await p, null);
+  assert.ok(Date.now() - t0 < 100);
+});
+
+test('unter 85 s bleibt alles wie bisher: Schlusstext mit den eigenen Commits des Dienstes vorn, genau einmal', async () => {
+  const n = neunzig();
+  let weg = 0;
+  const s = n.live.sitzung('n4', { onWeg: () => weg++ });
+  await n.oeffnen(s);
+  n.sprechen(s, 40_000);
+  n.offen[0].sag({ message_type: 'committed_transcript', text: 'Erster Teil.' });
+  n.sprechen(s, 30_000);
+  s.festhalten();
+  const p = s.schluss(800);
+  n.offen[0].sag({ message_type: 'committed_transcript', text: 'Zweiter Teil.' });
+  assert.equal(await p, 'Erster Teil. Zweiter Teil.');
+  // the service closes afterwards (90 s or our close): the text stays, no «weg»
+  n.offen[0].onclose && n.offen[0].onclose({ code: 1000 });
+  assert.equal(await s.schluss(10), 'Erster Teil. Zweiter Teil.');
+  s.beenden();
+  assert.equal(weg, 0);
+});
+
+test('kein Token (Tageskonto leer 429, 503, Netz, hängt): still null, kein Socket, onWeg ohne Meldung', async () => {
+  const antworten = [
+    { ok: false, status: 429, daten: { error: 'Tageslimit erreicht' } },
+    { ok: false, status: 503, daten: null },
+    () => { throw new TypeError('fetch failed'); },
+  ];
+  for (const token of antworten) {
+    const { live, offen, aufrufe } = aufbau({ token });
+    let weg = 0;
+    const s = live.sitzung('k1', { onWeg: () => weg++ });
+    s.pcm(pcm(32000));
+    await s.verbinden();
+    assert.equal(offen.length, 0);
+    assert.equal(s.zustand, 'aufgegeben');
+    assert.equal(weg, 1);
+    s.festhalten();
+    assert.equal(await s.schluss(800), null);
+    s.beenden();
+    assert.equal(aufrufe.filter((a) => a.pfad.endsWith('/finish')).length, 0, 'kein finish ohne Token');
+  }
+  // the token route hangs: the take ends first → null at once; the late token is reported as used for 0 s
+  let loesen;
+  const { live, offen, aufrufe } = aufbau({ token: () => new Promise((r) => { loesen = r; }) });
+  const s = live.sitzung('k2');
+  const v = s.verbinden();
+  await ruhe();
+  s.festhalten();
+  assert.equal(await s.schluss(800), null);
+  s.beenden();
+  loesen({ ok: true, status: 200, daten: zugang() });
+  await v;
+  await ruhe();
+  assert.equal(offen.length, 0, 'kein Socket mehr');
+  const fin = aufrufe.filter((a) => a.pfad.endsWith('/finish'));
+  assert.equal(fin.length, 1);
+  assert.equal(JSON.parse(fin[0].opts.body).audioSeconds, 0);
+});
