@@ -213,12 +213,13 @@ html[data-streifen] .griff { opacity: 1; }
   inset: 0;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.16s ease-in;
+  transition: opacity 0.12s cubic-bezier(0.4, 0, 1, 1);
 }
+/* frequent: out 120 ms + in 180 ms = 300 ms in all, no overshoot (web app docs/directives/bewegung.md) */
 .ansicht.an {
   opacity: 1;
   pointer-events: auto;
-  transition: opacity 0.3s ease-out 0.16s, scale 0.3s cubic-bezier(0.3, 1.2, 0.4, 1) 0.16s;
+  transition: opacity 0.18s cubic-bezier(0.2, 0.8, 0.2, 1) 0.12s, scale 0.18s cubic-bezier(0.2, 0.8, 0.2, 1) 0.12s;
   scale: 1;
 }
 .ansicht:not(.an) { scale: 0.97; }
@@ -238,7 +239,7 @@ html[data-streifen] .griff { opacity: 1; }
   inset: 0;
   background: radial-gradient(280px 280px at 50% 130%, var(--wash, transparent) 0%, transparent 70%);
   pointer-events: none;
-  transition: background 0.4s;
+  transition: background 0.3s;
 }
 .karte[data-wash="bernstein"] { --wash: rgba(245, 165, 36, 0.42); }
 .karte[data-wash="gruen"] { --wash: rgba(52, 211, 153, 0.32); }
@@ -254,7 +255,7 @@ html[data-streifen] .griff { opacity: 1; }
   pointer-events: none;
   filter: blur(6px);
   opacity: 0;
-  transition: opacity 0.4s, background 0.4s;
+  transition: opacity 0.3s, background 0.3s;
   z-index: 2;
 }
 #insel[data-modus="offen"] .gesicht-schein { opacity: var(--schein-deckung, 0.5); }
